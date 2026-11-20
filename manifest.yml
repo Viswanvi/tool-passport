@@ -1,0 +1,20 @@
+modules:
+  jira:globalPage:
+    - key: tool-passport-hello-world-global-page
+      resource: main
+      resolver:
+        function: resolver
+      render: native
+      title: tool-passport
+  function:
+    - key: resolver
+      handler: index.handler
+resources:
+  - key: main
+    path: src/frontend/index.jsx
+app:
+  runtime:
+    name: nodejs24.x
+    memoryMB: 256
+    architecture: arm64
+  id: ari:cloud:ecosystem::app/116e4a95-46a5-4008-8a77-9177f8e23ed0
