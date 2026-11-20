@@ -6,33 +6,34 @@
 
 ### Works (verified)
 
-- Hello-world global page loaded on the demo site (seen by the human in Jira, 2026-11-20).
-- `bash scripts/check-prereqs.sh` (Git Bash): `Result: 18 passed, 0 warnings, 0 failed` after excluding skill eval
-  fixtures from the token scan (DECISIONS D9).
+- `bash scripts/check-prereqs.sh` (Git Bash): `Result: 18 passed, 0 warnings, 0 failed` (DECISIONS D9).
 - `npx tsc --noEmit` exit 0; `npx eslint "src/**/*.{ts,tsx}" "test/**/*.ts"` exit 0;
-  `npx vitest run`: `Test Files 2 passed (2) · Tests 10 passed (10)`.
-- `forge lint`: `No issues found` (plus the expected MAJOR_VERSION_RULE approval for new scopes, sql and llm).
-- `forge deploy -e development --non-interactive --approve MAJOR_VERSION_RULE`: `Deployed tool-passport to the
-  development environment` (version 3.0.0).
-- `forge eligibility -e development --non-interactive`: `version [3.0.0] ... is eligible for the Runs on Atlassian program`.
+  `npx vitest run`: `Tests 16 passed (16)`.
+- `forge lint`: no issues. `forge eligibility -e development`: 3.0.0 eligible for Runs on Atlassian; every later
+  deploy (3.1.0-3.3.0) printed the same eligibility line.
+- `forge install --upgrade --site one-atlas-oibs.atlassian.net --product jira -e development` (approved by the human):
+  `Upgrade complete!`; `forge install list`: version 3, Up-to-date.
+- Forge SQL: all 19 migrations applied by the upgrade event (`[lifecycle] migrations applied: v001_tools …
+  v019_experiment_runs`, 18:32:40 UTC).
+- Scheduled trigger: ticks at 18:36:00 and 18:41:00 UTC (E10 running).
+- E1 as the admin, via the built-in browser signed in as the human: setup and reads; see `docs/experiments.md`.
 
 ### Not done / untested
 
-- The demo-site installation is still on version 2 (hello world). `forge install --upgrade` is waiting for the
-  human's approval (it grants the new scopes). Until then, migrations, the sweep (E10) and E1 have not run.
-- SQL migrations have never run on a real Forge SQL database: untested.
-- E1-E10: not run (docs/experiments.md).
+- E1 for an employee without an Assets role (needs Sam). E5, E6 (need Sam). E2 (needs the fresh site).
+- E10 two-hour verdict (window ends about 20:36 UTC).
+- E3 "who changed it" (needs an edit to KS-DEV). Absent-vs-empty attributes in AQL replies.
+- E4 (last; needs a payment method and the human's cost approval). E7 after the Assets decision.
 
 ### Next
 
-1. Human approves `forge install --upgrade` (scopes listed in the session).
-2. Lifecycle event runs migrations; the sweep starts (E10 clock starts).
-3. E1 as the admin: "E1 · Create test schema (admin)", then "E1 · Read as me" on the Tool Passport page.
-4. Stop at the first step needing Sam or the fresh site (E1 non-admin read, E6, E5, E2).
+- When Sam exists: Sam opens Apps → Tool Passport and clicks "E1 · Read as me" (user context and, on the next sweep,
+  impersonation as a non-admin). Then E6 and E5.
+- When the fresh developer site exists: E2, including the app-context read there (the docs say the app needs an
+  Assets role; the demo site didn't require one).
 
 ### Waiting on the human
 
-- Approval for `forge install --upgrade` on the demo site.
 - Second account (Sam): Jira + JSM customer access only, no Assets role, not an agent on TPD.
 - Free Atlassian Cloud developer site (E2, E8, E9, fresh-site checks).
 - Payment method on the Developer Space, then cost approval, before any LLM call (E4).
