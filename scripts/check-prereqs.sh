@@ -40,9 +40,13 @@ if [ -f .gitignore ]; then
   for p in node_modules .env; do grep -q "$p" .gitignore && ok ".gitignore covers $p" || bad ".gitignore is missing $p"; done
 else bad ".gitignore missing"; fi
 if git ls-files 2>/dev/null | grep -Eq '(^|/)\.env'; then bad ".env file is tracked by git"; else ok "no .env tracked"; fi
-if grep -rIlE "ATATT[0-9A-Za-z_-]{20,}" --exclude-dir=node_modules --exclude-dir=.git . >/dev/null 2>&1; then
-  bad "Something that looks like an Atlassian API token is in this folder: remove it"
-else ok "no Atlassian API token found in files"; fi
+# evals/fixtures under .claude/skills hold deliberately insecure sample code with fake tokens (Forge skill test data);
+# they are untracked in git and skipped here. Only file names are printed, never the matched text.
+token_files=$(grep -rIlE "ATATT[0-9A-Za-z_-]{20,}" --exclude-dir=node_modules --exclude-dir=.git . 2>/dev/null \
+  | grep -v '/evals/fixtures/')
+if [ -n "$token_files" ]; then
+  bad "Something that looks like an Atlassian API token is in: $(echo "$token_files" | tr '\n' ' ')- remove it"
+else ok "no Atlassian API token found in files (skill eval fixtures skipped)"; fi
 
 echo
 echo "Result: $pass passed, $warn warnings, $fail failed"

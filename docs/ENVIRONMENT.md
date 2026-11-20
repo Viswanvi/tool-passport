@@ -28,10 +28,12 @@ email addresses.
 ## Site check results (2026-11-20, done in the browser as the signed-in admin)
 
 - These checks used the admin's browser session. They prove the products exist on the site. They do NOT prove the
-  Forge app can read them: E5 must still show an app-side Assets read (scopes plus the Forge API call) before
+  Forge app can read them: E1 must still show an app-side Assets read (scopes plus the Forge API call) before
   anything depends on it.
 - The demo site comes pre-seeded: about 20 sample Jira spaces (several JSM service spaces) and 14 Assets schemas,
   including `a_software_registry` (18 objects) and `Application Portfolio` (32 objects).
 - Do not use the seeded Assets data in the demo or video. `Application Portfolio` names real third-party vendors
-  and products, which breaks the "no third-party names" rule. For E5, create a dedicated Tool Passport schema with
+  and products, which breaks the "no third-party names" rule. For E1, create a dedicated Tool Passport schema with
   fictional tool names and read that.
+- Experiment numbering follows spec section 7: E1 is the Assets read, E5 is JSM requests and resolution events.
+  (An earlier version of this note said E5 for the Assets read; corrected 2026-11-20.)
