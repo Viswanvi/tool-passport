@@ -1,20 +1,32 @@
 {
-  "name": "jira-global-page-ui-kit",
-  "version": "1.1.53-next.13",
-  "main": "index.js",
+  "name": "tool-passport",
+  "version": "0.1.0",
+  "description": "Tool Passport: can I do X with tool T in environment E? (Forge app, Codegeist 2026)",
   "license": "MIT",
   "private": true,
   "scripts": {
-    "lint": "eslint src/**/*"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"test/**/*.ts\"",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run lint && npm test"
   },
   "devDependencies": {
-    "eslint": "^8.56.0",
-    "eslint-plugin-react-hooks": "^4.6.0"
+    "@types/node": "24.19.2",
+    "@types/react": "18.3.31",
+    "@typescript-eslint/eslint-plugin": "8.73.0",
+    "@typescript-eslint/parser": "8.73.0",
+    "eslint": "8.57.1",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "typescript": "5.9.3",
+    "vitest": "5.1.1"
   },
   "dependencies": {
-    "@forge/bridge": "7.3.0-next.12",
-    "@forge/react": "12.5.0-next.2",
+    "@forge/api": "8.5.0",
+    "@forge/bridge": "7.3.0",
+    "@forge/react": "12.5.0",
     "@forge/resolver": "2.0.2",
-    "react": "^18.2.0"
+    "@forge/sql": "4.0.10",
+    "react": "^18.2.0",
+    "zod": "4.6.7"
   }
 }
