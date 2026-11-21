@@ -15,7 +15,7 @@ All times UTC. Demo site `one-atlas-oibs`, app version 3.0.0-3.3.0 (development)
 | E2 | Will Assets exist on a judge's site? | Not run (needs the fresh developer site) | |
 | E3 | Can the card show where an Assets value came from? | **Partial pass** | `created` and `updated` available on the object. History: 0 entries on an unedited object; "who changed it" untested |
 | E4 | Does translation work, and fail safely? | Not run (needs cost approval) | |
-| E5 | Can the app raise requests for an employee and react to resolution? | **Blocked** | Raising for Sam returns 401: the asker needs the org-level JSM "Customer" role. Adding Sam as a desk customer (204) isn't enough. Resolution events not yet tested |
+| E5 | Can the app raise requests for an employee and react to resolution? | **PASS** (one unexplained missed-event window) | Raise as the app on behalf of the asker works once the asker has the org-level JSM "Customer" role (401 before). Resolution reaches the app in 1-2 s; the name is in the changelog and a read-back, not in `issue.fields` |
 | E6 | Can the app read the asker's groups? | **PASS** | Groups as the user and as the app: 200 for admin (89) and Sam (1). Creating demo groups: 401 "scope does not match" with `write:group:jira` |
 | E7 | Is change detection safe to repeat? | Not run | |
 | E8 | Can judges use the Rovo action? (P1) | Moved to Phase 2 (D7) | |
@@ -136,8 +136,49 @@ with Jira access only. Consequences for the design:
 - Every asker needs the JSM customer role before Request the fix / Request approval / Ask the owner can work. The
   setup wizard and judge instructions must say so, and the app must show a clear message on this 401 instead of
   claiming a request exists.
-- Pending: give Sam the customer role (human's approval needed), then raise again, resolve one request as Done and one
-  as Declined, and record the event payload and latency.
+
+**Raise for Sam again** after the human approved and the admin granted Sam the JSM **Customer** role in Atlassian
+Administration ("You gave Sam 1 new role"): #60184, 07:27:20, **ok: TPD-1, TPD-2**. Both raised as the app with
+`raiseOnBehalfOf` = Sam (Jira shows "Sam raised this request via API") and assigned to the admin as the app
+(`PUT /rest/api/3/issue/{key}/assignee` 204).
+
+**Resolutions** (done in the browser as the admin; the TPD resolution list is Done, Won't Do, Duplicate, Cannot
+Reproduce, Declined, Known Error, Hardware failure, Software failure, Escalated, …):
+
+| When | Issue | Change | App version | Event seen by the app? |
+| --- | --- | --- | --- | --- |
+| 07:27 | TPD-1, TPD-2 | assigned by the app | 4.0.0 | **No `[E5]` line** |
+| ~07:29 / ~07:30 | TPD-1 / TPD-2 | resolved Done / Declined | 4.0.0 | **No `[E5]` line** in the 8 minutes watched |
+| 07:40:38 | TPD-1 | back to In Progress | 4.1.0 | Yes: `[issue-event] received avi:jira:updated:issue TPD-1` |
+| 07:41:14 | TPD-1 | resolved **Done** | 4.1.0 | Yes: `status=Resolved resolution=Done latency=2s` |
+| 07:42:10 | TPD-2 | back to In Progress | 4.1.0 | Yes |
+| 07:42:45 | TPD-2 | resolved **Declined** | 4.1.0 | Yes: `status=Resolved resolution=Declined latency=1s` |
+
+4.1.0 only added a log line per delivery (handler logic unchanged), so for the 4.0.0 window "not delivered" and
+"dropped before logging" can't be told apart; the handler would have logged `[E5]` on any matching delivery. The
+gap is unexplained. It is exactly the failure the spec's sweep fallback covers ("Trigger missed: the sweep still
+re-checks the open request", section 19), so the sweep re-check of open requests is **required**, not optional.
+
+**What the event carries** (#60199, TPD-2 Declined):
+- Top-level keys: `issue, customFields, changelog, associatedUsers, skippedCustomFieldIds, atlassianId,
+  associatedStatuses, customFieldsStatus, jiraEventTypeName, eventType, selfGenerated, permissions, timestamp,
+  context, contextToken`.
+- `issue.fields` keys: `summary, issuetype, creator, created, project, reporter, fixVersions, assignee, priority,
+  updated, status`. **No `resolution`.**
+- `changelog.items` (status and resolution only kept): `{field: "resolution", to: "Declined"}`,
+  `{field: "status", from: "In Progress", to: "Resolved"}`.
+- `jiraEventTypeName`: `issue_generic` (not `issue_resolved`).
+- Read-back `GET /rest/api/3/issue/TPD-2?fields=resolution,resolutiondate,status` as the app: 200, `Declined`,
+  `resolutiondate 2026-11-21T02:42:44.712-0500`; event `timestamp` 07:42:45.035Z.
+
+**Pass bar ("re-check within 60 s; resolution names readable for approvals"): PASS** once events flow: 1-2 s from
+resolution to the app's re-check, and the resolution name is readable from the changelog (`field: "resolution"`,
+`toString`) and from the read-back. With the unexplained 4.0.0 gap noted above.
+
+**Spec changes this forces (DECISIONS D22):** the spec's `onIssueEvent` reads `event.issue.fields?.resolution?.name`,
+which is always empty. Detect resolution from `changelog.items` (`field === "resolution"`) and take the name from a
+read-back of the issue (authoritative), never from the event alone. Don't rely on `jiraEventTypeName ===
+"issue_resolved"`.
 
 ## E3 · Assets record provenance
 

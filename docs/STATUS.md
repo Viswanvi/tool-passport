@@ -18,19 +18,26 @@
 - E10 PASS: `149 ticks, max gap 5 min, gaps over 10 min: 0` (2026-11-20 18:36 to 2026-11-21 06:56 UTC).
 - E1 PASS on the demo site via the app context, including for Sam (no Assets role); user context and impersonation
   return 403 for Sam. Details and design implications in `docs/experiments.md`.
-- Sam invited (Jira User only) and renamed "Sam" by the human; recorded in `docs/ENVIRONMENT.md`.
+- Sam invited (Jira User only) and renamed "Sam" by the human; JSM Customer role added 2026-11-21 (needed for
+  `raiseOnBehalfOf`); recorded in `docs/ENVIRONMENT.md`.
+- `forge install --upgrade` to 4.0.0 (approved): `Upgrade complete!`, scopes `manage:servicedesk-customer`,
+  `read:group:jira`, `write:group:jira` added.
+- E6 PASS: groups for admin (89) and Sam (1) as the user, as the app, and from the sweep (app and impersonation).
+- E5 raise: the app raised TPD-1 and TPD-2 for Sam (`Sam raised this request via API`) and assigned them to the admin;
+  resolved TPD-1 as Done and TPD-2 as Declined in the browser as the admin.
 
 ### Not done / untested
 
-- E6, E5 (Sam now exists). E2 (needs the fresh site), including the app-context Assets read there.
+- E5 PASS once events flowed (1-2 s); changes made under 4.0.0 (07:27-07:30) were never processed, unexplained.
+- E2 (needs the fresh site), including the app-context Assets read there.
+- Demo group creation: 401 "scope does not match" with `write:group:jira`; right scope set still unknown (Phase 4).
 - E3 "who changed it" (needs an edit to KS-DEV). Absent-vs-empty attributes in AQL replies.
 - E4 (last; needs a payment method and the human's cost approval). E7 after the Assets decision.
 
 ### Next
 
-- E6 (groups as the user and in app context, plus group create/add for the seed), then E5 (request raised for Sam,
-  resolution events). Both need Sam to click again; E5 adds the issue trigger and may add scopes (install upgrade
-  needs the human's approval).
+- E2 on the fresh developer site; then E4 last (pricing check and the human's cost approval before any LLM call);
+  then STOP for the Assets decision (Nov 23).
 - When the fresh developer site exists: E2, including the app-context read there (the docs say the app needs an
   Assets role; the demo site didn't require one).
 
