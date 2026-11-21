@@ -6,6 +6,7 @@ import { runMigrations } from '../db/migrations';
 import { getSetting, recordRun } from '../db/store';
 import { read, summarise } from '../experiments/e1';
 import { tick } from '../experiments/e10';
+import { groupsOf, myGroups } from '../experiments/e6';
 import { requester } from '../providers/assets-api';
 
 const BUDGET_MS = 30_000; // headroom under the 55 s scheduled-trigger limit
@@ -39,4 +40,14 @@ export async function sweep(): Promise<void> {
   const asUser = await read(requester('impersonate', target.accountId));
   await recordRun('E1', `sweep:impersonate:${who}`, asUser.ok, summarise('read', asUser), asUser);
   console.log(`[E1] sweep:impersonate:${who} ${summarise('read', asUser)}`);
+
+  // E6: the same person's groups with no user present.
+  if (Date.now() - started > BUDGET_MS) return;
+  const gApp = await groupsOf(requester('app'), target.accountId);
+  const gImp = await myGroups(requester('impersonate', target.accountId));
+  for (const [ctx, g] of [[`sweep:app:${who}`, gApp], [`sweep:impersonate:${who}`, gImp]] as const) {
+    const summary = `${g.ok ? 'ok' : 'failed'}: ${g.groups.length} groups ${g.steps[0]?.status ?? ''}`;
+    await recordRun('E6', ctx, g.ok, summary, g);
+    console.log(`[E6] ${ctx} ${summary}`);
+  }
 }

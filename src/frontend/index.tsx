@@ -66,7 +66,7 @@ const Experiments = () => {
   return (
     <Stack space="space.200">
       <SectionMessage appearance="warning" title="Phase 0 experiments (temporary)">
-        <Text>These buttons exist only to run spec experiments E1 and E3 as a signed-in person. They are removed before Phase 0 sign-off.</Text>
+        <Text>These buttons exist only to run spec experiments E1, E3, E5 and E6 as a signed-in person. They are removed before Phase 0 sign-off.</Text>
       </SectionMessage>
 
       <ButtonGroup>
@@ -78,6 +78,25 @@ const Experiments = () => {
         </Button>
         <Button isDisabled={busy !== null} onClick={() => run('status', 'exp.status')}>
           Refresh status
+        </Button>
+      </ButtonGroup>
+      <ButtonGroup>
+        <Button appearance="primary" isDisabled={busy !== null} onClick={() => run('groups', 'exp.e6.groups')}>
+          E6 · Read my groups
+        </Button>
+        <Button isDisabled={busy !== null} onClick={() => run('seed groups', 'exp.e6.seed')}>
+          E6 · Create demo groups (admin)
+        </Button>
+      </ButtonGroup>
+      <ButtonGroup>
+        <Button isDisabled={busy !== null} onClick={() => run('prepare', 'exp.e5.prepare')}>
+          E5 · Prepare (admin)
+        </Button>
+        <Button appearance="primary" isDisabled={busy !== null} onClick={() => run('raise', 'exp.e5.raise')}>
+          E5 · Raise 2 test requests for me
+        </Button>
+        <Button isDisabled={busy !== null} onClick={() => run('E5 requests', 'exp.e5.state')}>
+          E5 · Show requests
         </Button>
       </ButtonGroup>
       {busy && (

@@ -4,6 +4,9 @@ import { runMigrations } from '../db/migrations';
 import { recentRuns, recordRun, runDetail, setSetting } from '../db/store';
 import { callerIsJiraAdmin, read, setup, summarise } from '../experiments/e1';
 import { report } from '../experiments/e10';
+import { groupsOf, myGroups, seedGroups } from '../experiments/e6';
+import { prepare as e5Prepare, raise as e5Raise, STATE_KEY as E5_STATE, type E5State } from '../experiments/e5';
+import { getSetting } from '../db/store';
 import type { ImpersonationTarget } from '../change/sweep';
 import { requester } from '../providers/assets-api';
 
@@ -52,6 +55,76 @@ resolver.define('exp.e1.read', async ({ context }) => {
   await setSetting('exp.impersonate', target);
   return { who, user: asUser, app: asApp };
 });
+
+/** E6: the caller's groups as the user, and the same person's groups as the app. */
+resolver.define('exp.e6.groups', async ({ context }) => {
+  await runMigrations();
+  const accountId = context.accountId;
+  if (!accountId) return { refused: 'No signed-in user' };
+  const isJiraAdmin = await callerIsJiraAdmin(requester('user'));
+  const who = isJiraAdmin ? 'admin' : 'non-admin';
+  const asUser = await myGroups(requester('user'));
+  await recordRun('E6', `ui:user:${who}`, asUser.ok, `${asUser.ok ? 'ok' : 'failed'}: ${asUser.groups.length} groups ${asUser.steps[0]?.status ?? ''}`, asUser);
+  const asApp = await groupsOf(requester('app'), accountId);
+  await recordRun('E6', `ui:app:${who}`, asApp.ok, `${asApp.ok ? 'ok' : 'failed'}: ${asApp.groups.length} groups ${asApp.steps[0]?.status ?? ''}`, asApp);
+  // The sweep reads this person's groups with no user present (app context and impersonation).
+  const target: ImpersonationTarget = { accountId, isJiraAdmin, setAt: new Date().toISOString() };
+  await setSetting('exp.impersonate', target);
+  return { who, user: asUser, app: asApp };
+});
+
+/** E6 / gap J: create the demo groups and add the admin (Priya) to kestrel-dev-builders. Admin only. */
+resolver.define('exp.e6.seed', async ({ context }) => {
+  await runMigrations();
+  const accountId = context.accountId;
+  if (!accountId) return { refused: 'No signed-in user' };
+  if (!(await callerIsJiraAdmin(requester('user')))) return { refused: 'Only a Jira administrator can create groups' };
+  const asApp = await seedGroups(requester('app'), accountId);
+  await recordRun('E6', 'seed:app', asApp.ok, summariseSteps(asApp.ok, asApp.steps), asApp);
+  if (asApp.ok) return { app: asApp };
+  const asUser = await seedGroups(requester('user'), accountId);
+  await recordRun('E6', 'seed:user', asUser.ok, summariseSteps(asUser.ok, asUser.steps), asUser);
+  return { app: asApp, user: asUser };
+});
+
+/** E5: find the desk and a simple request type; the admin who clicks becomes the owner/assignee. */
+resolver.define('exp.e5.prepare', async ({ context }) => {
+  await runMigrations();
+  const accountId = context.accountId;
+  if (!accountId) return { refused: 'No signed-in user' };
+  if (!(await callerIsJiraAdmin(requester('user')))) return { refused: 'Only a Jira administrator can prepare E5' };
+  const res = await e5Prepare(requester('app'), accountId);
+  await recordRun(
+    'E5',
+    'prepare:app',
+    res.ok,
+    res.ok ? `ok: desk ${res.state?.serviceDeskId}, request type "${res.state?.requestTypeName}"` : summariseSteps(false, res.steps),
+    res,
+  );
+  return res;
+});
+
+/** E5: the app raises two requests on behalf of the person clicking (identity from the context only). */
+resolver.define('exp.e5.raise', async ({ context }) => {
+  await runMigrations();
+  const accountId = context.accountId;
+  if (!accountId) return { refused: 'No signed-in user' };
+  const who = (await callerIsJiraAdmin(requester('user'))) ? 'admin' : 'non-admin';
+  const res = await e5Raise(accountId, who);
+  await recordRun('E5', `raise:app:for-${who}`, res.ok, res.ok ? `ok: ${res.raised.map((r) => r.key).join(', ')}` : summariseSteps(false, res.steps), res);
+  return res;
+});
+
+resolver.define('exp.e5.state', async () => {
+  const state = await getSetting<E5State>(E5_STATE);
+  return state ? { requests: state.requests, requestType: state.requestTypeName, serviceDeskId: state.serviceDeskId } : null;
+});
+
+function summariseSteps(ok: boolean, steps: { step: string; status: number | null; ok: boolean; note?: string }[]): string {
+  if (ok) return 'ok';
+  const failed = steps.find((s) => !s.ok);
+  return failed ? `failed at "${failed.step}" (${failed.status ?? 'no status'}) ${failed.note ?? ''}`.trim() : 'failed';
+}
 
 resolver.define('exp.status', async () => {
   const migrations = await runMigrations().then(

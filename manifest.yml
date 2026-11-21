@@ -19,6 +19,10 @@ modules:
       events:
         - avi:forge:installed:app
         - avi:forge:upgraded:app
+    - key: issue-events             # E5 now; the request loop's re-check on resolution in Phase 1
+      function: on-issue-event
+      events:
+        - avi:jira:updated:issue
   scheduledTrigger:
     - key: five-minute-sweep        # module keys are unique across types; the function is "sweep"
       function: sweep
@@ -37,6 +41,8 @@ modules:
       handler: index.onLifecycle
     - key: sweep
       handler: index.sweep
+    - key: on-issue-event
+      handler: index.onIssueEvent
 resources:
   - key: ui
     path: src/frontend/index.tsx
@@ -49,6 +55,9 @@ permissions:
     read:servicedesk-request:
       allowImpersonation: true      # Assets workspace lookup; E1 impersonation path
     write:servicedesk-request: {}
+    manage:servicedesk-customer: {} # E5: add the asker as a desk customer if raiseOnBehalfOf needs it
+    read:group:jira: {}             # E6 / demo seed: find the demo groups (verified by a real call, D21)
+    write:group:jira: {}            # E6 / demo seed: create the demo groups and add the judge
     read:cmdb-object:jira:
       allowImpersonation: true      # E1: keep only if the impersonation path is chosen
     write:cmdb-object:jira: {}      # setup wizard and demo seed only
