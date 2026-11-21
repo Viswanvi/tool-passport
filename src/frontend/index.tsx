@@ -133,6 +133,11 @@ const Experiments = () => {
           E4 · Show results
         </Button>
       </ButtonGroup>
+      <ButtonGroup>
+        <Button isDisabled={busy !== null} onClick={() => run('E7', 'exp.e7.run')}>
+          E7 · Run change-detection test (admin)
+        </Button>
+      </ButtonGroup>
       {busy && (
         <Inline space="space.100" alignBlock="center">
           <Spinner />

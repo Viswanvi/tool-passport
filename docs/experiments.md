@@ -14,11 +14,11 @@ site `toolpassport` with app 4.1.0 (development).
 | --- | --- | --- | --- |
 | E1 | Which Assets read path works from Forge? | **PASS (app context)** on the demo site; app-context read repeated on the fresh site in E2 | App context reads the passport objects for everyone, with or without a user. User context and impersonation work for the admin but return 403 for Sam (no Assets role). Schema writes as the app: 403 on the demo site, 201 on the fresh site |
 | E2 | Will Assets exist on a judge's site? | **PASS** | Free developer site (Cloud Standard) has Assets on, no upgrade or trial. Installed app reads it as the app with no Assets role granted, and could even create the schema and objects as the app |
-| E3 | Can the card show where an Assets value came from? | **Partial pass** | `created` and `updated` available on the object. History: 0 entries on an unedited object; "who changed it" untested |
+| E3 | Can the card show where an Assets value came from? | **PASS, with the bonus** | `created` and `updated` on the object; history (as the app) gives the changed attribute, old and new value, time and the editor's account id, a few seconds after the edit |
 | E4 | Does translation work, and fail safely? | **PASS (pilot)** | Sonnet 5.5 and Haiku 5.5 each: 20/20 exact keys and values, 3/3 unsupported marked, both injection attempts ignored, empty question never sent, forced model error → "failed". 49 calls, about $0.13 |
 | E5 | Can the app raise requests for an employee and react to resolution? | **PASS** (one unexplained missed-event window) | Raise as the app on behalf of the asker works once the asker has the org-level JSM "Customer" role (401 before). Resolution reaches the app in 1-2 s; the name is in the changelog and a read-back, not in `issue.fields` |
 | E6 | Can the app read the asker's groups? | **PASS** | Groups as the user and as the app: 200 for admin (89) and Sam (1). Creating demo groups: 401 "scope does not match" with `write:group:jira` |
-| E7 | Is change detection safe to repeat? | Not run | |
+| E7 | Is change detection safe to repeat? | **PASS** (rollback verdicts: Phase 3) | Real Forge SQL: 3 parallel detections → 1 row, 1 compare-and-set win; crash between insert and update → finished with no extra row; rollback and repeat upgrade → 1 row each. Forge SQL `affectedRows` counts found rows, not changed rows |
 | E8 | Can judges use the Rovo action? (P1) | Moved to Phase 2 (D7) | |
 | E9 | Can a stranger reach moment 1 quickly? | Moved to Phase 4 (D7) | |
 | E10 | Does the five-minute sweep run, and can it read Assets without a user? | **PASS** | 149 ticks over about 12 h, max gap 5 min, none over 10. Assets read without a user works (app context) |
@@ -293,8 +293,63 @@ question (and cached repeats free), judge usage costs cents.
 
 - `GET …/object/4679` (KS-DEV): `created` and `updated` present (`2026-11-20T18:35:18.141Z`). **Pass bar "updated
   time available": met.**
-- `GET …/object/4679/history`: 200 with **0 entries** on an object that hasn't been edited since creation. Who
-  changed it (bonus): untested. Re-test after an edit (moment 2 edits KS-DEV's Build environments).
+- `GET …/object/4679/history`: 200 with **0 entries** on 2026-11-20, right after creation.
+
+**Re-test after an edit (2026-11-21, demo site, after the Assets decision).** As the admin, through the same Assets
+REST API the UI uses: `PUT …/object/4679` setting Version `13.2` → `13.2.1` (200, `updated 19:33:36.014Z`), read,
+then set back to `13.2` (200, `19:34:39.996Z`).
+
+| Read | Context | Result |
+| --- | --- | --- |
+| E1 read, seconds after the edit | user and app | Version `13.2.1`, `updated` 19:33:36; history **1 entry**: the creation (`type 0`, 2026-11-20 18:35:18), which hadn't been there on 2026-11-20 |
+| Browser read about 20 s later | admin | history 2 entries, newest first |
+| #432 `ui:app` 19:34:30 | `api.asApp()` | `ok: KS-DEV v13.2.1`; history **2 entries**, keys `actor, id, affectedAttribute, oldValue, newValue, type, created, objectId, affectedAttributeDisplayName, displayValues` |
+
+The edit entry: `type 2`, `affectedAttribute "Version"`, `oldValue "13.2"`, `newValue "13.2.1"`, `created` = the edit
+time, `actor.key` = the editor's account id (checked equal to `/rest/api/3/myself` `accountId`; no `accountId`
+field). `actor` also carries `displayName`, `name`, `emailAddress`, `avatarUrl`, `isDeleted`.
+
+**Pass bar ("updated time available; who changed it is a bonus"): PASS, including the bonus.**
+
+**Implications:**
+- The card can say "Assets record · changed Nov 21 by *name* (Version 13.2 → 13.2.1)", reading history as the app.
+- History is written a few seconds after the object's `updated` time, and the creation entry appeared later still.
+  Use `updated` for "changed at"; treat history as best effort and fall back to "changed *time*" without a name.
+- Privacy (spec section 14): keep only `actor.key` (account id); never store `displayName` or `emailAddress`; look the
+  name up when showing it.
+- Untested: the actor for edits made by Assets imports or automation.
+
+## E7 · Change detection is safe to repeat
+
+Code: `src/change/detect.ts` (`noteVersion`, `normaliseVersion`; pure, unit-tested with an in-memory repository) and
+`src/change/detect-sql.ts` (Forge SQL). Experiment `src/experiments/e7.ts` runs it against the real database on a
+throwaway environment row (tool 0, baseline `2026-11-01 00:00:00`, version 13.2), then deletes it. App 4.4.0-4.5.0,
+demo site, button "E7 · Run change-detection test (admin)". No Assets or LLM calls.
+
+Run 1 (4.4.0, 19:30): every database outcome was right, but two checks failed on an assumption in the code: the
+insert reported `affectedRows 1` for skipped duplicates too, so "inserted" was true for all three parallel
+detections while only one row existed. The code was changed not to rely on it (D26) and a probe added.
+
+Run 2 (4.5.0, 19:32), **all 9 checks pass**:
+
+| Scenario | Result |
+| --- | --- |
+| 3 detections at once from the same stale snapshot (`14.0`, `14.0`, `14.0.3`) | 1 change row `13.2 → 14.0` (baseline 2026-11-01); compare-and-set won by exactly 1 of 3; version 14.0 with a new `last_seen_at` |
+| Rollback to 13.2 with a crash after the insert and before the version update | 2 rows, version still 14.0; the next detection from the same stale snapshot added no row and moved the version to 13.2 |
+| Repeat upgrade 13.2 → 14.0 after the rollback | new row (baseline 19:32:54); 3 rows: `13.2→14.0`, `14.0→13.2`, `13.2→14.0` |
+| `14.0.9` at minor granularity | no-op |
+| Probe | duplicate `INSERT … ON DUPLICATE KEY UPDATE id = id`: `affectedRows 1`; `UPDATE … SET x = x`: `affectedRows 1` |
+
+**Pass bar ("one change row per transition; rollback restores verdicts with no edits"):** one row per transition
+**PASS**. "Rollback restores verdicts" needs the evaluator, so it moves to the Phase 3 change-detection test (spec
+section 19); the data it needs (verifications keyed by version, nothing deleted on a change) is in place.
+
+**Implications:**
+- Forge SQL reports *found* rows, not *changed* rows. Never use `affectedRows` to tell an insert from a duplicate or a
+  change from a no-op. Compare-and-set is still sound because the old value is in the `WHERE` clause.
+- `baseline_at` and `last_seen_at` are whole seconds. Two transitions to the same version from baselines in the same
+  second would collide; impossible at five-minute detection, but consider `TIMESTAMP(3)` in Phase 3.
+- The parallel case ran as concurrent SQL requests from one invocation; two separate invocations weren't tried.
 
 ## E10 · Five-minute sweep
 
@@ -317,3 +372,5 @@ question (and cached repeats free), judge usage costs cents.
    (`SyntaxError: "[object Object]" is not valid JSON`). Fixed with `fromJsonColumn`, which accepts both.
 4. `AUTO_INCREMENT` ids are allocated in blocks (ids 1, 2, 3, then 30001), so id order is not insert order. Order by
    timestamp; never use id order for recency in Phase 1.
+5. `affectedRows` counts found rows: 1 for a skipped duplicate in `INSERT … ON DUPLICATE KEY UPDATE id = id` and 1
+   for an `UPDATE` that changes nothing (E7 probe). Put the old value in the `WHERE` clause when the answer matters.

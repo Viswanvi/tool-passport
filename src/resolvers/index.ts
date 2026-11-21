@@ -8,6 +8,7 @@ import { groupsOf, myGroups, seedGroups } from '../experiments/e6';
 import { prepare as e5Prepare, raise as e5Raise, STATE_KEY as E5_STATE, type E5State } from '../experiments/e5';
 import { getSetting } from '../db/store';
 import { listModels as e4ListModels, report as e4Report, runBatch as e4RunBatch } from '../experiments/e4';
+import { run as e7Run } from '../experiments/e7';
 import type { ImpersonationTarget } from '../change/sweep';
 import { requester } from '../providers/assets-api';
 
@@ -143,6 +144,17 @@ resolver.define('exp.e4.run', async ({ context, payload }) => {
 });
 
 resolver.define('exp.e4.report', async () => e4Report());
+
+/** E7: change detection against real Forge SQL on a throwaway environment row. Admin only. */
+resolver.define('exp.e7.run', async ({ context }) => {
+  await runMigrations();
+  if (!context.accountId) return { refused: 'No signed-in user' };
+  if (!(await callerIsJiraAdmin(requester('user')))) return { refused: 'Only a Jira administrator can run E7' };
+  const res = await e7Run();
+  const failed = res.steps.filter((s) => !s.ok).map((s) => s.step);
+  await recordRun('E7', 'ui:sql', res.ok, res.ok ? `ok: ${res.steps.length} checks passed` : `failed: ${failed.join('; ')} ${res.error ?? ''}`.trim(), res);
+  return res;
+});
 
 function summariseSteps(ok: boolean, steps: { step: string; status: number | null; ok: boolean; note?: string }[]): string {
   if (ok) return 'ok';

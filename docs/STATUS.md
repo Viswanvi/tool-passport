@@ -42,6 +42,13 @@
   credit pricing); `claude-sonnet-5-5` and `claude-haiku-5-5` each `answerableExact 20/20, unsupportedMarked 3/3,
   empty true, forcedError true, retries []`. Budget: `calls 49, inputTokens 90980, outputTokens 2465, usd 0.1292`.
 
+- Assets decision taken by the human 2026-11-22: read Assets as the app (D25).
+- E7 PASS (one row per transition), app 4.5.0: `npx vitest run` `Tests 45 passed (45)`; panel run on the demo site:
+  9/9 checks (3 parallel detections → 1 row, crash → finished with no extra row, rollback and repeat upgrade → 1 row
+  each). Rollback verdicts move to Phase 3.
+- E3 PASS with the bonus: after editing KS-DEV's Version 13.2 → 13.2.1 as the admin, the app-context read (#432)
+  returned 2 history entries with `affectedAttribute`, `oldValue`, `newValue` and `actor.key`; Version set back to 13.2.
+
 ### Not done / untested
 - Demo group creation: 401 "scope does not match" with `write:group:jira`; right scope set still unknown (Phase 4).
 - E3 "who changed it" (needs an edit to KS-DEV). Absent-vs-empty attributes in AQL replies.
@@ -51,12 +58,12 @@
 
 ### Next
 
-- STOP: E1, E2, E4, E5 and E6 are done. The human decides the Assets read path (or registry-first) by Nov 23.
-- After the decision: E7, finish E3 ("who changed it" after an edit), Phase 0 sign-off (remove the experiment panel
-  and code, drop `experiment_runs`, lint, eligibility, decide on `allowImpersonation`).
+- Phase 0 sign-off: remove `allowImpersonation` (needs a major-version upgrade: ask first), remove the experiment
+  panel, resolvers and code (keep `src/change/detect*.ts` and the E4 translator for Phase 1/3), drop
+  `experiment_runs` and stop the E10 tick, then unit tests, `forge lint`, `forge eligibility`, security self-review.
 
 ### Waiting on the human
 
-- The Assets decision (Nov 23).
+- Approval for the `forge install --upgrade` that removing `allowImpersonation` will need.
 - Before any push to a remote: the root commit `6693b75` still contains the skill eval fixtures (fake token);
   decide whether to rewrite it (DECISIONS D9).
