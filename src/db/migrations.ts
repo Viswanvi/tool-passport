@@ -305,19 +305,11 @@ export const MIGRATIONS: Migration[] = [
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 )`,
   },
+  // v019_experiment_runs (Phase 0 experiment log) was removed from this list at Phase 0 sign-off, so new
+  // installs never create it; installs that ran it drop it here. Names stay permanent: v019 is never reused.
   {
-    // Phase 0 only. Dropped by a later migration once the experiments are written up.
-    name: 'v019_experiment_runs',
-    ddl: `CREATE TABLE IF NOT EXISTS experiment_runs (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  experiment VARCHAR(8) NOT NULL,
-  context VARCHAR(32) NOT NULL,
-  ok BOOLEAN NOT NULL,
-  summary VARCHAR(512) NOT NULL,
-  detail JSON NULL,
-  ran_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
-  KEY runs_by_experiment (experiment, ran_at)
-)`,
+    name: 'v020_drop_experiment_runs',
+    ddl: 'DROP TABLE IF EXISTS experiment_runs',
   },
 ];
 

@@ -1,6 +1,6 @@
 modules:
   jira:globalPage:
-    - key: passport-home            # Ask, My tools (owners), Changes. Phase 0: also the temporary Experiments panel
+    - key: passport-home            # Ask, My tools (owners), Changes
       resource: ui
       resolver:
         function: ui-resolver
@@ -19,14 +19,14 @@ modules:
       events:
         - avi:forge:installed:app
         - avi:forge:upgraded:app
-    - key: issue-events             # E5 now; the request loop's re-check on resolution in Phase 1
+    - key: issue-events             # the request loop's re-check on resolution (Phase 1)
       function: on-issue-event
       events:
         - avi:jira:updated:issue
   scheduledTrigger:
     - key: five-minute-sweep        # module keys are unique across types; the function is "sweep"
       function: sweep
-      interval: fiveMinute          # E10 checks the cadence
+      interval: fiveMinute          # E10: no gap over 10 minutes in 12 hours
   sql:
     - key: main
       engine: mysql
@@ -47,30 +47,25 @@ resources:
   - key: ui
     path: src/frontend/index.tsx
 permissions:
-  scopes:                           # map form: required once any scope allows impersonation
-    read:jira-work: {}
-    write:jira-work: {}
-    read:jira-user:
-      allowImpersonation: true      # E6: keep only if group reads in triggers need it
-    read:servicedesk-request:
-      allowImpersonation: true      # Assets workspace lookup; E1 impersonation path
-    write:servicedesk-request: {}
-    manage:servicedesk-customer: {} # E5: add the asker as a desk customer if raiseOnBehalfOf needs it
-    read:group:jira: {}             # E6 / demo seed: find the demo groups (verified by a real call, D21)
-    write:group:jira: {}            # E6 / demo seed: create the demo groups and add the judge
-    read:cmdb-object:jira:
-      allowImpersonation: true      # E1: keep only if the impersonation path is chosen
-    write:cmdb-object:jira: {}      # setup wizard and demo seed only
-    read:cmdb-schema:jira:
-      allowImpersonation: true
-    write:cmdb-schema:jira: {}      # setup wizard creates the schema
-    read:cmdb-type:jira:
-      allowImpersonation: true
-    write:cmdb-type:jira: {}
-    read:cmdb-attribute:jira:
-      allowImpersonation: true
-    write:cmdb-attribute:jira: {}
-    read:cmdb-icon:jira: {}         # object type creation needs an icon id
+  # Assets and groups are read as the app (DECISIONS D25), so no scope allows impersonation.
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - read:jira-user
+    - read:servicedesk-request      # includes the Assets workspace lookup
+    - write:servicedesk-request
+    - manage:servicedesk-customer   # E5: adding a desk customer works; raising for the asker needs the JSM Customer role (D23)
+    - read:group:jira               # E6 / demo seed: find the demo groups (verified by a real call, D21)
+    - write:group:jira              # demo seed: creating groups got 401 with this alone; right set decided in Phase 4
+    - read:cmdb-object:jira
+    - write:cmdb-object:jira        # setup wizard and demo seed only
+    - read:cmdb-schema:jira
+    - write:cmdb-schema:jira        # setup wizard creates the schema
+    - read:cmdb-type:jira
+    - write:cmdb-type:jira
+    - read:cmdb-attribute:jira
+    - write:cmdb-attribute:jira
+    - read:cmdb-icon:jira           # object type creation needs an icon id
 app:
   runtime:
     name: nodejs24.x

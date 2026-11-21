@@ -12,8 +12,14 @@ describe('Forge SQL migrations', () => {
     for (const t of SPEC_TABLES) expect(created).toContain(t);
   });
 
-  it('only uses idempotent CREATE TABLE IF NOT EXISTS (no transactions in Forge SQL)', () => {
-    for (const m of MIGRATIONS) expect(m.ddl.trimStart().startsWith('CREATE TABLE IF NOT EXISTS ')).toBe(true);
+  it('only uses idempotent statements (no transactions in Forge SQL)', () => {
+    for (const m of MIGRATIONS) expect(m.ddl.trimStart()).toMatch(/^(CREATE TABLE IF NOT EXISTS|DROP TABLE IF EXISTS) /);
+  });
+
+  it('never creates the Phase 0 experiment log, and drops it where it exists', () => {
+    expect(MIGRATIONS.map((m) => tableOf(m.ddl))).not.toContain('experiment_runs');
+    expect(MIGRATIONS.some((m) => m.ddl === 'DROP TABLE IF EXISTS experiment_runs')).toBe(true);
+    expect(MIGRATIONS.map((m) => m.name)).not.toContain('v019_experiment_runs');
   });
 
   it('has unique, ordered, permanent migration names', () => {

@@ -1,14 +1,14 @@
 import api, { route, type APIResponse, type Route } from '@forge/api';
 
 /**
- * Thin Assets REST client shared by the E1/E3 experiments and, later, the Assets provider.
- * Every call goes through one of three authorities, which is exactly what E1 compares:
- *   app         - api.asApp(): the app account (needs an Assets role granted by an admin)
- *   user        - api.asUser(): the person using the UI, only inside UI Kit resolvers
- *   impersonate - api.asUser(accountId): a named user from a context with no user (triggers);
- *                 needs allowImpersonation on the scopes used
+ * Thin Assets REST client for the Assets provider (Phase 1) and the setup wizard / demo seed (Phase 4).
+ *   app  - api.asApp(): every read (DECISIONS D25: works for employees with no Assets role, in resolvers,
+ *          triggers and the sweep; E1, E2, E10)
+ *   user - api.asUser(): the signed-in admin, for setup writes where the app account is refused (the demo
+ *          site returned 403 to the app on schema create; a fresh site didn't, E2)
+ * Impersonation was tested in E1 and dropped: it carries the user's own Assets permissions (403 for Sam).
  */
-export type Mode = 'app' | 'user' | 'impersonate';
+export type Mode = 'app' | 'user';
 
 interface Init {
   method?: string;
@@ -21,11 +21,9 @@ export interface Requester {
   request: (path: Route, init?: Init) => Promise<APIResponse>;
 }
 
-export function requester(mode: Mode, accountId?: string): Requester {
+export function requester(mode: Mode): Requester {
   if (mode === 'app') return { mode, request: (p, i) => api.asApp().requestJira(p, i) };
-  if (mode === 'user') return { mode, request: (p, i) => api.asUser().requestJira(p, i) };
-  if (!accountId) throw new Error('Impersonation needs an account id');
-  return { mode, request: (p, i) => api.asUser(accountId).requestJira(p, i) };
+  return { mode, request: (p, i) => api.asUser().requestJira(p, i) };
 }
 
 export interface Step {
@@ -40,7 +38,10 @@ export interface CallResult {
   body: unknown;
 }
 
-/** One HTTP call, never throwing: a failure becomes a recorded step, so experiments report every path. */
+/**
+ * One HTTP call, never throwing: a failure becomes a recorded step. Known issue for Phase 1 (E6): in user
+ * context, NEEDS_AUTHENTICATION_ERR must propagate so Forge shows the consent screen; don't use this there.
+ */
 export async function call(r: Requester, step: string, path: Route, method = 'GET', payload?: unknown): Promise<CallResult> {
   try {
     const headers: Record<string, string> = { Accept: 'application/json' };
@@ -68,7 +69,7 @@ function errorNote(body: unknown): string {
   return (raw ?? '').slice(0, 300);
 }
 
-// ---- helpers for response shapes the docs leave partly unconfirmed (E1 records the real ones) ----
+// ---- helpers for response shapes (real shapes recorded in docs/experiments.md E1 and E3) ----
 
 export const field = (o: unknown, k: string): unknown =>
   o !== null && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined;

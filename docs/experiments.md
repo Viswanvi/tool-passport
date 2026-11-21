@@ -10,6 +10,9 @@ E9 in Phase 4.
 All times UTC. Demo site `one-atlas-oibs`, app version 3.0.0-3.3.0 (development). E2 ran on the fresh free developer
 site `toolpassport` with app 4.1.0 (development).
 
+The experiment code and panel were removed at Phase 0 sign-off (DECISIONS D27); they are in git history up to commit
+`d5e86d0`. The run numbers below (#…) referred to the `experiment_runs` table, which was dropped then.
+
 | ID | Question | Status | Result so far |
 | --- | --- | --- | --- |
 | E1 | Which Assets read path works from Forge? | **PASS (app context)** on the demo site; app-context read repeated on the fresh site in E2 | App context reads the passport objects for everyone, with or without a user. User context and impersonation work for the admin but return 403 for Sam (no Assets role). Schema writes as the app: 403 on the demo site, 201 on the fresh site |

@@ -1,19 +1,8 @@
-import { onEvent as e5OnEvent } from '../experiments/e5';
-
-type IssueEvent = Parameters<typeof e5OnEvent>[0];
-
 /**
- * avi:jira:updated:issue. Phase 0: only E5's test requests are looked at. Phase 1 replaces this with
- * the request loop (spec section 11): ignore anything we didn't raise, re-check on resolution.
+ * avi:jira:updated:issue. Phase 1 builds the request loop here (spec section 11): ignore any issue the app
+ * didn't raise; on a resolution, read it from `changelog.items` and confirm with a read-back of the issue
+ * (DECISIONS D22, never `issue.fields.resolution`), then re-check. Until then the handler does nothing.
  */
-export async function onIssueEvent(event: IssueEvent): Promise<void> {
-  // Phase 0 diagnostic: one line per delivery (event type, payload keys, issue key; no names or content),
-  // so E5 can tell "never delivered" from "delivered but not matched".
-  const keys = event && typeof event === 'object' ? Object.keys(event).join(',') : typeof event;
-  console.log(`[issue-event] received ${event?.eventType ?? '?'} ${event?.issue?.key ?? '(no issue.key)'} keys=${keys}`);
-  try {
-    await e5OnEvent(event);
-  } catch (e) {
-    console.error(`[issue-event] ${String(e).slice(0, 300)}`);
-  }
+export async function onIssueEvent(): Promise<void> {
+  // Intentionally empty until Phase 1; the trigger stays so adding the loop needs no manifest change.
 }
