@@ -63,10 +63,30 @@ const Experiments = () => {
     }
   };
 
+  /** E4: one small batch per resolver call (function time limit); stop on refusal, budget stop or error. */
+  const runE4 = async (model: 'sonnet' | 'haiku') => {
+    setBusy(`E4 ${model}`);
+    const log: unknown[] = [];
+    try {
+      for (let i = 0; i < 20; i++) {
+        const res = await call<{ done?: boolean; ran?: unknown[]; stopped?: string; refused?: string }>('exp.e4.run', { model });
+        log.push(res);
+        setOutput(JSON.stringify(log, null, 2));
+        if (!res || res.refused || res.stopped || res.done || (res.ran ?? []).length === 0) break;
+      }
+      setOutput(JSON.stringify({ report: await call<unknown>('exp.e4.report'), batches: log }, null, 2));
+    } catch (e) {
+      setOutput(`Error: ${String(e)}\n${JSON.stringify(log, null, 2)}`);
+    } finally {
+      setBusy(null);
+      await refresh();
+    }
+  };
+
   return (
     <Stack space="space.200">
       <SectionMessage appearance="warning" title="Phase 0 experiments (temporary)">
-        <Text>These buttons exist only to run spec experiments E1, E3, E5 and E6 as a signed-in person. They are removed before Phase 0 sign-off.</Text>
+        <Text>These buttons exist only to run spec experiments E1, E3, E4, E5 and E6 as a signed-in person. They are removed before Phase 0 sign-off.</Text>
       </SectionMessage>
 
       <ButtonGroup>
@@ -97,6 +117,20 @@ const Experiments = () => {
         </Button>
         <Button isDisabled={busy !== null} onClick={() => run('E5 requests', 'exp.e5.state')}>
           E5 · Show requests
+        </Button>
+      </ButtonGroup>
+      <ButtonGroup>
+        <Button isDisabled={busy !== null} onClick={() => run('E4 models', 'exp.e4.models')}>
+          E4 · List models (admin, paid API)
+        </Button>
+        <Button isDisabled={busy !== null} onClick={() => runE4('sonnet')}>
+          E4 · Run pilot on Sonnet 4.5 (admin, paid)
+        </Button>
+        <Button isDisabled={busy !== null} onClick={() => runE4('haiku')}>
+          E4 · Run pilot on Haiku 4.5 (admin, paid)
+        </Button>
+        <Button isDisabled={busy !== null} onClick={() => run('E4 report', 'exp.e4.report')}>
+          E4 · Show results
         </Button>
       </ButtonGroup>
       {busy && (

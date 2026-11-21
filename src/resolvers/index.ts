@@ -7,6 +7,7 @@ import { report } from '../experiments/e10';
 import { groupsOf, myGroups, seedGroups } from '../experiments/e6';
 import { prepare as e5Prepare, raise as e5Raise, STATE_KEY as E5_STATE, type E5State } from '../experiments/e5';
 import { getSetting } from '../db/store';
+import { listModels as e4ListModels, report as e4Report, runBatch as e4RunBatch } from '../experiments/e4';
 import type { ImpersonationTarget } from '../change/sweep';
 import { requester } from '../providers/assets-api';
 
@@ -119,6 +120,29 @@ resolver.define('exp.e5.state', async () => {
   const state = await getSetting<E5State>(E5_STATE);
   return state ? { requests: state.requests, requestType: state.requestTypeName, serviceDeskId: state.serviceDeskId } : null;
 });
+
+// E4 pilot. Admin only: every call costs money, and the human approved at most 100 calls / $3 (DECISIONS D6).
+const E4Model = z.object({ model: z.enum(['sonnet', 'haiku']) });
+
+resolver.define('exp.e4.models', async ({ context }) => {
+  await runMigrations();
+  if (!context.accountId) return { refused: 'No signed-in user' };
+  if (!(await callerIsJiraAdmin(requester('user')))) return { refused: 'Only a Jira administrator can run E4' };
+  const res = await e4ListModels();
+  await recordRun('E4', 'list', res.ok, res.ok ? `ok: ${JSON.stringify(res.models).slice(0, 400)}` : `failed: ${res.error ?? ''}`, res);
+  return res;
+});
+
+resolver.define('exp.e4.run', async ({ context, payload }) => {
+  await runMigrations();
+  if (!context.accountId) return { refused: 'No signed-in user' };
+  const parsed = E4Model.safeParse(payload);
+  if (!parsed.success) return { refused: 'Bad model' };
+  if (!(await callerIsJiraAdmin(requester('user')))) return { refused: 'Only a Jira administrator can run E4' };
+  return e4RunBatch(parsed.data.model, 2);
+});
+
+resolver.define('exp.e4.report', async () => e4Report());
 
 function summariseSteps(ok: boolean, steps: { step: string; status: number | null; ok: boolean; note?: string }[]): string {
   if (ok) return 'ok';

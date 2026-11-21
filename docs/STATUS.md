@@ -34,6 +34,11 @@
   with no Assets role granted; the first sweep there (18:36:30, no user) logged `[E1] sweep:app ok: KS-DEV v13.2,
   KS-PROD v13.2`. The new site has 0 service desks.
 
+- E4 pilot built, nothing run: `npx tsc` exit 0, eslint exit 0, `npx vitest run`: `Tests 38 passed (38)` (adds
+  `e4-translate` and `e4-budget` tests with a fake model). `forge lint`: no issues. `forge deploy -e development`:
+  4.2.0 deployed, "eligible for the Runs on Atlassian program". `@forge/llm` 1.0.10 pinned. The human approved up to $3
+  of LLM spend; no LLM call has been made yet (waiting for the payment method).
+
 ### Not done / untested
 - Demo group creation: 401 "scope does not match" with `write:group:jira`; right scope set still unknown (Phase 4).
 - E3 "who changed it" (needs an edit to KS-DEV). Absent-vs-empty attributes in AQL replies.
@@ -43,11 +48,11 @@
 
 ### Next
 
-- E4 last: read the Forge LLM pricing page, report the price per call and the pilot total, and wait for the human's
-  approval before any LLM call; then STOP for the Assets decision (Nov 23).
+- E4: once the payment method is on, run "List models", then the pilot on Sonnet 4.5 and Haiku 4.5 from the demo
+  site panel (guard: 100 calls / $2.90); record results; then STOP for the Assets decision (Nov 23).
 
 ### Waiting on the human
 
-- Payment method on the Developer Space, then cost approval, before any LLM call (E4).
+- Payment method on the Developer Space (cost approval given 2026-11-22: up to $3).
 - Before any push to a remote: the root commit `6693b75` still contains the skill eval fixtures (fake token);
   decide whether to rewrite it (DECISIONS D9).
