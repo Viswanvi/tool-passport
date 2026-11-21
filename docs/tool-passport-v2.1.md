@@ -55,7 +55,7 @@ Every requirement on the [Codegeist 2026 rules page](https://codegeist2026.devpo
 | # | Rule requirement | How Tool Passport meets it | Proof | Status |
 | --- | --- | --- | --- | --- |
 | 1 | A Forge app that integrates with at least one of Jira, Confluence, JSM, Bitbucket, Teamwork Graph or Rovo | Forge app on Jira and JSM, reading JSM Assets; Rovo action (P1) | Manifest, section 9 | Planned |
-| 2 | Installs in a judge's test environment through an installation link | Production deploy and distribution link; setup wizard; registry mode when the judge's site has no Assets | E9 fresh-site test on two sites | Planned |
+| 2 | Installs in a judge's test environment through an installation link | Production deploy and distribution link; setup wizard; Assets read as the app, so judges and employees need no Assets role (E1, E2; DECISIONS D25); registry mode when the judge's site has no Assets | E9 fresh-site test on two sites | Planned |
 | 3 | Runs consistently and works as shown in the video and text | Demo data is created through real APIs; no hard-coded screens; the video follows the judge path | Judge path timed twice in week 5 | Planned |
 | 4 | New project, unpublished before the submission period | Code starts Nov 17, after the Oct 27 start; nothing published earlier | Repository history | Planned |
 | 5 | Choose one category | Apps for Software Teams | Devpost form | Planned |
@@ -642,7 +642,7 @@ export async function publishAnswer({ context, answer }) {
 }
 ```
 
-Re-checks inside triggers and the sweep run without a user present. They read Assets and group membership in the app context if E1 and E6 confirm that works. If not, readiness and access stay Not verified until the asker opens the card, which re-checks as the user and polls every 10 seconds while a request is open.
+Re-checks inside triggers and the sweep run without a user present. They read Assets and group membership in the app context, which E1, E2, E6 and E10 confirmed (DECISIONS D25). If a read still fails, readiness and access stay Not verified until the asker opens the card, which re-checks and polls every 10 seconds while a request is open.
 
 **Version validity**
 
@@ -865,7 +865,7 @@ The app answers questions about permissions, so it must never become a way aroun
 | A false Yes from missing data | Missing input is Not verified (section 5); combine() refuses an empty check list | False-Yes suite, in the build and on the test screen |
 | Someone other than the owner changes a fact, rule or mapping | Every write resolver checks owner or Jira administrator on the server; hiding buttons is not the control | Unit test calling each write resolver as a non-owner |
 | A request pretends to be someone else | The asker always comes from the Forge context; no resolver or Rovo action accepts an account ID; request content comes from the stored answer | Code review checklist and a forged-payload test |
-| Environment data shown to the wrong people | Assets reads return only mapped attributes of the passport schema; environments can be limited to an audience group, and non-members can't pick them | E1 and a unit test |
+| Environment data shown to the wrong people | Assets is read as the app (D25), which ignores the asker's own Assets permissions, so these controls are the only protection: reads return only mapped attributes of objects in the passport schema; environments can be limited to an audience group, and non-members can't pick them | E1 and a unit test |
 | The model infers permission from wording | Access comes only from mapped group membership and policy only from rules; the model sees neither; code adds the linked checks | Injection and social-pressure cases in the false-Yes suite |
 | An approval is recorded that nobody gave | Only resolutions mapped to Approved in setup count; anything else leaves the approval pending | Unit test with an unmapped resolution |
 | One asker's question leaks to another | Each asker has their own request; owners answer in the app; nobody is added as a participant | Privacy test (section 19) |
@@ -970,7 +970,7 @@ Everything a judge sees is created by "Load demo data" through the same APIs a r
 
 **Judge path with Assets**
 
-1. Install from the link on a site with Jira and Jira Service Management (Assets available; see E2).
+1. Install from the link on a site with Jira and Jira Service Management (Assets is on by default on a free developer site, and no Assets role is needed; see E2). A new site has no service desk yet, so setup creates or picks one, and every asker needs the JSM Customer role (D23).
 2. Apps → Tool Passport setup → pick the service desk → **Load demo data**. This creates the request types, the Assets schema and objects, the two groups (adding you to kestrel-dev-builders), the catalog, facts, rules and mappings. You play both Priya and Marco.
 3. Apps → Tool Passport → Ask. Pick Kestrel Studio and KS-DEV, then a suggested question. Switch to KS-PROD.
 4. Click **Request the fix**, open the request, follow its link to the KS-DEV object in Assets, add "frontend", resolve the request, and return to the card. Then **Request approval** and resolve that request as Approved.
