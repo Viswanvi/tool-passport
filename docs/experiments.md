@@ -16,7 +16,7 @@ All times UTC. Demo site `one-atlas-oibs`, app version 3.0.0-3.3.0 (development)
 | E3 | Can the card show where an Assets value came from? | **Partial pass** | `created` and `updated` available on the object. History: 0 entries on an unedited object; "who changed it" untested |
 | E4 | Does translation work, and fail safely? | Not run (needs cost approval) | |
 | E5 | Can the app raise requests for an employee and react to resolution? | **Blocked** | Raising for Sam returns 401: the asker needs the org-level JSM "Customer" role. Adding Sam as a desk customer (204) isn't enough. Resolution events not yet tested |
-| E6 | Can the app read the asker's groups? | **PASS** (Sam's no-user row pending) | Groups as the user and as the app: 200 for admin (89) and Sam (1). Creating demo groups: 401 "scope does not match" with `write:group:jira` |
+| E6 | Can the app read the asker's groups? | **PASS** | Groups as the user and as the app: 200 for admin (89) and Sam (1). Creating demo groups: 401 "scope does not match" with `write:group:jira` |
 | E7 | Is change detection safe to repeat? | Not run | |
 | E8 | Can judges use the Rovo action? (P1) | Moved to Phase 2 (D7) | |
 | E9 | Can a stranger reach moment 1 quickly? | Moved to Phase 4 (D7) | |
@@ -96,14 +96,14 @@ App version 4.0.0 (scopes `read:jira-user`, plus granular `read:group:jira` / `w
 | `sweep:app:admin`, `sweep:impersonate:admin` 07:11-07:21 | scheduled trigger, no user | admin | 200, 89 groups, every tick |
 | #60179 `ui:user:non-admin` 07:22:44 | `api.asUser()` | Sam | 200, 1 group |
 | #30149 `ui:app:non-admin` 07:22:45 | `api.asApp()` | Sam | 200, 1 group |
-| `sweep:app:non-admin`, `sweep:impersonate:non-admin` | scheduled trigger, no user | Sam | Pending (next tick after 07:22) |
+| `sweep:app:non-admin`, `sweep:impersonate:non-admin` 07:26:33 | scheduled trigger, no user | Sam | 200, 1 group (both). Log: `[E6] sweep:app:non-admin ok: 1 groups 200`, `[E6] sweep:impersonate:non-admin ok: 1 groups 200` |
 
-**Pass bar ("groups returned in both contexts"): PASS** for the admin and for Sam with a user present and as the app;
-the no-user path is proven for the admin (every tick) and is being confirmed for Sam.
+**Pass bar ("groups returned in both contexts"): PASS** for the admin and for Sam, with a user present and in the
+scheduled trigger with no user, as the app and by impersonation.
 
 **Implication:** `groups.ok` can be computed in the UI and in triggers with `api.asApp()` and the asker's account id
 from the stored ask; impersonation isn't needed for groups either (recommend dropping `allowImpersonation` from
-`read:jira-user` too once Sam's sweep row is in).
+`read:jira-user` as well as from the cmdb read scopes).
 
 **Demo seed: creating groups (gap J from the kickoff) — FAIL with the scopes tried.**
 - As the app: `GET /rest/api/3/group/bulk?groupName=…` 200 (lookup works); `POST /rest/api/3/group`
