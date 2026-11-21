@@ -7,12 +7,13 @@ Order agreed at kickoff: E10 (started first, passive) → E1 (+ E3) → E6 → E
 first). STOP after E1, E2, E4, E5, E6 for the Assets decision (due Nov 23). E7 after the decision; E8 in Phase 2;
 E9 in Phase 4.
 
-All times UTC. Demo site `one-atlas-oibs`, app version 3.0.0-3.3.0 (development).
+All times UTC. Demo site `one-atlas-oibs`, app version 3.0.0-3.3.0 (development). E2 ran on the fresh free developer
+site `toolpassport` with app 4.1.0 (development).
 
 | ID | Question | Status | Result so far |
 | --- | --- | --- | --- |
-| E1 | Which Assets read path works from Forge? | **PASS on the demo site (app context)**; repeat on the fresh site in E2 | App context reads the passport objects for everyone, with or without a user. User context and impersonation work for the admin but return 403 for Sam (no Assets role). Schema writes: admin user yes, app no (403) |
-| E2 | Will Assets exist on a judge's site? | Not run (needs the fresh developer site) | |
+| E1 | Which Assets read path works from Forge? | **PASS (app context)** on the demo site; app-context read repeated on the fresh site in E2 | App context reads the passport objects for everyone, with or without a user. User context and impersonation work for the admin but return 403 for Sam (no Assets role). Schema writes as the app: 403 on the demo site, 201 on the fresh site |
+| E2 | Will Assets exist on a judge's site? | **PASS** | Free developer site (Cloud Standard) has Assets on, no upgrade or trial. Installed app reads it as the app with no Assets role granted, and could even create the schema and objects as the app |
 | E3 | Can the card show where an Assets value came from? | **Partial pass** | `created` and `updated` available on the object. History: 0 entries on an unedited object; "who changed it" untested |
 | E4 | Does translation work, and fail safely? | Not run (needs cost approval) | |
 | E5 | Can the app raise requests for an employee and react to resolution? | **PASS** (one unexplained missed-event window) | Raise as the app on behalf of the asker works once the asker has the org-level JSM "Customer" role (401 before). Resolution reaches the app in 1-2 s; the name is in the changelog and a read-back, not in `issue.fields` |
@@ -60,8 +61,8 @@ AQL reply top-level keys: `values, objectTypeAttributes, maxResults, startAt, to
 
 **Contradiction with the docs:** Atlassian's "grant roles to Forge apps (2LO)" page says the app account has no
 Assets access by default. Here the app read the passport objects without any role. Possible reasons: the demo site's
-configuration, or these endpoints being exempt. **E2 must repeat the app-context read on the fresh developer site**
-before the design relies on it.
+configuration, or these endpoints being exempt. **E2 repeated the app-context read on the fresh developer site: it
+works there too, also with no role granted** (see E2). The contradiction with the docs is still unexplained.
 
 **Pass bar** ("at least one path returns the environment object for an employee with no Assets role"):
 **PASS on the demo site, through the app context only.** During Sam's own click the app-context read returned both
@@ -77,13 +78,57 @@ employees can't read Assets").
   for objects in the passport schema, and honour each environment's audience group.
 - `allowImpersonation` is not needed on the cmdb read scopes: recommend removing it (it only adds an upgrade
   prompt). `read:jira-user` impersonation waits for E6.
-- Writes (setup wizard, demo seed) must run as the signed-in admin in user context; the app gets 403 on schema create.
-- **Still unproven on a judge's site:** the docs say the app account needs an Assets role. E2 repeats the app-context
-  read on the fresh developer site. If it fails there, the setup wizard must tell the admin to grant the app the
-  Assets "Users" role on the passport schema (and the judge path gains a step).
+- Writes (setup wizard, demo seed): on the demo site the app got 403 on schema create and only the signed-in admin
+  could write; on the fresh site (E2) the app could write. The wizard should try the app first and fall back to the
+  signed-in admin, which is what `e1.ts` `setup` already does.
+- ~~Still unproven on a judge's site~~ Answered by E2: the app-context read works on a fresh free developer site with
+  no Assets role granted. Keep a clear error for a 403 anyway (a judge's site may have Assets configured differently),
+  telling the admin to grant the app the Assets "Users" role on the passport schema.
 
 **Open sub-question (provider contract, absent vs empty):** every attribute on both objects has a value, so whether
 AQL omits empty attributes is untested. Test with an empty attribute before the Assets provider is built.
+
+## E2 · Assets on a fresh free developer site
+
+**Site:** `toolpassport.atlassian.net`, created 2026-11-21 by the human (admin account) from
+`go.atlassian.com/cloud-dev`. The sign-up page: "Cloud Developer Bundle · Cloud Standard … standard versions of Jira
+Software, Service Collection, and Confluence, which are free forever" (limits: 5 users for Jira and Confluence, 1
+agent for Service Collection). Nothing was set up by hand afterwards.
+
+**Is Assets there? (checked in the browser as the admin, 18:2x)**
+
+| Check | Result |
+| --- | --- |
+| `GET /rest/api/3/instance/license` | 200: `jira-customer-service`, `jira-servicedesk`, `jira-software`, each `plan: "PAID"` (the developer licence reports PAID although no payment exists) |
+| `GET /rest/servicedeskapi/assets/workspace` | 200, one workspace `8d6845ee-…` |
+| `GET /rest/servicedeskapi/servicedesk` | 200, **0 service desks** (a judge must create one; the setup wizard has to handle this) |
+| Assets schema list (browser gateway) | 200, one auto-created empty schema "Business Portfolio" (`A_BP`), `canManage: true` |
+| `/jira/assets` page | "Welcome to Assets", **Create a schema** button; no upgrade or trial prompt |
+
+**Installed app** (`forge install --site toolpassport.atlassian.net --product jira -e development
+--confirm-scopes --non-interactive`, approved by the human): `√ Install in Jira complete!`. Status panel on that site:
+`Migrations: ok` (each installation has its own Forge SQL database: `E10: 0 ticks` there).
+
+| Run (fresh site) | Context | Result |
+| --- | --- | --- |
+| #1 `setup:app` 18:34:59 | `api.asApp()` | **Every step as the app**: workspace 200, create schema 201 (id 7), object type 201 (id 51), 4 attributes 201, KS-DEV and KS-PROD 201. On the demo site the same call got 403 at create schema |
+| #2 `ui:user:admin` 18:35:11 | `api.asUser()` | 200, both objects, all attributes; history 200. No consent screen appeared |
+| #3 `ui:app` 18:35:12 | `api.asApp()` | **200, `ok: KS-DEV v13.2, KS-PROD v13.2`. No Assets role was granted to the app** |
+| sweep 18:36:30 (invocation `8df9bba8`, first tick on this site) | `api.asApp()` in the scheduled trigger, no user | `[E1] sweep:app ok: KS-DEV v13.2, KS-PROD v13.2`; also `sweep:impersonate:admin ok`, `[E6] sweep:app:admin ok: 10 groups 200` |
+
+The install's lifecycle event logged `[lifecycle] migrations applied: none` at 18:34:52, after the page had already
+applied them (the resolvers run migrations too), so either path brings a new installation's database up.
+
+**Pass bar ("Assets available on a free developer site"): PASS.** Assets is on by default on the free Cloud Standard
+developer site, and the installed app reads (and writes) it as the app with no role set up.
+
+**Not covered:** a non-admin employee on the fresh site (Sam isn't invited there, to keep it fresh; E1 covered that on
+the demo site and the app-context read doesn't depend on the asker). A judge's *existing* site on Free or with
+customised Assets roles may differ; the app must show a clear message on a 403. Why the app can write on this site
+but not on the demo site is unexplained (different Assets role defaults between the two sites is the likely cause).
+
+**What this means for the design:** Assets mode can be a real judge path, not only a video path. The judge path still
+needs a service desk created first (0 on a new site), which the setup wizard or the written guide must cover.
 
 ## E6 · The asker's groups
 

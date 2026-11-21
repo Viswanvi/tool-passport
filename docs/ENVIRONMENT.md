@@ -16,6 +16,7 @@ email addresses.
 | Rovo Chat visible on the demo site? (Stage 3) | yes ("Open Rovo Chat" in the top bar) |
 | Confluence on the demo site? | yes (/wiki opens) |
 | Licensed products (applicationrole) | Jira Software, Jira Service Desk, Jira Product Discovery, Jira Customer Service |
+| Fresh free developer site (E2, later E9) | https://toolpassport.atlassian.net, created 2026-11-21 by the admin account from `go.atlassian.com/cloud-dev` ("Cloud Developer Bundle, Cloud Standard": Jira, JSM, Confluence free). Assets workspace 8d6845ee-3640-4610-89e6-337b1814da32. Dev app installed 2026-11-21 18:33 UTC. No service space, no second user. Keep it fresh: create nothing by hand |
 | Node.js version | 24.22.1 (npm 11.19.1; stay on npm 11) |
 | Forge CLI version | 15.1.0 |
 

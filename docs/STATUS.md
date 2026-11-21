@@ -25,26 +25,29 @@
 - E6 PASS: groups for admin (89) and Sam (1) as the user, as the app, and from the sweep (app and impersonation).
 - E5 raise: the app raised TPD-1 and TPD-2 for Sam (`Sam raised this request via API`) and assigned them to the admin;
   resolved TPD-1 as Done and TPD-2 as Declined in the browser as the admin.
+- E5 PASS once events flowed (1-2 s); changes made under 4.0.0 (07:27-07:30) were never processed, unexplained.
+- Fresh free developer site `toolpassport.atlassian.net` created by the human (Cloud Standard developer bundle).
+  `forge install --site toolpassport.atlassian.net --product jira -e development --confirm-scopes --non-interactive`
+  (approved): `√ Install in Jira complete!`; status panel there: `Migrations: ok`.
+- E2 PASS: Assets on by default (workspace 200, `/jira/assets` with "Create a schema", no upgrade prompt). As the app:
+  schema, type, 4 attributes and 2 objects created (201), and the AQL read returned `ok: KS-DEV v13.2, KS-PROD v13.2`
+  with no Assets role granted; the first sweep there (18:36:30, no user) logged `[E1] sweep:app ok: KS-DEV v13.2,
+  KS-PROD v13.2`. The new site has 0 service desks.
 
 ### Not done / untested
-
-- E5 PASS once events flowed (1-2 s); changes made under 4.0.0 (07:27-07:30) were never processed, unexplained.
-- E2 (needs the fresh site), including the app-context Assets read there.
 - Demo group creation: 401 "scope does not match" with `write:group:jira`; right scope set still unknown (Phase 4).
 - E3 "who changed it" (needs an edit to KS-DEV). Absent-vs-empty attributes in AQL replies.
 - E4 (last; needs a payment method and the human's cost approval). E7 after the Assets decision.
 
+- On the fresh site: a non-admin employee (not invited there, to keep it fresh).
+
 ### Next
 
-- E2 on the fresh developer site; then E4 last (pricing check and the human's cost approval before any LLM call);
-  then STOP for the Assets decision (Nov 23).
-- When the fresh developer site exists: E2, including the app-context read there (the docs say the app needs an
-  Assets role; the demo site didn't require one).
+- E4 last: read the Forge LLM pricing page, report the price per call and the pilot total, and wait for the human's
+  approval before any LLM call; then STOP for the Assets decision (Nov 23).
 
 ### Waiting on the human
 
-- Second account (Sam): Jira + JSM customer access only, no Assets role, not an agent on TPD.
-- Free Atlassian Cloud developer site (E2, E8, E9, fresh-site checks).
 - Payment method on the Developer Space, then cost approval, before any LLM call (E4).
 - Before any push to a remote: the root commit `6693b75` still contains the skill eval fixtures (fake token);
   decide whether to rewrite it (DECISIONS D9).
