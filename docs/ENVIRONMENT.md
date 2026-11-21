@@ -11,7 +11,7 @@ email addresses.
 | Forge app ID (`app.id` in manifest.yml) | ari:cloud:ecosystem::app/116e4a95-46a5-4008-8a77-9177f8e23ed0 |
 | JSM service space name and key | Tool Passport Desk (TPD), project id 10202, template Basic IT service management, created 2026-11-20 |
 | Account 1 (plays Priya and Marco) | the admin account (display name kept out of the repo) |
-| Account 2 display name (plays Sam) | Sam (invited 2026-11-20: Jira User via `jira-users-one-atlas-oibs`; no admin access, no Assets role, not a JSM agent) |
+| Account 2 display name (plays Sam) | Sam (invited 2026-11-20: Jira User via `jira-users-one-atlas-oibs`, which also grants Studio; no admin access, no Assets role, not a JSM agent. 2026-11-21: JSM **Customer** role added, needed for `raiseOnBehalfOf` (E5); customer of the Tool Passport Desk) |
 | Assets visible on the demo site? (Stage 3) | yes (workspace id e814c5c1-5d62-496f-9b4c-78c6d67a7401; 14 seeded schemas) |
 | Rovo Chat visible on the demo site? (Stage 3) | yes ("Open Rovo Chat" in the top bar) |
 | Confluence on the demo site? | yes (/wiki opens) |
