@@ -6,16 +6,19 @@ import { translate, scoreCase, type ChatFn, type TranslateResult } from './e4-tr
 /**
  * E4 pilot runner (DECISIONS D6). Every LLM call goes through `guarded`, which enforces the human's
  * approval: at most MAX_CALLS calls and MAX_USD estimated spend in total, across all runs. Only models
- * with a price on the Forge LLMs pricing page (read 2026-11-21) can be used, so the estimate is real.
+ * with a known price can be used, so the estimate is real.
  */
 
 export const MAX_CALLS = 100;
 export const MAX_USD = 2.9;
 
-/** USD per 1M tokens, from the Forge LLMs pricing page. */
+/**
+ * USD per 1M tokens. Credits per 1M tokens come from the live `list()` reply (run #422, 2026-11-21:
+ * sonnet-5-5 20, haiku-5-5 5); credits cost $0.10 (input) and $0.50 (output) per the Forge LLMs pricing page.
+ */
 export const PRICED = {
-  sonnet: { model: 'claude-sonnet-4-5-20250929', inPerM: 3, outPerM: 15 },
-  haiku: { model: 'claude-haiku-4-5-20251001', inPerM: 1, outPerM: 5 },
+  sonnet: { model: 'claude-sonnet-5-5', inPerM: 2, outPerM: 10 },
+  haiku: { model: 'claude-haiku-5-5', inPerM: 0.5, outPerM: 2.5 },
 } as const;
 export type ModelKey = keyof typeof PRICED;
 

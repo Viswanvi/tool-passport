@@ -37,7 +37,10 @@
 - E4 pilot built, nothing run: `npx tsc` exit 0, eslint exit 0, `npx vitest run`: `Tests 38 passed (38)` (adds
   `e4-translate` and `e4-budget` tests with a fake model). `forge lint`: no issues. `forge deploy -e development`:
   4.2.0 deployed, "eligible for the Runs on Atlassian program". `@forge/llm` 1.0.10 pinned. The human approved up to $3
-  of LLM spend; no LLM call has been made yet (waiting for the payment method).
+  of LLM spend and added a payment method.
+- E4 PASS (pilot), app 4.3.0 (deploy: "eligible for the Runs on Atlassian program"): `list()` ok (11 models with
+  credit pricing); `claude-sonnet-5-5` and `claude-haiku-5-5` each `answerableExact 20/20, unsupportedMarked 3/3,
+  empty true, forcedError true, retries []`. Budget: `calls 49, inputTokens 90980, outputTokens 2465, usd 0.1292`.
 
 ### Not done / untested
 - Demo group creation: 401 "scope does not match" with `write:group:jira`; right scope set still unknown (Phase 4).
@@ -48,11 +51,12 @@
 
 ### Next
 
-- E4: once the payment method is on, run "List models", then the pilot on Sonnet 4.5 and Haiku 4.5 from the demo
-  site panel (guard: 100 calls / $2.90); record results; then STOP for the Assets decision (Nov 23).
+- STOP: E1, E2, E4, E5 and E6 are done. The human decides the Assets read path (or registry-first) by Nov 23.
+- After the decision: E7, finish E3 ("who changed it" after an edit), Phase 0 sign-off (remove the experiment panel
+  and code, drop `experiment_runs`, lint, eligibility, decide on `allowImpersonation`).
 
 ### Waiting on the human
 
-- Payment method on the Developer Space (cost approval given 2026-11-22: up to $3).
+- The Assets decision (Nov 23).
 - Before any push to a remote: the root commit `6693b75` still contains the skill eval fixtures (fake token);
   decide whether to rewrite it (DECISIONS D9).

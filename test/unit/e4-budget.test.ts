@@ -30,7 +30,7 @@ describe('E4 budget guard (the human approved at most 100 calls / $3)', () => {
     await runBatch('sonnet', 1);
     const b = await budget();
     expect(b.calls).toBe(1);
-    expect(b.usd).toBeCloseTo((4000 * 3 + 100 * 15) / 1_000_000, 10);
+    expect(b.usd).toBeCloseTo((4000 * 2 + 100 * 10) / 1_000_000, 10);
   });
 
   it('stops at the call cap without calling the model again', async () => {

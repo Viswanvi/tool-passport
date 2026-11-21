@@ -124,10 +124,10 @@ const Experiments = () => {
           E4 · List models (admin, paid API)
         </Button>
         <Button isDisabled={busy !== null} onClick={() => runE4('sonnet')}>
-          E4 · Run pilot on Sonnet 4.5 (admin, paid)
+          E4 · Run pilot on Sonnet 5.5 (admin, paid)
         </Button>
         <Button isDisabled={busy !== null} onClick={() => runE4('haiku')}>
-          E4 · Run pilot on Haiku 4.5 (admin, paid)
+          E4 · Run pilot on Haiku 5.5 (admin, paid)
         </Button>
         <Button isDisabled={busy !== null} onClick={() => run('E4 report', 'exp.e4.report')}>
           E4 · Show results
