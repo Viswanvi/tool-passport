@@ -15,8 +15,8 @@ All times UTC. Demo site `one-atlas-oibs`, app version 3.0.0-3.3.0 (development)
 | E2 | Will Assets exist on a judge's site? | Not run (needs the fresh developer site) | |
 | E3 | Can the card show where an Assets value came from? | **Partial pass** | `created` and `updated` available on the object. History: 0 entries on an unedited object; "who changed it" untested |
 | E4 | Does translation work, and fail safely? | Not run (needs cost approval) | |
-| E5 | Can the app raise requests for an employee and react to resolution? | Not run (needs Sam) | |
-| E6 | Can the app read the asker's groups? | Not run (needs Sam) | |
+| E5 | Can the app raise requests for an employee and react to resolution? | **Blocked** | Raising for Sam returns 401: the asker needs the org-level JSM "Customer" role. Adding Sam as a desk customer (204) isn't enough. Resolution events not yet tested |
+| E6 | Can the app read the asker's groups? | **PASS** (Sam's no-user row pending) | Groups as the user and as the app: 200 for admin (89) and Sam (1). Creating demo groups: 401 "scope does not match" with `write:group:jira` |
 | E7 | Is change detection safe to repeat? | Not run | |
 | E8 | Can judges use the Rovo action? (P1) | Moved to Phase 2 (D7) | |
 | E9 | Can a stranger reach moment 1 quickly? | Moved to Phase 4 (D7) | |
@@ -84,6 +84,60 @@ employees can't read Assets").
 
 **Open sub-question (provider contract, absent vs empty):** every attribute on both objects has a value, so whether
 AQL omits empty attributes is untested. Test with an empty attribute before the Assets provider is built.
+
+## E6 · The asker's groups
+
+App version 4.0.0 (scopes `read:jira-user`, plus granular `read:group:jira` / `write:group:jira` added for the seed).
+
+| Run | Context | Who | Result |
+| --- | --- | --- | --- |
+| `ui:user:admin` 2026-11-21 07:1x | `api.asUser()`: `GET /rest/api/3/myself?expand=groups` | admin | 200, 89 groups (`groups.items[].name`) |
+| `ui:app:admin` | `api.asApp()`: `GET /rest/api/3/user/groups?accountId=…` | admin | 200, the same 89 groups (array of `{name, groupId}`) |
+| `sweep:app:admin`, `sweep:impersonate:admin` 07:11-07:21 | scheduled trigger, no user | admin | 200, 89 groups, every tick |
+| #60179 `ui:user:non-admin` 07:22:44 | `api.asUser()` | Sam | 200, 1 group |
+| #30149 `ui:app:non-admin` 07:22:45 | `api.asApp()` | Sam | 200, 1 group |
+| `sweep:app:non-admin`, `sweep:impersonate:non-admin` | scheduled trigger, no user | Sam | Pending (next tick after 07:22) |
+
+**Pass bar ("groups returned in both contexts"): PASS** for the admin and for Sam with a user present and as the app;
+the no-user path is proven for the admin (every tick) and is being confirmed for Sam.
+
+**Implication:** `groups.ok` can be computed in the UI and in triggers with `api.asApp()` and the asker's account id
+from the stored ask; impersonation isn't needed for groups either (recommend dropping `allowImpersonation` from
+`read:jira-user` too once Sam's sweep row is in).
+
+**Demo seed: creating groups (gap J from the kickoff) — FAIL with the scopes tried.**
+- As the app: `GET /rest/api/3/group/bulk?groupName=…` 200 (lookup works); `POST /rest/api/3/group`
+  **401 `"Unauthorized; scope does not match"`**. Granular `write:group:jira` alone is not what this endpoint needs.
+  Nothing was created.
+- As the admin user: `NEEDS_AUTHENTICATION_ERR` (the call threw before reaching Jira). After the 4.0.0 upgrade, a
+  user-context call on a **newly added scope** needs the user to grant consent again; calls on scopes the user had
+  already used kept working. Our helper caught the error, so the consent prompt never appeared.
+- Next: find the right scope set (likely the classic `manage:jira-configuration`, or a larger granular set) before
+  Phase 4, or have the setup wizard ask the admin to create the two groups. Phase 1 lesson: let
+  `NEEDS_AUTHENTICATION_ERR` propagate from user-context resolver calls so Forge shows the consent screen.
+
+## E5 · Requests raised for the asker, and resolution events
+
+**Prepare** (admin, app context): `GET /rest/servicedeskapi/servicedesk` 200 → Tool Passport Desk is service desk
+**14**; `GET …/servicedesk/14/requesttype` 200; first request type needing only summary/description is **320 "Get IT
+help"**. Owner/assignee = the admin.
+
+**Raise for Sam** (#30150, 07:22:57, app context, `POST /rest/servicedeskapi/request` with `raiseOnBehalfOf` = Sam):
+
+| Step | Status | Result |
+| --- | --- | --- |
+| Raise on behalf of Sam | **401** | `"You can't raise a request on behalf of this user because they need the customer role on your site managed by your organization admins."` (`sd.request.create.error.permission.requestor`) |
+| `POST /rest/servicedeskapi/servicedesk/14/customer` `{accountIds:[Sam]}` as the app | **204** | The app *can* add a desk customer (`manage:servicedesk-customer`) |
+| Raise again | **401** | Same message: desk membership isn't the missing piece |
+
+**Finding:** on this org, `raiseOnBehalfOf` needs the person to hold the **Jira Service Management "Customer" role**
+at the organization level (managed in admin.atlassian.com), not only to be a customer of the desk. Sam was invited
+with Jira access only. Consequences for the design:
+- Every asker needs the JSM customer role before Request the fix / Request approval / Ask the owner can work. The
+  setup wizard and judge instructions must say so, and the app must show a clear message on this 401 instead of
+  claiming a request exists.
+- Pending: give Sam the customer role (human's approval needed), then raise again, resolve one request as Done and one
+  as Declined, and record the event payload and latency.
 
 ## E3 · Assets record provenance
 
