@@ -225,6 +225,26 @@ which is always empty. Detect resolution from `changelog.items` (`field === "res
 read-back of the issue (authoritative), never from the event alone. Don't rely on `jiraEventTypeName ===
 "issue_resolved"`.
 
+## E4 · Translation pilot: cost estimate (no LLM call made)
+
+Source: Forge LLMs pricing page (developer.atlassian.com/platform/forge/runtime-reference/forge-llms-api-pricing/),
+read 2026-11-21. "No free usage allowance … All token usage is billed", charged to the app's developer on the
+Forge monthly bill. Input credits $0.10 each, output credits $0.50 each.
+
+| Model | $ per 1M input tokens | $ per 1M output tokens | Est. $ per call (4,000 in / 300 out) |
+| --- | --- | --- | --- |
+| Opus 4.6 | 5 | 25 | 0.028 |
+| Sonnet 4.5 | 3 | 15 | 0.017 |
+| Haiku 4.5 | 1 | 5 | 0.006 |
+
+Per-call size is an estimate: rules (~300 tokens) + 8 worked examples (~1,000) + ~25-key catalog with synonyms
+(~1,500) + the question, rounded up to 4,000 input tokens; the reply is a small JSON object (≤ 300 tokens).
+
+Pilot (D6): 20 questions + forced error + empty + a few unsupported ≈ 25 cases; the spec retries once on an
+unreadable reply, and the set may be re-run once after a prompt fix: **at most 100 calls**, likely about 50.
+Worst case 100 calls on Opus 4.6 ≈ **$2.80**; on Sonnet 4.5 ≈ $1.70; on Haiku 4.5 ≈ $0.60.
+Status: waiting for a payment method on the Developer Space and the human's approval.
+
 ## E3 · Assets record provenance
 
 - `GET …/object/4679` (KS-DEV): `created` and `updated` present (`2026-11-20T18:35:18.141Z`). **Pass bar "updated
