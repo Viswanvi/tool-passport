@@ -67,6 +67,8 @@ Results, verbatim:
   for the Runs on Atlassian program.`
 - `bash scripts/check-prereqs.sh`: `Result: 18 passed, 0 warnings, 0 failed`.
 - Demo site app page after the deploy: shows only the heading and the Phase 1 placeholder; the app's requests 200.
+- First 4.7.0 sweep, both installations (`forge logs`, 2026-11-21 19:46:30-31 UTC):
+  `[sweep] migrations applied: v020_drop_experiment_runs` and `[sweep] cleared Phase 0 experiment settings`, twice.
 
 Security self-review against spec section 14 (what exists after Phase 0):
 
