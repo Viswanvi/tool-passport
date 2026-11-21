@@ -11,7 +11,7 @@ All times UTC. Demo site `one-atlas-oibs`, app version 3.0.0-3.3.0 (development)
 
 | ID | Question | Status | Result so far |
 | --- | --- | --- | --- |
-| E1 | Which Assets read path works from Forge? | **Partial**: admin and no-user paths run; employee-without-Assets-role path needs Sam | All three read paths work for the admin: app context (UI resolver and scheduled trigger, no role granted), user context, and impersonation in the scheduled trigger. Schema writes: admin user yes, app no (403) |
+| E1 | Which Assets read path works from Forge? | **PASS on the demo site (app context)**; repeat on the fresh site in E2 | App context reads the passport objects for everyone, with or without a user. User context and impersonation work for the admin but return 403 for Sam (no Assets role). Schema writes: admin user yes, app no (403) |
 | E2 | Will Assets exist on a judge's site? | Not run (needs the fresh developer site) | |
 | E3 | Can the card show where an Assets value came from? | **Partial pass** | `created` and `updated` available on the object. History: 0 entries on an unedited object; "who changed it" untested |
 | E4 | Does translation work, and fail safely? | Not run (needs cost approval) | |
@@ -20,7 +20,7 @@ All times UTC. Demo site `one-atlas-oibs`, app version 3.0.0-3.3.0 (development)
 | E7 | Is change detection safe to repeat? | Not run | |
 | E8 | Can judges use the Rovo action? (P1) | Moved to Phase 2 (D7) | |
 | E9 | Can a stranger reach moment 1 quickly? | Moved to Phase 4 (D7) | |
-| E10 | Does the five-minute sweep run, and can it read Assets without a user? | **Running** (2-hour window) | Ticking since 18:36:00. Assets read without a user: works (app context) |
+| E10 | Does the five-minute sweep run, and can it read Assets without a user? | **PASS** | 149 ticks over about 12 h, max gap 5 min, none over 10. Assets read without a user works (app context) |
 
 ## E1 · Assets read path
 
@@ -49,8 +49,10 @@ with `qlQuery: objectSchema = "Tool Passport Environments" AND objectType = "Too
 | #30001 `ui:app` 18:35:33 | `api.asApp()` in a UI resolver | (app) | 200, both objects, all attributes. **No Assets role was granted to the app** |
 | #30003 `sweep:app` 18:36:02 | `api.asApp()` in the scheduled trigger | (no user) | 200: `ok: KS-DEV v13.2, KS-PROD v13.2` |
 | `sweep:impersonate:admin` 18:41:05 | `api.asUser(accountId)` in the scheduled trigger | Jira admin | 200: `ok: KS-DEV v13.2, KS-PROD v13.2`. Offline impersonation works with `allowImpersonation` on the read scopes. (The 18:36 attempt failed on a JSON-column bug in our code, fixed in 3.2.0.) |
-| `ui:user:non-admin` | `api.asUser()` in a UI resolver | Sam (no Assets role) | **Not run: needs Sam** |
-| `sweep:impersonate:non-admin` | `api.asUser(accountId)` in the scheduled trigger | Sam | **Not run: needs Sam** |
+| #60159 `ui:user:non-admin` 2026-11-21 06:55:26 | `api.asUser()` in a UI resolver | Sam (Jira User only, no Assets role) | Workspace lookup 200, then AQL **403** `{"status":403,"error":"Forbidden","path":"/api/v1/object/aql"}` |
+| #148 `ui:app` 06:55:29 (same click by Sam) | `api.asApp()` in a UI resolver | (app) | 200, both objects, all attributes |
+| #60161 `sweep:impersonate:non-admin` 06:56:02 | `api.asUser(accountId)` in the scheduled trigger | Sam | AQL **403** (same body). Impersonation carries the user's own Assets permissions |
+| #149 `sweep:app` 06:56:00 | `api.asApp()` in the scheduled trigger | (no user) | 200 |
 
 AQL reply top-level keys: `values, objectTypeAttributes, maxResults, startAt, total, isLast, hasMoreResults, last`.
 `objectTypeAttributes` maps attribute ids to names, so no extra call is needed. The system attributes `Key`,
@@ -61,9 +63,24 @@ Assets access by default. Here the app read the passport objects without any rol
 configuration, or these endpoints being exempt. **E2 must repeat the app-context read on the fresh developer site**
 before the design relies on it.
 
-**Pass bar** ("at least one path returns the environment object for an employee with no Assets role"): not decided
-yet. The app path doesn't use the employee's permissions at all, so it should pass for Sam; that is what the Sam run
-checks.
+**Pass bar** ("at least one path returns the environment object for an employee with no Assets role"):
+**PASS on the demo site, through the app context only.** During Sam's own click the app-context read returned both
+objects (#148), and it keeps working in the scheduled trigger with no user (#149 and every sweep since 18:36).
+The user-context and impersonation paths both fail for Sam with 403, as the spec predicted (v2.1 fix 9: "most
+employees can't read Assets").
+
+**What this means for the design (for the human's Assets decision, due Nov 23):**
+- The Assets provider reads as the app (`api.asApp()`), in resolvers and in triggers alike. One path, no user needed,
+  so re-checks inside triggers and the sweep can read readiness (spec section 11, "if E1 and E6 confirm").
+- Because the app context ignores the asker's own Assets permissions, the spec's section 14 controls are the
+  protection and must be enforced in code: return only the attributes named in `readiness_keys` plus Version, only
+  for objects in the passport schema, and honour each environment's audience group.
+- `allowImpersonation` is not needed on the cmdb read scopes: recommend removing it (it only adds an upgrade
+  prompt). `read:jira-user` impersonation waits for E6.
+- Writes (setup wizard, demo seed) must run as the signed-in admin in user context; the app gets 403 on schema create.
+- **Still unproven on a judge's site:** the docs say the app account needs an Assets role. E2 repeats the app-context
+  read on the fresh developer site. If it fails there, the setup wizard must tell the admin to grant the app the
+  Assets "Users" role on the passport schema (and the judge path gains a step).
 
 **Open sub-question (provider contract, absent vs empty):** every attribute on both objects has a value, so whether
 AQL omits empty attributes is untested. Test with an empty attribute before the Assets provider is built.
@@ -78,9 +95,13 @@ AQL omits empty attributes is untested. Test with an empty attribute before the 
 ## E10 · Five-minute sweep
 
 - `scheduledTrigger` `interval: fiveMinute`, key `five-minute-sweep`, deployed in 3.0.0 and installed 18:32.
-- First tick `2026-11-20T18:36:00.047Z`, second `18:41:00.180Z`. Pass bar: no gap over 10 minutes across two hours
-  (until about 20:36). The Status panel's E10 line computes the gaps from the recorded ticks.
-- Assets read without a user: **works** in the app context (`sweep:app` above).
+- First tick `2026-11-20T18:36:00.047Z`. Status panel on 2026-11-21 06:56: `E10: 149 ticks, max gap 5 min, gaps over
+  10 min: 0 (from 2026-11-20 18:36:00.167 to 2026-11-21 06:55:58.749)`, about 12 h 20 min.
+- **Pass bar (no gap over 10 minutes across two hours): PASS**, six times over.
+- Assets read without a user: **works** in the app context (`sweep:app`, every tick). Impersonation also works, but
+  only with the impersonated user's own permissions (403 for Sam), so it adds nothing over the app context for Assets.
+- Implication: five-minute detection of version changes is possible for Assets environments (spec F6 "by the sweep if
+  E10 allows").
 
 ## Forge SQL platform behaviour seen while running the experiments (verified on the demo site)
 

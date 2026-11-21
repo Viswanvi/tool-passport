@@ -15,20 +15,22 @@
   `Upgrade complete!`; `forge install list`: version 3, Up-to-date.
 - Forge SQL: all 19 migrations applied by the upgrade event (`[lifecycle] migrations applied: v001_tools …
   v019_experiment_runs`, 18:32:40 UTC).
-- Scheduled trigger: ticks at 18:36:00 and 18:41:00 UTC (E10 running).
-- E1 as the admin, via the built-in browser signed in as the human: setup and reads; see `docs/experiments.md`.
+- E10 PASS: `149 ticks, max gap 5 min, gaps over 10 min: 0` (2026-11-20 18:36 to 2026-11-21 06:56 UTC).
+- E1 PASS on the demo site via the app context, including for Sam (no Assets role); user context and impersonation
+  return 403 for Sam. Details and design implications in `docs/experiments.md`.
+- Sam invited (Jira User only) and renamed "Sam" by the human; recorded in `docs/ENVIRONMENT.md`.
 
 ### Not done / untested
 
-- E1 for an employee without an Assets role (needs Sam). E5, E6 (need Sam). E2 (needs the fresh site).
-- E10 two-hour verdict (window ends about 20:36 UTC).
+- E6, E5 (Sam now exists). E2 (needs the fresh site), including the app-context Assets read there.
 - E3 "who changed it" (needs an edit to KS-DEV). Absent-vs-empty attributes in AQL replies.
 - E4 (last; needs a payment method and the human's cost approval). E7 after the Assets decision.
 
 ### Next
 
-- When Sam exists: Sam opens Apps → Tool Passport and clicks "E1 · Read as me" (user context and, on the next sweep,
-  impersonation as a non-admin). Then E6 and E5.
+- E6 (groups as the user and in app context, plus group create/add for the seed), then E5 (request raised for Sam,
+  resolution events). Both need Sam to click again; E5 adds the issue trigger and may add scopes (install upgrade
+  needs the human's approval).
 - When the fresh developer site exists: E2, including the app-context read there (the docs say the app needs an
   Assets role; the demo site didn't require one).
 
