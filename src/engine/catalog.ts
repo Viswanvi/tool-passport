@@ -1,6 +1,10 @@
 /**
  * Catalog types (spec section 10, `catalog_keys`). The catalog is the only vocabulary the model may use;
- * comparisons live here, never in the model's reply. Phase 1 adds capability links and the repository.
+ * comparisons live here, never in the model's reply. Capability links and the assembled `Catalog` are in
+ * `model.ts`.
+ *
+ * Comparison meaning (evaluate.ts `compare`): `has` needs a stored true; `gte` needs the owner's recorded
+ * limit to be at least the asked value; `lte` the reverse; `eq` compares like with like.
  */
 
 export interface CatalogKey {
