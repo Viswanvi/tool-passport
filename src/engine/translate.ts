@@ -1,14 +1,18 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { CatalogChoice, CatalogKey, WorkedExample } from './catalog';
 
 /**
- * Question → catalog keys (spec section 13 `translate`), without the cache yet (Phase 1). Proven in the E4
- * pilot: 20/20 exact on two models, injections ignored, model errors reported as "failed" (docs/experiments.md).
- * No Forge imports: the chat function is passed in, so it runs in unit tests with a fake. The model only picks
- * catalog keys and values; it never sees facts, rules, environment values or groups.
+ * Question → catalog keys (spec section 13 `translate`), with the translation cache. Proven in the E4 pilot:
+ * 20/20 exact on two models, injections ignored, model errors reported as "failed" (docs/experiments.md).
+ * No Forge imports: the chat function and the cache store are passed in, so it runs in unit tests with fakes.
+ * The model only picks catalog keys and values; it never sees facts, rules, environment values or groups.
  */
 
 export const MAX_QUESTION_CHARS = 500;
+
+/** Bump when the prompt or its rules change, so old cached translations stop being used. */
+export const PROMPT_VERSION = 'p1';
 
 const Value = z.union([z.string(), z.number(), z.boolean()]);
 
@@ -26,10 +30,11 @@ export interface ChatMessage {
   content: string;
 }
 
-/** What the injected chat function returns: the raw content (string or text parts) and token usage. */
+/** What the injected chat function returns: the raw content (string or text parts), usage, and the model used. */
 export interface ChatReply {
   content: unknown;
   usage?: { input_tokens?: number; output_tokens?: number };
+  model?: string;
 }
 
 export type ChatFn = (messages: ChatMessage[]) => Promise<ChatReply>;
@@ -40,10 +45,61 @@ export interface TranslationContext {
   examples: WorkedExample[];
 }
 
+/** One row of the `translations` table: unique on (tool, catalog revision, question hash). */
+export interface CacheKey {
+  toolId: number;
+  catalogRevision: number;
+  questionHash: string;
+}
+
+/**
+ * Where translations are kept. `get` returns the stored requirement unvalidated (it is re-checked here);
+ * `put` keeps keys, values and the model id only: no question text and no model wording (spec section 14).
+ */
+export interface TranslationStore {
+  get(key: CacheKey): Promise<unknown>;
+  put(key: CacheKey, requirement: CatalogChoice[], modelId: string | null): Promise<void>;
+}
+
+/** The cache for one tool at one catalog revision: any change to keys, links, facts or rules bumps it. */
+export interface CacheBinding {
+  store: TranslationStore;
+  toolId: number;
+  catalogRevision: number;
+}
+
 export type TranslateResult =
-  | { status: 'ok'; requirement: CatalogChoice[]; restated: string; attempts: number }
+  | { status: 'ok'; requirement: CatalogChoice[]; restated: string; attempts: number; cached: boolean; modelId?: string }
   | { status: 'unsupported'; reason: string; attempts: number }
   | { status: 'failed'; reason: 'model_unavailable' | 'unreadable_reply'; attempts: number; error?: string };
+
+/** The cache key's question part: case, spacing and trailing punctuation don't make a new question. */
+export function normaliseQuestion(question: string): string {
+  return question
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[\s?!.]+$/u, '');
+}
+
+export function questionHash(question: string): string {
+  return createHash('sha256').update(`${PROMPT_VERSION}\n${normaliseQuestion(question)}`).digest('hex');
+}
+
+/** A plain restatement built from catalog labels only, used when the model's own wording isn't kept. */
+export function describeRequirement(requirement: CatalogChoice[], catalog: CatalogKey[]): string {
+  const byKey = new Map(catalog.map((k) => [k.key, k]));
+  return requirement
+    .map((c) => {
+      const label = byKey.get(c.key)?.label ?? c.key;
+      return c.value === undefined ? label : `${label}: ${String(c.value)}`;
+    })
+    .join('; ')
+    .slice(0, 200);
+}
+
+const Cached = z.array(z.object({ key: z.string(), value: Value.optional() })).min(1).max(4);
 
 export function catalogLines(catalog: CatalogKey[]): string {
   return catalog
@@ -130,14 +186,42 @@ export function checkAgainstCatalog(r: Requirement, catalog: CatalogKey[]): { pr
   return { requirement: out };
 }
 
-export async function translate(question: string, ctx: TranslationContext, chat: ChatFn): Promise<TranslateResult> {
+/**
+ * A cached translation, re-checked against today's catalog. Anything that doesn't fit (wrong shape, unknown
+ * key, missing or bad value) is ignored and the model is asked again: the cache can save a call, never
+ * widen what an answer may use. A failed read is a miss.
+ */
+async function fromCache(key: CacheKey, store: TranslationStore, catalog: CatalogKey[]): Promise<CatalogChoice[] | null> {
+  let stored: unknown;
+  try {
+    stored = await store.get(key);
+  } catch {
+    return null;
+  }
+  const shape = Cached.safeParse(stored);
+  if (!shape.success) return null;
+  const checked = checkAgainstCatalog({ capabilities: shape.data, unsupported: null, restated: '' }, catalog);
+  if ('problem' in checked) return null;
+  // checkAgainstCatalog drops values on keys that take none; a row that changed under it isn't trusted.
+  if (JSON.stringify(checked.requirement) !== JSON.stringify(shape.data)) return null;
+  return checked.requirement;
+}
+
+export async function translate(question: string, ctx: TranslationContext, chat: ChatFn, cache?: CacheBinding): Promise<TranslateResult> {
   const q = question.trim();
   // No model call for these: nothing to translate, and it saves money.
   if (q.length === 0) return { status: 'unsupported', reason: 'The question is empty', attempts: 0 };
   if (q.length > MAX_QUESTION_CHARS) return { status: 'unsupported', reason: 'The question is too long', attempts: 0 };
 
+  const key: CacheKey | null = cache ? { toolId: cache.toolId, catalogRevision: cache.catalogRevision, questionHash: questionHash(q) } : null;
+  if (cache && key) {
+    const hit = await fromCache(key, cache.store, ctx.catalog);
+    if (hit) return { status: 'ok', requirement: hit, restated: describeRequirement(hit, ctx.catalog), attempts: 0, cached: true };
+  }
+
   const messages = buildMessages(q, ctx);
   let parsed: Requirement | null = null;
+  let modelId: string | undefined;
   let attempts = 0;
   // One retry on an unreadable reply (spec section 13); a thrown error is not retried.
   while (attempts < 2 && !parsed) {
@@ -148,6 +232,7 @@ export async function translate(question: string, ctx: TranslationContext, chat:
     } catch (e) {
       return { status: 'failed', reason: 'model_unavailable', attempts, error: String(e).slice(0, 300) };
     }
+    modelId = reply.model;
     const result = Requirement.safeParse(parseReply(reply.content));
     if (result.success) parsed = result.data;
   }
@@ -158,7 +243,16 @@ export async function translate(question: string, ctx: TranslationContext, chat:
   }
   const checked = checkAgainstCatalog(parsed, ctx.catalog);
   if ('problem' in checked) return { status: 'unsupported', reason: checked.problem, attempts };
-  return { status: 'ok', requirement: checked.requirement, restated: parsed.restated, attempts };
+
+  if (cache && key) {
+    try {
+      await cache.store.put(key, checked.requirement, modelId ?? null);
+    } catch {
+      // A cache write that fails costs a model call next time, nothing else.
+    }
+  }
+  const ok: TranslateResult = { status: 'ok', requirement: checked.requirement, restated: parsed.restated, attempts, cached: false };
+  return modelId ? { ...ok, modelId } : ok;
 }
 
 /** Eval scoring (spec E4 bar): exact key set and values for answerable questions; "unsupported" for the rest. */

@@ -305,6 +305,26 @@ describe('false-Yes suite', () => {
       const a = await ask(yesWorld(), DASHBOARD, DEV, picks({ key: 'web_frontend' }, { key: 'approved_by_manager' }));
       expect(a.state).toBe('unsupported');
     });
+
+    it('a cached translation still runs every linked check', async () => {
+      const w = demoWorld();
+      const store = { get: async () => [{ key: 'web_frontend' }], put: async () => undefined };
+      const model = modelReplying('the model should not be called');
+      const a = await answerQuestion(askInput(w, DASHBOARD, DEV), { ...depsFor(w, model), translations: store });
+      expect(a).toMatchObject({ state: 'checked', cached: true, verdict: 'not_ready' });
+      expect(model.sent).toHaveLength(0);
+    });
+
+    it('a cached row that no longer fits the catalog is not used', async () => {
+      for (const bad of [[{ key: 'approved_by_manager' }], [{ key: 'max_upload_gb' }], 'yes', [{ key: 'web_frontend', value: 'approved' }]]) {
+        const w = yesWorld();
+        const store = { get: async () => bad, put: async () => undefined };
+        const model = modelReplying({ capabilities: [], unsupported: 'not covered', restated: '' });
+        const a = await answerQuestion(askInput(w, DASHBOARD, DEV), { ...depsFor(w, model), translations: store });
+        expect(a.state, JSON.stringify(bad)).toBe('unsupported');
+        expect(model.sent).toHaveLength(1);
+      }
+    });
   });
 
   it('9. no policy rule while the default policy is none', async () => {

@@ -121,16 +121,30 @@ Started two days early at the human's request ("Start Phase1").
   (`Tests 1 failed | 42 passed (43)`, case 3); restored, green again.
 - `npx tsc --noEmit -p tsconfig.json`: exit 0. `npx eslint "src/**/*.{ts,tsx}" "test/**/*.ts"`: exit 0.
   `forge lint`: `No issues found.`
+- Step 3, translation cache and model choice (D29), tests written first (red: `normaliseQuestion is not a
+  function`, `Cannot find module '../../src/llm/model-choice'`):
+  - `src/engine/translate.ts`: cache by tool, catalog revision and question hash; hits make no model call; a
+    cached row is re-checked against the catalog; no question text or model wording stored.
+  - `src/llm/model-choice.ts`: `chooseModel` (preference list from E4), `currentModel`, `modelChat` (switches
+    once if the stored model has retired). `src/llm/client.ts` wires `@forge/llm` `list()`/`chat()` and
+    `app_settings`; `src/db/translations-sql.ts` is the `translations` table store.
+  - `npx vitest run`: `Test Files 10 passed (10)`, `Tests 146 passed (146)`; safety suite 45 (two cache cases
+    added). Mutation check: letting a cached row skip the catalog re-check turned 2 tests red (one safety, one
+    cache); restored, green. tsc exit 0, eslint exit 0, `forge lint`: `No issues found.`
 
 ### Not done / untested
 
-- Nothing deployed: the engine isn't wired to a resolver yet, so nothing changed on either site.
-- Steps 3-7: translation cache and model choice, providers (Assets as the app, registry, groups) and the SQL
-  repository, Ask resolver + card + Ask page, guided fix loop, eval set to 20 (24 pilot questions exist).
+- Nothing deployed: the engine isn't wired to a resolver yet, so nothing changed on either site. No LLM call
+  was made in Phase 1 so far.
+- Untested against the real platform: `sqlTranslationStore` and `translationChat` (unit tests fake
+  `@forge/sql` and `@forge/llm`). They are first exercised by the Ask resolver in step 5.
+- Steps 4-7: providers (Assets as the app, registry, groups) and the SQL repository, Ask resolver + card + Ask
+  page, guided fix loop, eval set to 20 (24 pilot questions exist).
 - Demo seed (Phase 4) must add facts and links for the action keys `external_api_calls` and `external_sharing`,
   or those questions answer Don't know yet (D28 h).
 
 ### Next
 
-- Step 3: translation cache (keyed by tool, catalog revision and question hash; no question text stored) and
-  `llm/client.ts` model choice from `list()` with a preference list.
+- Step 4: providers behind one interface (Assets read as the app: mapped attributes of the passport schema
+  only, record time, absent vs empty; registry), the group reader returning `{ ok, names }`, and the Forge SQL
+  repository for the engine (`EngineRepo`).

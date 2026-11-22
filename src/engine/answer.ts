@@ -3,7 +3,7 @@ import type { CatalogChoice } from './catalog';
 import { evaluate, type EvalDeps } from './evaluate';
 import { expand } from './expand';
 import type { Catalog, Check, Environment, Groups, Outcome, Tool, Verdict } from './model';
-import { translate, type ChatFn } from './translate';
+import { translate, type ChatFn, type TranslationStore } from './translate';
 
 /**
  * The answer pipeline (spec section 11, `ask`), without Forge: the resolver passes the asker from the Forge
@@ -23,6 +23,8 @@ export interface AskInput {
 
 export interface AskDeps extends EvalDeps {
   chat: ChatFn;
+  /** The translations table; keyed here by tool and catalog revision. */
+  translations?: TranslationStore;
 }
 
 export type Answer =
@@ -38,6 +40,9 @@ export type Answer =
       checks: Check[];
       /** "Any environment": only capability checks ran; the card must say policy, setup and access weren't. */
       anyEnvironment: boolean;
+      /** The translation came from the cache (no model call). */
+      cached: boolean;
+      modelId?: string;
     };
 
 export async function answerQuestion(input: AskInput, deps: AskDeps): Promise<Answer> {
@@ -52,6 +57,7 @@ export async function answerQuestion(input: AskInput, deps: AskDeps): Promise<An
     input.question,
     { toolName: input.tool.name, catalog: [...input.catalog.keys.values()], examples: input.catalog.examples },
     deps.chat,
+    deps.translations ? { store: deps.translations, toolId: input.tool.id, catalogRevision: input.catalog.revision } : undefined,
   );
   if (t.status === 'failed') return { state: 'try_again', reason: t.reason };
   if (t.status === 'unsupported') return { state: 'unsupported', verdict: 'dont_know', reason: t.reason, settle: 'ask_owner' };
@@ -61,7 +67,7 @@ export async function answerQuestion(input: AskInput, deps: AskDeps): Promise<An
   if (checks.length === 0) return { state: 'unsupported', verdict: 'dont_know', reason: "Nothing in this tool's catalog matches the question", settle: 'ask_owner' };
 
   const outcome = await evaluate(checks, { tool: input.tool, environment, asker: input.asker, groups: input.groups, catalog: input.catalog }, deps);
-  return {
+  const answer: Answer = {
     state: 'checked',
     verdict: outcome.verdict,
     outcome,
@@ -69,5 +75,7 @@ export async function answerQuestion(input: AskInput, deps: AskDeps): Promise<An
     restated: t.restated,
     checks,
     anyEnvironment: environment === null,
+    cached: t.cached,
   };
+  return t.modelId ? { ...answer, modelId: t.modelId } : answer;
 }

@@ -125,7 +125,7 @@ describe('translate', () => {
 });
 
 describe('scoreCase', () => {
-  const ok = (requirement: CatalogChoice[]) => ({ status: 'ok' as const, requirement, restated: '', attempts: 1 });
+  const ok = (requirement: CatalogChoice[]) => ({ status: 'ok' as const, requirement, restated: '', attempts: 1, cached: false });
   it('needs the exact key set and values', () => {
     expect(scoreCase([{ key: 'max_upload_gb', value: 3 }], ok([{ key: 'max_upload_gb', value: 3 }]))).toBe(true);
     expect(scoreCase([{ key: 'max_upload_gb', value: 3 }], ok([{ key: 'max_upload_gb', value: 2 }]))).toBe(false);
