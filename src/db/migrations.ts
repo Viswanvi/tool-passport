@@ -311,6 +311,12 @@ export const MIGRATIONS: Migration[] = [
     name: 'v020_drop_experiment_runs',
     ddl: 'DROP TABLE IF EXISTS experiment_runs',
   },
+  {
+    // What a value means ("file size in gigabytes (GB)"), shown to the model so it can convert units
+    // (E4: "500 MB" → 0.5). Not in the spec's column list (DECISIONS D30).
+    name: 'v021_catalog_key_unit',
+    ddl: 'ALTER TABLE catalog_keys ADD COLUMN IF NOT EXISTS unit VARCHAR(128) NULL',
+  },
 ];
 
 // The runner is a module-level singleton that accumulates enqueued statements, so the list is

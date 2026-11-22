@@ -70,6 +70,7 @@ export function demoWorld(): World {
     audienceGroup: null,
     lastSeenVersion: '13.2',
     lastSeenAt: T0,
+    recordedValues: null,
   });
 
   const link = (capabilityKey: string, actions: string[] | null, readinessKeys: string[] | null): CapabilityLink => ({

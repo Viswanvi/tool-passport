@@ -91,6 +91,18 @@ employees can't read Assets").
 **Open sub-question (provider contract, absent vs empty):** every attribute on both objects has a value, so whether
 AQL omits empty attributes is untested. Test with an empty attribute before the Assets provider is built.
 
+**Answered 2026-11-22 (read-only, in the browser as the admin, demo site, Phase 1 step 4):**
+- `POST …/object/aql?includeAttributes=true` with `objectSchema = "Tool Passport Environments" AND objectType =
+  "Tool Environment" AND Key = "TPENV-4679"`: 200, exactly 1 object; object keys include `objectKey`, `objectType`
+  (`id` "147"), `created`, `updated` (`2026-11-21T19:34:39.996Z`), `attributes`. So lookup by Key works.
+- The 14 seeded schemas, 25 objects each at most: hundreds of attributes listed in `objectTypeAttributes` were
+  missing from objects (e.g. schema 2: 237, schema 1: 220), and **no attribute ever came back with an empty value
+  list (0 everywhere). AQL leaves out attributes that have no value.**
+- `objectTypeAttributes` lists every attribute the type defines: compared with `GET …/objecttype/{id}/attributes`
+  (a plain array), 16/16, 15/15 and 27/27, while the single object returned only 7, 6 and 17 of them.
+- Design consequence (D30): whether an attribute exists comes from the type's definitions, never from which
+  values come back. Defined with no value → empty list (Missing); not defined → absent (Not verified).
+
 ## E2 · Assets on a fresh free developer site
 
 **Site:** `toolpassport.atlassian.net`, created 2026-11-21 by the human (admin account) from

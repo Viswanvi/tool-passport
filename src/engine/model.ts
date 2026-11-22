@@ -27,6 +27,8 @@ export interface Environment {
   audienceGroup: string | null;
   lastSeenVersion: string | null;
   lastSeenAt: string | null;
+  /** Registry environments only: the owner's recorded values, as stored (validated by the registry provider). */
+  recordedValues: unknown;
 }
 
 /** Which policy actions, readiness keys and access a capability needs. null = not recorded (Not verified). */

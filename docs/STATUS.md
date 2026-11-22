@@ -132,19 +132,41 @@ Started two days early at the human's request ("Start Phase1").
     added). Mutation check: letting a cached row skip the catalog re-check turned 2 tests red (one safety, one
     cache); restored, green. tsc exit 0, eslint exit 0, `forge lint`: `No issues found.`
 
+- Step 4, providers and the SQL repository (D30):
+  - `src/providers/assets.ts` (one passport object by Key, mapped attributes plus Version, absent vs empty from
+    the type's definitions, record time), `registry.ts`, `index.ts` (one `read(environment)`), `groups.ts`;
+    `forge.ts` wires them as the app (`api.asApp()`), read-only. `src/db/repo.ts`: the engine's `EngineRepo`
+    on Forge SQL with strict row checks, plus `loadTool`, `loadEnvironment`, `loadCatalog`, `mappedAttributes`.
+  - `npx vitest run`: `Test Files 12 passed (12)`, `Tests 169 passed (169)` (adds `providers.test.ts` 15,
+    `repo-sql.test.ts` 8). Tests were written before the code, but no red run was recorded for this step;
+    mutation check instead: treating an undefined attribute as empty turned 2 provider tests red; restored, green.
+  - Real API, read-only, in the browser as the admin on the demo site (`docs/experiments.md` E1, "Answered
+    2026-11-22"): AQL by `Key = "TPENV-4679"` returns exactly that object with `objectKey`, `objectType.id`,
+    `updated`; AQL leaves out attributes with no value (0 empty lists across 14 schemas) while
+    `objectTypeAttributes` lists all of the type's attributes (16/16, 15/15, 27/27).
+  - Assets writes: the only POST in `src/providers` is the AQL search (a read); create paths in
+    `assets-api.ts` are builders with no caller.
+  - tsc exit 0, eslint exit 0, `forge lint`: `No issues found.` `forge deploy -e development`: 4.8.0, "eligible
+    for the Runs on Atlassian program" (minor: no scope or module change).
+  - Migration v021 (`ALTER TABLE catalog_keys ADD COLUMN IF NOT EXISTS unit …`) on real Forge SQL, both
+    installations (`forge logs`, 2026-11-22 03:31:30-31 UTC): `[sweep] migrations applied: v021_catalog_key_unit`,
+    twice, no errors.
+
 ### Not done / untested
 
-- Nothing deployed: the engine isn't wired to a resolver yet, so nothing changed on either site. No LLM call
-  was made in Phase 1 so far.
-- Untested against the real platform: `sqlTranslationStore` and `translationChat` (unit tests fake
-  `@forge/sql` and `@forge/llm`). They are first exercised by the Ask resolver in step 5.
-- Steps 4-7: providers (Assets as the app, registry, groups) and the SQL repository, Ask resolver + card + Ask
-  page, guided fix loop, eval set to 20 (24 pilot questions exist).
+- No LLM call was made in Phase 1 so far. Nothing reads or writes app data on the sites yet (no resolver uses
+  the engine), so the sites behave as after Phase 0 apart from the v021 migration.
+- Untested against the real platform: `sqlTranslationStore`, `translationChat`, `sqlEngineRepo` and the loaders
+  (unit tests fake `@forge/sql` and `@forge/llm`), and the providers through `requestJira` as the app (the API
+  shapes were checked as the admin in the browser; E1 showed the app gets the same reply). First exercised by
+  the Ask resolver in step 5.
+- Steps 5-7: Ask resolver + card + Ask page (needs a tool, environments and facts in Forge SQL on the dev site),
+  guided fix loop, eval set to 20 (24 pilot questions exist).
 - Demo seed (Phase 4) must add facts and links for the action keys `external_api_calls` and `external_sharing`,
   or those questions answer Don't know yet (D28 h).
 
 ### Next
 
-- Step 4: providers behind one interface (Assets read as the app: mapped attributes of the passport schema
-  only, record time, absent vs empty; registry), the group reader returning `{ ok, names }`, and the Forge SQL
-  repository for the engine (`EngineRepo`).
+- Step 5: Ask resolver (identity from the Forge context only), the verdict card and the Ask page (spec section
+  15 card rules). Needs Kestrel Studio data in Forge SQL on the dev site, created through owner-write code paths
+  (CLAUDE.md rule 6), and a few real LLM calls (reported by count).
