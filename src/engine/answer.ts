@@ -3,7 +3,7 @@ import type { CatalogChoice } from './catalog';
 import { evaluate, type EvalDeps } from './evaluate';
 import { expand } from './expand';
 import type { Catalog, Check, Environment, Groups, Outcome, Tool, Verdict } from './model';
-import { translate, type ChatFn, type TranslationStore } from './translate';
+import { checkAgainstCatalog, describeRequirement, translate, type ChatFn, type TranslationStore } from './translate';
 
 /**
  * The answer pipeline (spec section 11, `ask`), without Forge: the resolver passes the asker from the Forge
@@ -48,12 +48,8 @@ export type Answer =
     };
 
 export async function answerQuestion(input: AskInput, deps: AskDeps): Promise<Answer> {
-  const { environment } = input;
-  if (environment) {
-    if (environment.toolId !== input.tool.id) return { state: 'environment_refused', reason: 'That environment belongs to another tool' };
-    const pick = canPick(environment, input.groups);
-    if (!pick.ok) return { state: 'environment_refused', reason: pick.reason };
-  }
+  const refused = audienceRefusal(input);
+  if (refused) return refused;
 
   const t = await translate(
     input.question,
@@ -64,7 +60,48 @@ export async function answerQuestion(input: AskInput, deps: AskDeps): Promise<An
   if (t.status === 'failed') return { state: 'try_again', reason: t.reason };
   if (t.status === 'unsupported') return { state: 'unsupported', verdict: 'dont_know', reason: t.reason, settle: 'ask_owner' };
 
-  const checks = expand(t.requirement, input.catalog, environment);
+  return checkRequirement(t.requirement, t.restated, input, deps, t.cached, t.modelId);
+}
+
+export interface RequirementInput extends Omit<AskInput, 'question'> {
+  /** Keys stored with an earlier ask. */
+  requirement: CatalogChoice[];
+}
+
+/**
+ * Re-check (spec F4): evaluate the keys stored with an ask again, fresh, with no model call. The stored keys
+ * are checked against today's catalog first, as cached translations are: a key that's gone, or a value on a
+ * key that no longer takes one, is Don't know yet, never a guess. `cached` is true: no model was asked.
+ */
+export async function answerRequirement(input: RequirementInput, deps: EvalDeps): Promise<Answer> {
+  const refused = audienceRefusal(input);
+  if (refused) return refused;
+  const catalog = [...input.catalog.keys.values()];
+  const checked = input.requirement.length ? checkAgainstCatalog({ capabilities: input.requirement, unsupported: null, restated: '' }, catalog) : null;
+  if (!checked || 'problem' in checked || JSON.stringify(checked.requirement) !== JSON.stringify(input.requirement)) {
+    return { state: 'unsupported', verdict: 'dont_know', reason: 'The catalog changed since this was asked', settle: 'ask_owner' };
+  }
+  return checkRequirement(checked.requirement, describeRequirement(checked.requirement, catalog), input, deps, true);
+}
+
+function audienceRefusal(input: Pick<AskInput, 'tool' | 'environment' | 'groups'>): Answer | null {
+  const { environment } = input;
+  if (!environment) return null;
+  if (environment.toolId !== input.tool.id) return { state: 'environment_refused', reason: 'That environment belongs to another tool' };
+  const pick = canPick(environment, input.groups);
+  return pick.ok ? null : { state: 'environment_refused', reason: pick.reason };
+}
+
+async function checkRequirement(
+  requirement: CatalogChoice[],
+  restated: string,
+  input: Omit<AskInput, 'question'>,
+  deps: EvalDeps,
+  cached: boolean,
+  modelId?: string,
+): Promise<Answer> {
+  const { environment } = input;
+  const checks = expand(requirement, input.catalog, environment);
   // translate() never returns ok without a key, but combine() would throw on an empty list: say so plainly.
   if (checks.length === 0) return { state: 'unsupported', verdict: 'dont_know', reason: "Nothing in this tool's catalog matches the question", settle: 'ask_owner' };
 
@@ -82,12 +119,12 @@ export async function answerQuestion(input: AskInput, deps: AskDeps): Promise<An
     state: 'checked',
     verdict: outcome.verdict,
     outcome,
-    requirement: t.requirement,
-    restated: t.restated,
+    requirement,
+    restated,
     checks,
     anyEnvironment: environment === null,
-    cached: t.cached,
+    cached,
     environmentVersion,
   };
-  return t.modelId ? { ...answer, modelId: t.modelId } : answer;
+  return modelId ? { ...answer, modelId } : answer;
 }

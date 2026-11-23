@@ -240,6 +240,12 @@ which is always empty. Detect resolution from `changelog.items` (`field === "res
 read-back of the issue (authoritative), never from the event alone. Don't rely on `jiraEventTypeName ===
 "issue_resolved"`.
 
+**Used for real in Phase 1 step 6 (2026-11-23, app 4.13.0, D32):** `POST /rest/servicedeskapi/request` with
+`raiseOnBehalfOf` = the admin (raising for themselves) worked with no extra role and returned `_links.web`
+(the customer portal link, `…/servicedesk/customer/portal/14/TPD-3`). The public comment
+`POST /rest/servicedeskapi/request/{key}/comment` `{body, public: true}` as the app worked (TPD-4, shown as
+from "tool-passport"). The resolution event reached the app about 2 s after TPD-4 was resolved.
+
 ## E4 · Translation pilot: cost estimate (no LLM call made)
 
 Source: Forge LLMs pricing page (developer.atlassian.com/platform/forge/runtime-reference/forge-llms-api-pricing/),

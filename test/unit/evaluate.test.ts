@@ -29,7 +29,7 @@ describe('moment 1: the same question, two environments', () => {
     expect(by(a, 'environment')).toMatchObject({
       status: 'missing',
       label: { kind: 'assets_record', attribute: 'Build environments' },
-      route: 'env-owner:acct-marco',
+      route: 'environment_owner',
     });
     expect(by(a, 'access')).toMatchObject({ status: 'pass', label: { kind: 'mapped_access', group: 'kestrel-dev-builders' } });
     expect(a.outcome).toMatchObject({ fixes: [{ check: { key: 'frontend_build' } }], next: [{ check: { action: 'custom_ui' } }] });

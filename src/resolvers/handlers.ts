@@ -5,6 +5,7 @@ import { canPick } from '../engine/audience';
 import { buildCard, type Card } from '../engine/card';
 import type { Catalog, EngineRepo, Environment, EnvironmentReader, Groups, Tool } from '../engine/model';
 import type { ChatFn, TranslationStore } from '../engine/translate';
+import { cardWithRequests, type RequestRepo } from '../loop/requests';
 import { mayAdminister, type WriteCheck } from '../registry/authorise';
 import type { SeedResult } from '../seed/demo';
 
@@ -38,6 +39,8 @@ export interface AskHandlerDeps {
   environments: EnvironmentReader;
   noteVersion?(tool: Tool, environment: Environment, observed: string | null): Promise<unknown>;
   saveAsk(a: SavedAsk): Promise<number | null>;
+  /** Open fix requests, so a card shows "Fix requested" instead of offering the same request again. */
+  requests?: Pick<RequestRepo, 'openFor'>;
 }
 
 export type AskReply =
@@ -81,7 +84,11 @@ export async function handleAsk(payload: unknown, ctx: ResolverContext, deps: As
         noteVersion: deps.noteVersion ? (e, v) => deps.noteVersion!(tool, e, v) : undefined,
       },
     );
-    const card = buildCard(answer, { toolName: tool.name, environment, catalog });
+    let card = buildCard(answer, { toolName: tool.name, environment, catalog });
+    if (deps.requests) {
+      const built = card;
+      card = await cardWithRequests({ answer, card, environment }, asker, deps.requests).catch(() => built);
+    }
     // One line per question, for counting model calls (they cost money). No question text, no account id.
     console.log(
       `[ask] state=${answer.state}${answer.state === 'checked' ? ` verdict=${answer.verdict} cached=${answer.cached} model=${answer.modelId ?? '-'}` : ''}`,

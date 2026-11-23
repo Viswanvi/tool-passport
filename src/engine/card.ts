@@ -19,12 +19,22 @@ export interface Chip {
   changedAt?: string | null;
 }
 
-export type ActionKind = 'request_fix' | 'request_approval' | 'ask_owner' | 'recheck' | 'try_again';
+export type ActionKind = 'request_fix' | 'fix_requested' | 'request_approval' | 'ask_owner' | 'recheck' | 'try_again';
+
+/** An open request shown on the card. The page looks the owner's name up from the account id. */
+export interface CardRequest {
+  /** Null while it is still being raised. */
+  key: string | null;
+  url: string | null;
+  ownerAccountId: string;
+}
 
 export interface CardAction {
   kind: ActionKind;
   label: string;
   requestKey?: string;
+  /** fix_requested only: one per missing piece. */
+  requests?: CardRequest[];
 }
 
 export interface CardCheck {

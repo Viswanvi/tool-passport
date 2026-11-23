@@ -41,13 +41,13 @@ export function id(v: unknown, table: string, column: string): number {
   if (!Number.isSafeInteger(n)) throw new BadRow(table, column, v);
   return n;
 }
-const idOrNull = (v: unknown, t: string, c: string) => (v === null || v === undefined ? null : id(v, t, c));
+export const idOrNull = (v: unknown, t: string, c: string) => (v === null || v === undefined ? null : id(v, t, c));
 
 export function text(v: unknown, table: string, column: string): string {
   if (typeof v !== 'string') throw new BadRow(table, column, v);
   return v;
 }
-const textOrNull = (v: unknown, t: string, c: string) => (v === null || v === undefined ? null : text(v, t, c));
+export const textOrNull = (v: unknown, t: string, c: string) => (v === null || v === undefined ? null : text(v, t, c));
 
 /** MySQL BOOLEAN is TINYINT(1): accept true/false and 1/0. */
 export function bool(v: unknown, table: string, column: string): boolean {

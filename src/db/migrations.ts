@@ -327,6 +327,12 @@ export const MIGRATIONS: Migration[] = [
     name: 'v023_rules_scope_unique',
     ddl: 'CREATE UNIQUE INDEX IF NOT EXISTS one_rule_per_scope ON rules (scope_key)',
   },
+  {
+    // The request's customer portal link from the create reply (`_links.web`), so the card can open it
+    // for the asker. Not in the spec's column list (DECISIONS D32).
+    name: 'v024_requests_portal_url',
+    ddl: 'ALTER TABLE requests ADD COLUMN IF NOT EXISTS portal_url VARCHAR(512) NULL',
+  },
 ];
 
 // The runner is a module-level singleton that accumulates enqueued statements, so the list is

@@ -186,22 +186,69 @@ Started two days early at the human's request ("Start Phase1").
     before the log line existed; at most one retry possible there). At ~2,000 input / 50 output tokens per call,
     about $0.003.
 
+- Step 6, guided fix (D32):
+  - Code: `src/loop/requests.ts` (Request the fix, Re-check, routing, request text, the card's open requests),
+    `src/loop/events.ts` (resolution from the changelog, read-back, re-check and comment, the sweep's share),
+    `src/loop/jsm-forge.ts` (desk calls as the app), `src/loop/forge.ts` (wiring, `onIssueEvent`),
+    `src/db/requests.ts` (open-key claim, status compare-and-set), `src/db/asks.ts` (`loadAsk`,
+    `saveAskResult`), `src/resolvers/request-handlers.ts` (requestFix, recheck, request setup),
+    `answerRequirement` in `src/engine/answer.ts`, migration v024 (`requests.portal_url`), page changes.
+  - Tests first (red: `Cannot find module '../../src/loop/events'`, no tests ran). `npx vitest run`:
+    `Test Files 17 passed (17)`, `Tests 241 passed (241)` (adds `fix-loop.test.ts` 32, `requests-sql.test.ts` 10).
+    Mutation checks: dropping the "ask belongs to the caller" check turned 2 tests red; ignoring the read-back
+    (trusting the event alone) turned 2 red; both restored, green. tsc exit 0, eslint exit 0, `forge lint`:
+    `No issues found.`
+  - `forge deploy -e development`: 4.12.0, then 4.13.0 (fix below), each "eligible for the Runs on Atlassian
+    program". Migration v024 on real Forge SQL, both installations: `[sweep] migrations applied:
+    v024_requests_portal_url` at 08:46:30 UTC (twice).
+  - Bug found live in 4.12.0: the question box placeholder showed `Can I â€¦ ?`. Cause: a PowerShell
+    rewrite (`Get-Content -Raw`) had re-saved four files with the wrong text encoding (`·`, `→`, `…` garbled in
+    the page, a user-facing message in `requests.ts`, and two test comments). Repaired as UTF-8 and checked
+    (`â|Ã|Â` in src and test: 0 matches; test files differ from HEAD only by the intended edits); 4.13.0 shows
+    `Can I … ?`.
+  - **Live on the demo site, in the browser as the admin (2026-11-23, UTC):**
+    - Setup → Requests: desk list loaded (as the app), Tool Passport Desk (TPD) → usable request types listed
+      (Get IT help first) → Save: `Fix requests go to Tool Passport Desk (TPD) as "Get IT help".`
+    - Ask, KS-DEV, "Can I build a custom web dashboard?": Not ready, now with a **Request the fix** button. Log:
+      `[ask] state=checked verdict=not_ready cached=true model=-`.
+    - Request the fix (08:50:29): `[request] fix raised=2`. The card turned to `Fix requested (TPD-3) from <owner>
+      · view request` and `Fix requested (TPD-4) from <owner> · view request`, with Re-check. TPD-3 = access,
+      TPD-4 = setup. TPD-4 in Jira: summary `Fix needed in KS-DEV: Frontend build`, "raised this request via
+      API" for the asker, assignee the owner, request type Get IT help, description: `Missing: Frontend build.
+      Build environments needs to include "frontend". Evidence: Assets record TPENV-4679, read 2026-11-23 08:50
+      UTC. What they want to do: Build a custom web front end or dashboard.` No question text. The admin raising
+      for themselves needed no extra Customer role.
+    - Sweep at 08:51:31: `[sweep] requests looked=2 rechecked=0 failed=0` (both open, not resolved: only looked).
+    - As Marco: KS-DEV (TPENV-4679) Build environments set to `standard, frontend` in Assets; TPD-4 resolved as
+      Done. Log 08:52:24: `[issue-event] TPD-4 rechecked` (about 2 s after resolving). TPD-4 got a public comment
+      from tool-passport: `Tool Passport checked again after this request was resolved. Answer now: Not ready.
+      You're not in kestrel-dev-builders, which gives Developer role in Kestrel.` (right: the frontend build is
+      fixed; access, TPD-3, is still open).
+    - Ask again: Not ready, reason access, and only `Fix requested (TPD-3)`: the frontend check now passes and a
+      new ask finds the open request. The "view request" link is
+      `https://one-atlas-oibs.atlassian.net/servicedesk/customer/portal/14/TPD-3`.
+  - **LLM calls in step 6: 0** (every ask was a translation cache hit). Phase 1 total stays 1 `list()` + 2 chat.
+
 ### Not done / untested
 
+- **"Yes, with approval" live (sign-off item) is blocked on the group:** the admin must be in
+  `kestrel-dev-builders`, which doesn't exist on the demo site (E6). Once the human creates it and joins it,
+  resolving TPD-3 should re-check to Yes, with approval and comment that.
+- Untested live: the card flipping by polling (the page was left before TPD-4 was resolved), the sweep
+  re-checking a missed event, the Customer-role message (D23), taking over a stopped raise, a failed comment
+  finished by the sweep (all unit-tested).
+- Demo data changed by the live test: KS-DEV's Build environments is now `standard, frontend` (moment 2 starts
+  without `frontend`). TPD-3 is open, TPD-4 resolved. Reset demo arrives in Phase 4; set it back by hand before a
+  demo run.
 - Untested live: `noteVersion` from the Ask path (setting KS-DEV's baseline; errors there are swallowed by
-  design), the sweep's 30-day question purge, the Re-check and Try again buttons, "Any environment".
-- The spec's exact moment 1 wording in KS-DEV ("The frontend build isn't set up") needs the asker in a group
-  named kestrel-dev-builders. The app can't create groups yet (E6), so either the human creates it in
-  admin.atlassian.com and joins it, or this waits for the Phase 4 seed.
+  design), the sweep's 30-day question purge, "Any environment".
 - No demo data on the fresh site (toolpassport), on purpose (E9 must start fresh).
-- Steps 6-7: guided fix loop (Request the fix, issue events, Re-check, card polling, sweep re-check), eval set
-  to 20 (24 pilot questions exist).
+- Step 7: eval set to 20 (24 pilot questions exist).
 - Demo seed (Phase 4) must add facts and links for the action keys `external_api_calls` and `external_sharing`,
   or those questions answer Don't know yet (D28 h).
 
 ### Next
 
-- Step 6: guided fix. `loop/requests.ts` (kind `fix`: JSM request raised for the asker, routed to the
-  environment or tool owner), `loop/events.ts` (resolution from the changelog plus read-back, D22), Re-check,
-  card polling while a request is open, and the sweep's re-check of open requests. Needs the JSM service desk
-  on the demo site and the asker's Customer role (D23).
+- Finish step 6 live once `kestrel-dev-builders` exists: resolve TPD-3 → Yes, with approval.
+- Step 7: the first 20 eval questions. Then Phase 1 sign-off (safety suite, unit tests, `forge lint`,
+  `forge eligibility`, section 14 self-review).

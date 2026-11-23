@@ -15,6 +15,7 @@ import type {
   Tool,
 } from '../../src/engine/model';
 import type { ChatFn, ChatMessage } from '../../src/engine/translate';
+import { ROUTES } from '../../src/seed/demo';
 import { DEMO_CATALOG, DEMO_EXAMPLES, DEMO_TOOL_NAME } from '../../src/seed/demo-catalog';
 
 /**
@@ -136,8 +137,8 @@ export function demoWorld(): World {
   rule('external_sharing', PROD, 'deny', 'Not allowed');
 
   const readiness: ReadinessKeyRow[] = [
-    { id: 300, toolId: 1, key: 'frontend_build', providerAttribute: 'Build environments', match: 'has', expected: 'frontend', label: 'Frontend build', fixRoute: `env-owner:${MARCO}` },
-    { id: 301, toolId: 1, key: 'uploads', providerAttribute: 'Features enabled', match: 'has', expected: 'uploads', label: 'Uploads', fixRoute: `env-owner:${MARCO}` },
+    { id: 300, toolId: 1, key: 'frontend_build', providerAttribute: 'Build environments', match: 'has', expected: 'frontend', label: 'Frontend build', fixRoute: ROUTES.environmentOwner },
+    { id: 301, toolId: 1, key: 'uploads', providerAttribute: 'Features enabled', match: 'has', expected: 'uploads', label: 'Uploads', fixRoute: ROUTES.environmentOwner },
   ];
 
   const mapping = (id: number, environmentId: number, actionKey: string, groupName: string | null, grants: string | null): AccessMappingRow => ({
@@ -150,7 +151,7 @@ export function demoWorld(): World {
     source: 'idp_synced',
     attestedBy: MARCO,
     attestedAt: T0,
-    grantRoute: groupName ? `group-owner:${MARCO}` : null,
+    grantRoute: groupName ? ROUTES.toolOwner : null,
   });
   const access = [
     mapping(400, DEV, 'custom_ui', 'kestrel-dev-builders', 'Developer role in Kestrel'),

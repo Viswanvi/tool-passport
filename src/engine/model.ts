@@ -180,6 +180,8 @@ export interface CheckResult {
   found?: unknown;
   /** Plain words for what was checked, when the stored row names it (a readiness key's label). */
   subject?: string;
+  /** Missing only: what would make it pass, from the owner's records ('Build environments needs to include "frontend"'). */
+  needs?: string;
 }
 
 export type Verdict = 'yes' | 'yes_with_approval' | 'not_ready' | 'no' | 'dont_know';

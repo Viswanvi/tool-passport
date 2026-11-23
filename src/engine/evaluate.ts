@@ -227,7 +227,14 @@ async function readiness(c: Extract<Check, { dimension: 'environment' }>, x: Ctx
       : { kind: 'recorded_by_owner', attribute: rk.providerAttribute, readAt: x.env.readAt, changedAt: x.env.recordUpdatedAt };
   const m = matches(values, rk);
   if (m === 'unreadable') return named(notVerified(c, `${rk.providerAttribute} for ${x.environment.name} can't be compared with "${rk.expected}"`, 'ask_owner'));
-  return named(m ? result(c, 'pass', label) : { check: c, status: 'missing', label, route: rk.fixRoute });
+  return named(m ? result(c, 'pass', label) : { check: c, status: 'missing', label, route: rk.fixRoute, needs: needsText(rk) });
+}
+
+/** What the owner's readiness key asks for, in words for the fix request. */
+function needsText(rk: Pick<ReadinessKeyRow, 'providerAttribute' | 'match' | 'expected'>): string {
+  if (rk.match === 'has') return `${rk.providerAttribute} needs to include "${rk.expected}"`;
+  if (rk.match === 'eq') return `${rk.providerAttribute} needs to be "${rk.expected}"`;
+  return `${rk.providerAttribute} needs to be at least ${rk.expected}`;
 }
 
 export function matches(values: unknown, rk: Pick<ReadinessKeyRow, 'match' | 'expected'>): boolean | 'unreadable' {
@@ -262,5 +269,7 @@ async function access(c: Extract<Check, { dimension: 'access' }>, x: Ctx): Promi
   const names = knownGroups(x.groups);
   if (names === null) return notVerified(c, 'Group membership could not be read', 'recheck');
   const label: Label = { kind: 'mapped_access', group: m.groupName, grants: m.grants, source: m.source, by: m.attestedBy };
-  return names.includes(m.groupName) ? result(c, 'pass', label) : { check: c, status: 'missing', label, route: m.grantRoute };
+  return names.includes(m.groupName)
+    ? result(c, 'pass', label)
+    : { check: c, status: 'missing', label, route: m.grantRoute, needs: `membership of ${m.groupName}${m.grants ? `, which gives ${m.grants}` : ''}` };
 }

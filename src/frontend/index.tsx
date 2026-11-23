@@ -4,6 +4,7 @@ import ForgeReconciler, {
   Button,
   Heading,
   Inline,
+  Link,
   Lozenge,
   SectionMessage,
   Select,
@@ -12,12 +13,15 @@ import ForgeReconciler, {
   Tag,
   Text,
   Textfield,
+  User,
   useProductContext,
   xcss,
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
-import type { Card, Chip } from '../engine/card';
+import type { Card, CardRequest, Chip } from '../engine/card';
+import type { RaiseReply, RecheckReply, RequestSetup } from '../loop/requests';
 import type { AskReply } from '../resolvers/handlers';
+import type { Option as DeskOption } from '../resolvers/request-handlers';
 import type { SeedResult } from '../seed/demo';
 
 /**
@@ -33,6 +37,8 @@ interface Option {
 }
 
 const ANY = 'any';
+const POLL_MS = 10_000;
+const POLL_LIMIT = 90;
 
 const cardStyle = xcss({
   borderColor: 'color.border',
@@ -70,15 +76,40 @@ function checkLine(c: Card['checks'][number]): string {
   return `${c.subject}: ${c.statusText} (${chip.label}${extra ? ` · ${extra}` : ''})`;
 }
 
+// Actions that arrive in Phase 2, shown as the next step in words rather than as buttons that do nothing.
 const NEXT_STEP: Record<string, string> = {
-  request_fix: 'Next step: request the fix.',
   request_approval: 'Next step: request approval.',
   ask_owner: 'Next step: ask the tool owner.',
 };
 
-const VerdictCard = ({ card, onRecheck, busy }: { card: Card; onRecheck: () => void; busy: boolean }) => {
+/** "Fix requested from Marco · view request", one line per open request. Names are looked up by the page. */
+const OpenRequests = ({ requests }: { requests: CardRequest[] }) => (
+  <Stack space="space.050">
+    {requests.map((r, i) => (
+      <Inline key={r.key ?? `raising-${i}`} space="space.100" alignBlock="center" shouldWrap>
+        <Text>{r.key ? `Fix requested (${r.key}) from` : 'Fix being requested from'}</Text>
+        <User accountId={r.ownerAccountId} />
+        {r.key && r.url ? (
+          <Link href={r.url} openNewTab>
+            view request
+          </Link>
+        ) : null}
+      </Inline>
+    ))}
+  </Stack>
+);
+
+interface CardActions {
+  busy: boolean;
+  onRecheck: () => void;
+  onRequestFix: () => void;
+  canRecheck: boolean;
+}
+
+const VerdictCard = ({ card, busy, onRecheck, onRequestFix, canRecheck }: { card: Card } & CardActions) => {
   const [open, setOpen] = useState(false);
-  const wired = card.action && (card.action.kind === 'recheck' || card.action.kind === 'try_again');
+  const kind = card.action?.kind;
+  const button = kind === 'recheck' || kind === 'try_again' || kind === 'request_fix';
   return (
     <Box xcss={cardStyle}>
       <Stack space="space.150">
@@ -101,13 +132,21 @@ const VerdictCard = ({ card, onRecheck, busy }: { card: Card; onRecheck: () => v
             ))}
           </Inline>
         ) : null}
+        {kind === 'fix_requested' && card.action?.requests ? <OpenRequests requests={card.action.requests} /> : null}
         <Inline space="space.150" alignBlock="center" shouldWrap>
-          {wired && card.action ? (
-            <Button appearance="primary" onClick={onRecheck} isDisabled={busy}>
+          {button && card.action ? (
+            <Button appearance="primary" onClick={kind === 'request_fix' ? onRequestFix : onRecheck} isDisabled={busy}>
               {card.action.label}
             </Button>
           ) : null}
-          {card.action && !wired ? <Text>{card.action.kind === 'request_approval' && card.action.requestKey ? card.action.label : NEXT_STEP[card.action.kind]}</Text> : null}
+          {card.action && NEXT_STEP[card.action.kind] ? (
+            <Text>{card.action.kind === 'request_approval' && card.action.requestKey ? card.action.label : NEXT_STEP[card.action.kind]}</Text>
+          ) : null}
+          {kind === 'fix_requested' && canRecheck ? (
+            <Button appearance="subtle" onClick={onRecheck} isDisabled={busy}>
+              Re-check
+            </Button>
+          ) : null}
           {card.next.length ? <Text>next: {card.next.join(', ')}</Text> : null}
           {card.checks.length ? (
             <Button appearance="subtle" onClick={() => setOpen(!open)}>
@@ -136,7 +175,10 @@ const AskPage = () => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
-  const [reply, setReply] = useState<AskReply | null>(null);
+  const [card, setCard] = useState<Card | null>(null);
+  const [askId, setAskId] = useState<number | null>(null);
+  const [failed, setFailed] = useState<Extract<AskReply, { ok: false }>['error'] | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [asked, setAsked] = useState<{ toolId: number; environmentId: number | null; question: string } | null>(null);
 
   useEffect(() => {
@@ -147,10 +189,17 @@ const AskPage = () => {
     });
   }, []);
 
+  const clear = () => {
+    setCard(null);
+    setAskId(null);
+    setFailed(null);
+    setNotice(null);
+  };
+
   useEffect(() => {
     if (!tool) return;
     setEnv(null);
-    setReply(null);
+    clear();
     void call<{ environments: Array<{ id: number; name: string }>; suggestions: string[] }>('environments', { toolId: Number(tool.value) }).then((r) => {
       const list = [...r.environments.map((e) => ({ label: e.name, value: String(e.id) })), { label: 'Any environment', value: ANY }];
       setEnvs(list);
@@ -162,14 +211,69 @@ const AskPage = () => {
   const run = async (payload: { toolId: number; environmentId: number | null; question: string }) => {
     setBusy(true);
     setAsked(payload);
+    clear();
     try {
-      setReply(await call<AskReply>('ask', payload));
+      const r = await call<AskReply>('ask', payload);
+      setCard(r.card);
+      setAskId(r.ok ? r.askId : null);
+      setFailed(r.ok ? null : r.error);
     } catch {
-      setReply({ ok: false, error: 'try_again', card: null });
+      setFailed('try_again');
     } finally {
       setBusy(false);
     }
   };
+
+  /** Evaluates the stored ask again (no model call). Without a stored ask, the question is asked again. */
+  const recheck = async (quiet = false) => {
+    if (askId === null) {
+      if (asked && !quiet) await run(asked);
+      return;
+    }
+    if (!quiet) setBusy(true);
+    try {
+      const r = await call<RecheckReply>('recheck', { askId });
+      if (r.ok) setCard(r.card);
+      else if (!quiet) setNotice('Could not check again just now. Try again.');
+    } catch {
+      if (!quiet) setNotice('Could not check again just now. Try again.');
+    } finally {
+      if (!quiet) setBusy(false);
+    }
+  };
+
+  const requestFix = async () => {
+    if (askId === null) {
+      setNotice('Ask the question again, then request the fix.');
+      return;
+    }
+    setBusy(true);
+    setNotice(null);
+    try {
+      const r = await call<RaiseReply>('requestFix', { askId });
+      if (r.card) setCard(r.card);
+      if (!r.ok) setNotice(r.message);
+    } catch {
+      setNotice("The request couldn't be raised just now. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // While a fix request is open the card checks again every 10 seconds (spec section 15), for 15 minutes.
+  const polling = card?.action?.kind === 'fix_requested' && askId !== null;
+  useEffect(() => {
+    if (!polling) return undefined;
+    let polls = 0;
+    const timer = setInterval(() => {
+      polls += 1;
+      if (polls > POLL_LIMIT) clearInterval(timer);
+      else void recheck(true);
+    }, POLL_MS);
+    return () => clearInterval(timer);
+    // recheck reads askId, which is in the list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [polling, askId]);
 
   const ask = (q: string) => {
     if (!tool || !env || !q.trim()) return;
@@ -185,7 +289,6 @@ const AskPage = () => {
     );
   }
 
-  const card = reply?.card ?? null;
   return (
     <Stack space="space.200">
       <Inline space="space.200" shouldWrap>
@@ -222,10 +325,101 @@ const AskPage = () => {
         </Inline>
       ) : null}
       {busy ? <Spinner /> : null}
-      {card ? <VerdictCard card={card} busy={busy} onRecheck={() => asked && void run(asked)} /> : null}
-      {reply && !reply.ok && !reply.card ? (
+      {notice ? (
         <SectionMessage appearance="warning">
-          <Text>{reply.error === 'not_found' ? 'That tool or environment no longer exists.' : 'Something went wrong. Try again.'}</Text>
+          <Text>{notice}</Text>
+        </SectionMessage>
+      ) : null}
+      {card ? (
+        <VerdictCard card={card} busy={busy} canRecheck={askId !== null} onRecheck={() => void recheck()} onRequestFix={() => void requestFix()} />
+      ) : null}
+      {failed && !card ? (
+        <SectionMessage appearance="warning">
+          <Text>{failed === 'not_found' ? 'That tool or environment no longer exists.' : 'Something went wrong. Try again.'}</Text>
+        </SectionMessage>
+      ) : null}
+    </Stack>
+  );
+};
+
+type SetupReply = { ok: true; current: RequestSetup | null; desks: DeskOption[] } | { ok: false; reason: string };
+type TypesReply = { ok: true; types: DeskOption[] } | { ok: false; reason: string };
+type SaveReply = { ok: true; setup: RequestSetup } | { ok: false; reason: string };
+
+const asOption = (o: DeskOption): Option => ({ label: o.name, value: o.id });
+
+/** Where Request the fix goes. Jira administrators only; the server checks that again on save. */
+const RequestSetupSection = () => {
+  const [setup, setSetup] = useState<{ current: RequestSetup | null; desks: Option[] } | null>(null);
+  const [desk, setDesk] = useState<Option | null>(null);
+  const [types, setTypes] = useState<Option[] | null>(null);
+  const [type, setType] = useState<Option | null>(null);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void call<SetupReply>('requestSetup').then((r) => {
+      if (!r.ok) return setMessage({ ok: false, text: r.reason });
+      const desks = r.desks.map(asOption);
+      setSetup({ current: r.current, desks });
+      setDesk(desks.find((d) => d.value === r.current?.serviceDeskId) ?? null);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!desk) return;
+    setTypes(null);
+    setType(null);
+    void call<TypesReply>('requestTypes', { serviceDeskId: desk.value }).then((r) => {
+      if (!r.ok) return setMessage({ ok: false, text: r.reason });
+      const list = r.types.map(asOption);
+      setTypes(list);
+      const current = setup?.current?.serviceDeskId === desk.value ? setup.current.requestTypeIds.fix : undefined;
+      setType(list.find((t) => t.value === current) ?? null);
+    });
+    // setup is read once, when it arrives; the desk choice drives this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desk]);
+
+  const save = async () => {
+    if (!desk || !type) return;
+    setBusy(true);
+    try {
+      const r = await call<SaveReply>('saveRequestSetup', { serviceDeskId: desk.value, requestTypeId: type.value });
+      setMessage(r.ok ? { ok: true, text: `Fix requests go to ${desk.label} as "${type.label}".` } : { ok: false, text: r.reason });
+    } catch (e) {
+      setMessage({ ok: false, text: String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Stack space="space.150">
+      <Heading as="h2">Requests</Heading>
+      <Text>
+        Request the fix raises a private request in this service desk for the person asking, assigned to the owner. Pick a request type that needs only a summary
+        and a description. Everyone who asks needs the Jira Service Management Customer role, given in Atlassian Administration.
+      </Text>
+      {setup ? (
+        <Inline space="space.200" alignBlock="center" shouldWrap>
+          <Box xcss={xcss({ width: '280px' })}>
+            <Select options={setup.desks} value={desk} onChange={(o: Option) => setDesk(o)} placeholder="Service desk" />
+          </Box>
+          <Box xcss={xcss({ width: '280px' })}>
+            <Select options={types ?? []} value={type} onChange={(o: Option) => setType(o)} placeholder={desk && !types ? 'Loading…' : 'Request type'} />
+          </Box>
+          <Button appearance="primary" onClick={() => void save()} isDisabled={busy || !desk || !type}>
+            Save
+          </Button>
+        </Inline>
+      ) : message ? null : (
+        <Spinner />
+      )}
+      {types && types.length === 0 ? <Text>This desk has no request type that needs only a summary and a description.</Text> : null}
+      {message ? (
+        <SectionMessage appearance={message.ok ? 'success' : 'warning'}>
+          <Text>{message.text}</Text>
         </SectionMessage>
       ) : null}
     </Stack>
@@ -272,7 +466,8 @@ const SetupPage = () => {
           <Text>{result.reason}</Text>
         </SectionMessage>
       ) : null}
-      <Text>The rest of the setup wizard (service desk, request types, resolution mapping, model choice) arrives in Phase 4.</Text>
+      <RequestSetupSection />
+      <Text>The rest of the setup wizard (approval and question request types, resolution mapping, model choice) arrives in Phase 4.</Text>
     </Stack>
   );
 };
