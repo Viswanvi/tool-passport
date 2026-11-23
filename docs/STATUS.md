@@ -244,6 +244,20 @@ Started two days early at the human's request ("Start Phase1").
     card (section 15) word for word, now that the admin is in kestrel-dev-builders.
   - **LLM calls in step 6: 0** (every ask was a translation cache hit). Phase 1 total stays 1 `list()` + 2 chat.
 
+- Step 7, the first 20 eval questions (D33):
+  - `test/eval/questions.json` now has the spec's five groups with targets (20 + 6 + 6 + 5 + 3 = 40) and
+    the complete plain group first: the pilot's 18 plain questions plus `p16` (data kept 90 days →
+    `data_retention_days: 90`) and `p17` (another team's system calls my app as an API → `api_endpoints`).
+    The pilot's outside (3 + the blank question) and injection (2) questions are kept for Phase 2.
+  - `test/unit/eval-set.test.ts` (5 tests, offline, no model call): groups and targets, plain group first
+    and complete with one or two keys each and 18 distinct keys, unique ids and questions, every expected
+    key and value accepted unchanged by the catalog, a perfect model reply scores as a pass through
+    `translate`. Mutation check: making p16's value the string "90" turned it red; restored, green.
+  - `npx vitest run`: `Test Files 18 passed (18)`, `Tests 246 passed (246)`. tsc exit 0, eslint exit 0.
+  - **Not run against the real model** (0 LLM calls): no eval runner exists in the app (the E4 runner was
+    removed at Phase 0 sign-off). The pilot ran 18 of the 20 exact on `claude-haiku-5-5` with essentially
+    today's prompt; `p16`, `p17` and the ≥ 90% bar on the current prompt are untested until the Phase 2 run.
+
 ### Not done / untested
 
 - Untested live (unit-tested): the sweep re-checking a missed event, the Customer-role message (D23), taking
@@ -253,11 +267,11 @@ Started two days early at the human's request ("Start Phase1").
 - Untested live: `noteVersion` from the Ask path (setting KS-DEV's baseline; errors there are swallowed by
   design), the sweep's 30-day question purge, "Any environment".
 - No demo data on the fresh site (toolpassport), on purpose (E9 must start fresh).
-- Step 7: eval set to 20 (24 pilot questions exist).
+- The eval set has never run on today's prompt: planned once, for all 40, in Phase 2 step 3 (D33 d).
 - Demo seed (Phase 4) must add facts and links for the action keys `external_api_calls` and `external_sharing`,
   or those questions answer Don't know yet (D28 h).
 
 ### Next
 
-- Step 7: the first 20 eval questions. Then Phase 1 sign-off (safety suite, unit tests, `forge lint`,
-  `forge eligibility`, section 14 self-review).
+- Phase 1 sign-off: safety suite, unit tests, `forge lint`, `forge eligibility`, section 14 self-review,
+  results pasted here verbatim.
