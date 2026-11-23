@@ -43,6 +43,8 @@ export type Answer =
       /** The translation came from the cache (no model call). */
       cached: boolean;
       modelId?: string;
+      /** The version the environment's record showed, for the card header ("KS-DEV · 13.2"). */
+      environmentVersion: string | null;
     };
 
 export async function answerQuestion(input: AskInput, deps: AskDeps): Promise<Answer> {
@@ -66,7 +68,16 @@ export async function answerQuestion(input: AskInput, deps: AskDeps): Promise<An
   // translate() never returns ok without a key, but combine() would throw on an empty list: say so plainly.
   if (checks.length === 0) return { state: 'unsupported', verdict: 'dont_know', reason: "Nothing in this tool's catalog matches the question", settle: 'ask_owner' };
 
-  const outcome = await evaluate(checks, { tool: input.tool, environment, asker: input.asker, groups: input.groups, catalog: input.catalog }, deps);
+  // Remember the version the read showed, for the card header; the read itself happens once, in evaluate().
+  let environmentVersion: string | null = null;
+  const environments = {
+    read: async (e: Environment) => {
+      const r = await deps.environments.read(e);
+      if (r.ok) environmentVersion = r.version;
+      return r;
+    },
+  };
+  const outcome = await evaluate(checks, { tool: input.tool, environment, asker: input.asker, groups: input.groups, catalog: input.catalog }, { ...deps, environments });
   const answer: Answer = {
     state: 'checked',
     verdict: outcome.verdict,
@@ -76,6 +87,7 @@ export async function answerQuestion(input: AskInput, deps: AskDeps): Promise<An
     checks,
     anyEnvironment: environment === null,
     cached: t.cached,
+    environmentVersion,
   };
   return t.modelId ? { ...answer, modelId: t.modelId } : answer;
 }

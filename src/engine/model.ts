@@ -176,6 +176,10 @@ export interface CheckResult {
   pending?: { requestKey: string } | null;
   /** Capability only: the fact version used, saved with the ask as evidence. */
   factVersionId?: number;
+  /** Capability only: the owner's recorded value that was compared. */
+  found?: unknown;
+  /** Plain words for what was checked, when the stored row names it (a readiness key's label). */
+  subject?: string;
 }
 
 export type Verdict = 'yes' | 'yes_with_approval' | 'not_ready' | 'no' | 'dont_know';

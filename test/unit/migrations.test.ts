@@ -14,7 +14,7 @@ describe('Forge SQL migrations', () => {
 
   it('only uses idempotent statements (no transactions in Forge SQL)', () => {
     for (const m of MIGRATIONS) {
-      expect(m.ddl.trimStart()).toMatch(/^(CREATE TABLE IF NOT EXISTS|DROP TABLE IF EXISTS|ALTER TABLE \w+ ADD COLUMN IF NOT EXISTS) /);
+      expect(m.ddl.trimStart()).toMatch(/^(CREATE TABLE IF NOT EXISTS|DROP TABLE IF EXISTS|ALTER TABLE \w+ ADD COLUMN IF NOT EXISTS|CREATE UNIQUE INDEX IF NOT EXISTS) /);
     }
   });
 

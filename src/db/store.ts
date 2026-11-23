@@ -7,12 +7,20 @@ import { sql } from '@forge/sql';
 export const limitClause = (n: number): string => `LIMIT ${Math.max(1, Math.min(1000, Math.trunc(Number(n) || 1)))}`;
 
 /**
- * JSON columns arrive already parsed as objects (seen 2026-11-20), although the Forge SQL docs say
- * they are returned as strings. Accept both so a platform change can't break reads.
+ * JSON columns arrive already parsed (seen 2026-11-20), although the Forge SQL docs say they are returned as
+ * strings. Accept both so a platform change can't break reads. A JSON string value also arrives parsed, as
+ * plain text that isn't JSON itself (seen 2026-11-23: the stored workspace id came back as e814c5c1-…), so
+ * text that doesn't parse is that string. Because "2" or "true" stored as JSON strings would be ambiguous,
+ * the app stores objects, not bare scalars, in JSON columns (facts: `{ value }`, D30).
  */
 export function fromJsonColumn<T>(v: unknown): T | null {
   if (v === null || v === undefined) return null;
-  return (typeof v === 'string' ? JSON.parse(v) : v) as T;
+  if (typeof v !== 'string') return v as T;
+  try {
+    return JSON.parse(v) as T;
+  } catch {
+    return v as T;
+  }
 }
 
 /** App settings (service desk, request types, model choice, …). See DECISIONS D14. */

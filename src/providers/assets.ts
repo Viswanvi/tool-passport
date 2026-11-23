@@ -41,7 +41,9 @@ export const VERSION_ATTRIBUTE = 'Version';
 /** Object keys look like TPENV-4679; anything else never reaches the query. */
 const OBJECT_KEY = /^[A-Za-z][A-Za-z0-9_]{0,31}-\d{1,12}$/;
 
-const quote = (s: string) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+/** An AQL string literal, quotes and backslashes escaped. */
+export const aqlString = (s: string) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+const quote = aqlString;
 
 const obj = (v: unknown): Record<string, unknown> | null => (v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : null);

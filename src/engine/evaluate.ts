@@ -142,7 +142,7 @@ function judge(fv: FactVersionRow, key: CatalogKey, c: Extract<Check, { dimensio
   if (outcome === 'bad_stored') return notVerified(c, `The recorded answer for "${key.label}" can't be compared`, 'ask_owner');
   if (outcome === 'bad_asked') return notVerified(c, `The question didn't give a usable value for "${key.label}"`, 'ask_owner');
   const label: Label = { kind: 'owner_verified', version: fv.version, by: fv.verifiedBy, at: fv.verifiedAt, quote: fv.quote };
-  return result(c, outcome ? 'pass' : 'fail', label, { factVersionId: fv.id });
+  return result(c, outcome ? 'pass' : 'fail', label, { factVersionId: fv.id, found: fv.value });
 }
 
 /**
@@ -215,9 +215,10 @@ async function readiness(c: Extract<Check, { dimension: 'environment' }>, x: Ctx
   if (!x.env || !x.env.ok) return envNotRead(c, x.env, x.environment, `The record for ${x.environment.name}`);
   const rk = await x.repo.readinessKey(x.tool.id, c.key);
   if (!rk) return notVerified(c, 'No setting recorded for this requirement', 'ask_owner');
+  const named = (r: CheckResult): CheckResult => ({ ...r, subject: rk.label });
   // Absent is not the same as empty: the provider leaves out only attributes that don't exist.
   if (!Object.hasOwn(x.env.values, rk.providerAttribute)) {
-    return notVerified(c, `${rk.providerAttribute} not found for ${x.environment.name}`, 'ask_owner');
+    return named(notVerified(c, `${rk.providerAttribute} not found for ${x.environment.name}`, 'ask_owner'));
   }
   const values = x.env.values[rk.providerAttribute];
   const label: Label =
@@ -225,8 +226,8 @@ async function readiness(c: Extract<Check, { dimension: 'environment' }>, x: Ctx
       ? { kind: 'assets_record', attribute: rk.providerAttribute, readAt: x.env.readAt, changedAt: x.env.recordUpdatedAt }
       : { kind: 'recorded_by_owner', attribute: rk.providerAttribute, readAt: x.env.readAt, changedAt: x.env.recordUpdatedAt };
   const m = matches(values, rk);
-  if (m === 'unreadable') return notVerified(c, `${rk.providerAttribute} for ${x.environment.name} can't be compared with "${rk.expected}"`, 'ask_owner');
-  return m ? result(c, 'pass', label) : { check: c, status: 'missing', label, route: rk.fixRoute };
+  if (m === 'unreadable') return named(notVerified(c, `${rk.providerAttribute} for ${x.environment.name} can't be compared with "${rk.expected}"`, 'ask_owner'));
+  return named(m ? result(c, 'pass', label) : { check: c, status: 'missing', label, route: rk.fixRoute });
 }
 
 export function matches(values: unknown, rk: Pick<ReadinessKeyRow, 'match' | 'expected'>): boolean | 'unreadable' {

@@ -244,14 +244,23 @@ export async function loadTool(toolId: number): Promise<Tool | null> {
   };
 }
 
+const ENVIRONMENT_COLUMNS = 'id, tool_id, name, provider, provider_ref, owner_account_id, audience_group, last_seen_version, last_seen_at, recorded_values';
+
 export async function loadEnvironment(environmentId: number): Promise<Environment | null> {
-  const rows = await select(
-    `SELECT id, tool_id, name, provider, provider_ref, owner_account_id, audience_group, last_seen_version, last_seen_at, recorded_values
-     FROM environments WHERE id = ?`,
-    environmentId,
-  );
-  const r = rows[0];
-  if (!r) return null;
+  const rows = await select(`SELECT ${ENVIRONMENT_COLUMNS} FROM environments WHERE id = ?`, environmentId);
+  return rows[0] ? environmentRow(rows[0]) : null;
+}
+
+export async function listEnvironments(toolId: number): Promise<Environment[]> {
+  return (await select(`SELECT ${ENVIRONMENT_COLUMNS} FROM environments WHERE tool_id = ? ORDER BY name`, toolId)).map(environmentRow);
+}
+
+export async function listTools(): Promise<Array<{ id: number; name: string }>> {
+  const rows = await select('SELECT id, name FROM tools ORDER BY name');
+  return rows.map((r) => ({ id: id(r.id, 'tools', 'id'), name: text(r.name, 'tools', 'name') }));
+}
+
+function environmentRow(r: Row): Environment {
   return {
     id: id(r.id, 'environments', 'id'),
     toolId: id(r.tool_id, 'environments', 'tool_id'),

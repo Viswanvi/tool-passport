@@ -11,6 +11,10 @@ describe('fromJsonColumn (Forge SQL returns JSON columns parsed, docs say string
   it('parses a JSON string', () => {
     expect(fromJsonColumn('{"a":1}')).toEqual({ a: 1 });
   });
+  it('a JSON string value that arrives already parsed is returned as that string (seen on Forge SQL)', () => {
+    expect(fromJsonColumn('e814c5c1-5d62-496f-9b4c-78c6d67a7401')).toBe('e814c5c1-5d62-496f-9b4c-78c6d67a7401');
+    expect(fromJsonColumn('"quoted"')).toBe('quoted');
+  });
   it('maps null and undefined to null', () => {
     expect(fromJsonColumn(null)).toBeNull();
     expect(fromJsonColumn(undefined)).toBeNull();

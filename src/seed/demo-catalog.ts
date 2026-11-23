@@ -37,7 +37,8 @@ export const DEMO_CATALOG: CatalogKey[] = [
   atLeast('max_upload_gb', 'Upload a file of a given size', 'file size in gigabytes (GB)', ['upload limit', 'file size', 'big file']),
   has('scheduled_jobs', 'Run jobs on a schedule', ['cron', 'nightly job', 'scheduled task', 'run automatically every day']),
   has('single_sign_on', 'Sign in with the company single sign-on', ['SSO', 'company login', 'single sign-on']),
-  has('websockets', 'Keep live two-way connections open (websockets)', ['websocket', 'live updates', 'push updates', 'real-time connection']),
+  // Labels appear on the card, which never says "live" (spec section 15); synonyms only go to the model.
+  has('websockets', 'Keep two-way connections open (websockets)', ['websocket', 'live updates', 'push updates', 'real-time connection']),
   // Policy actions an employee can ask about directly.
   has('external_api_calls', 'Call services outside the company from an app', ['external API', 'outside service', 'third-party API', 'internet API'], 'action'),
   has('external_sharing', 'Share an app with people outside the company', ['share externally', 'public link', 'share with a customer', 'share with a partner'], 'action'),

@@ -317,6 +317,16 @@ export const MIGRATIONS: Migration[] = [
     name: 'v021_catalog_key_unit',
     ddl: 'ALTER TABLE catalog_keys ADD COLUMN IF NOT EXISTS unit VARCHAR(128) NULL',
   },
+  {
+    // One rule per scope (tool|environment-or-*|group-or-*|action), like facts.scope_key, so writing a rule
+    // again updates it instead of adding a duplicate (DECISIONS D31).
+    name: 'v022_rules_scope_key',
+    ddl: 'ALTER TABLE rules ADD COLUMN IF NOT EXISTS scope_key VARCHAR(512) NULL',
+  },
+  {
+    name: 'v023_rules_scope_unique',
+    ddl: 'CREATE UNIQUE INDEX IF NOT EXISTS one_rule_per_scope ON rules (scope_key)',
+  },
 ];
 
 // The runner is a module-level singleton that accumulates enqueued statements, so the list is

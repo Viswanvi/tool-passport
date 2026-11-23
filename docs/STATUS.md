@@ -152,21 +152,56 @@ Started two days early at the human's request ("Start Phase1").
     installations (`forge logs`, 2026-11-22 03:31:30-31 UTC): `[sweep] migrations applied: v021_catalog_key_unit`,
     twice, no errors.
 
+- Step 5, Ask resolver, card and Ask page, plus "Load demo data" (D31):
+  - Code: `src/engine/card.ts` (card model), `src/resolvers/handlers.ts` (ask, tools, environments, loadDemo;
+    identity from the context, zod payloads, Try again on any error), `src/registry/write.ts` +
+    `authorise.ts`, `src/seed/demo.ts`, `src/db/asks.ts`, `src/frontend/index.tsx` (Ask page, card, setup page).
+  - Tests first for the card (red: `Cannot find module '../../src/engine/card'`). `npx vitest run`:
+    `Test Files 15 passed (15)`, `Tests 199 passed (199)` (adds `card.test.ts` 14, `seed.test.ts` 4,
+    `resolvers.test.ts` 10; the seed test runs the loaded data through the real engine: KS-DEV Not ready,
+    KS-PROD No, 3 GB No, 1 GB Yes, websockets Don't know yet). tsc exit 0, eslint exit 0, `forge lint`:
+    `No issues found.`
+  - `forge deploy -e development`: 4.9.0, 4.10.0, 4.11.0, each "eligible for the Runs on Atlassian program"
+    (minor versions; no scope or module change).
+  - **Live on the demo site, in the browser as the admin (2026-11-23):**
+    - Setup page → Load demo data (4.9.0): `Demo data not loaded … Unexpected token 'e', "e814c5c1-5"... is not
+      valid JSON` (stored workspace id read back already parsed; nothing was written because objects are looked
+      up first). Fixed in 4.10.0 (D31 h). Second click: `Demo data loaded · tools: 1 · environments: 2 ·
+      catalogKeys: 25 · links: 7 · facts: 6 · rules: 8 · readinessKeys: 2 · accessMappings: 4 · KS-DEV →
+      TPENV-4679 · KS-PROD → TPENV-4680`. This verified the admin check, the Name lookup in Assets, the owner
+      write layer and migrations v022/v023 on real Forge SQL (the sweep also logged `[sweep] migrations applied:
+      v022_rules_scope_key, v023_rules_scope_unique` at 05:41:31 for the other installation).
+    - Ask, Kestrel Studio, KS-DEV, "Can I build a custom web dashboard?": **Not ready**, `KS-DEV · 13.2`,
+      "You're not in kestrel-dev-builders, which gives Developer role in Kestrel.", chips `Mapped access ·
+      kestrel-dev-builders`, `Assets record · read 11:11 AM`, `Owner-verified · 13.2`, "next: Needs design
+      review", I checked: web front end · custom ui policy · access for custom ui · Frontend build. Access is
+      Missing because the group doesn't exist on the demo site (E6: group creation needs a scope we don't have).
+    - Same question, KS-PROD: **No**, "Policy for KS-PROD: Not allowed in production." Log: `[ask]
+      state=checked verdict=no cached=true model=-` (translation cache hit, no model call).
+    - "Can I upload a 3 GB file?", KS-PROD: **No**, "Upload a file of a given size: the recorded limit on 13.2 is
+      2 GB; you asked for 3 GB." Log: `[ask] state=checked verdict=no cached=false model=claude-haiku-5-5`.
+    - So, verified on the real platform: model choice from `list()` (Haiku 5.5 stored), `translationChat`,
+      `sqlTranslationStore`, `sqlEngineRepo` and loaders, the Assets provider and group reader as the app.
+  - **LLM calls in Phase 1 so far: 1 `list()` + 2 chat calls on `claude-haiku-5-5`** (the first KS-DEV ask ran
+    before the log line existed; at most one retry possible there). At ~2,000 input / 50 output tokens per call,
+    about $0.003.
+
 ### Not done / untested
 
-- No LLM call was made in Phase 1 so far. Nothing reads or writes app data on the sites yet (no resolver uses
-  the engine), so the sites behave as after Phase 0 apart from the v021 migration.
-- Untested against the real platform: `sqlTranslationStore`, `translationChat`, `sqlEngineRepo` and the loaders
-  (unit tests fake `@forge/sql` and `@forge/llm`), and the providers through `requestJira` as the app (the API
-  shapes were checked as the admin in the browser; E1 showed the app gets the same reply). First exercised by
-  the Ask resolver in step 5.
-- Steps 5-7: Ask resolver + card + Ask page (needs a tool, environments and facts in Forge SQL on the dev site),
-  guided fix loop, eval set to 20 (24 pilot questions exist).
+- Untested live: `noteVersion` from the Ask path (setting KS-DEV's baseline; errors there are swallowed by
+  design), the sweep's 30-day question purge, the Re-check and Try again buttons, "Any environment".
+- The spec's exact moment 1 wording in KS-DEV ("The frontend build isn't set up") needs the asker in a group
+  named kestrel-dev-builders. The app can't create groups yet (E6), so either the human creates it in
+  admin.atlassian.com and joins it, or this waits for the Phase 4 seed.
+- No demo data on the fresh site (toolpassport), on purpose (E9 must start fresh).
+- Steps 6-7: guided fix loop (Request the fix, issue events, Re-check, card polling, sweep re-check), eval set
+  to 20 (24 pilot questions exist).
 - Demo seed (Phase 4) must add facts and links for the action keys `external_api_calls` and `external_sharing`,
   or those questions answer Don't know yet (D28 h).
 
 ### Next
 
-- Step 5: Ask resolver (identity from the Forge context only), the verdict card and the Ask page (spec section
-  15 card rules). Needs Kestrel Studio data in Forge SQL on the dev site, created through owner-write code paths
-  (CLAUDE.md rule 6), and a few real LLM calls (reported by count).
+- Step 6: guided fix. `loop/requests.ts` (kind `fix`: JSM request raised for the asker, routed to the
+  environment or tool owner), `loop/events.ts` (resolution from the changelog plus read-back, D22), Re-check,
+  card polling while a request is open, and the sweep's re-check of open requests. Needs the JSM service desk
+  on the demo site and the asker's Customer role (D23).

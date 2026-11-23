@@ -2,7 +2,7 @@ import { route } from '@forge/api';
 import { mappedAttributes } from '../db/repo';
 import { getSetting, setSetting } from '../db/store';
 import type { EnvironmentReader, Groups } from '../engine/model';
-import { readAssets, type AssetsClient, type HttpReply } from './assets';
+import { aqlString, readAssets, type AssetsClient, type HttpReply } from './assets';
 import { assets, call, field, list, requester, text } from './assets-api';
 import { parseGroups } from './groups';
 import { environmentReader } from './index';
@@ -30,13 +30,15 @@ async function http(step: string, path: Parameters<typeof call>[2], method = 'GE
 
 export const forgeAssetsClient: AssetsClient = {
   async workspace() {
-    const stored = await getSetting<string>(WORKSPACE_SETTING);
-    if (typeof stored === 'string' && stored) return stored;
+    // Stored as { id } (an object, see store.ts); a bare string from 4.9.0 is read too.
+    const stored = await getSetting<unknown>(WORKSPACE_SETTING);
+    const known = typeof stored === 'string' ? stored : text(field(stored, 'id'));
+    if (known) return known;
     const res = await http('workspace lookup', route`/rest/servicedeskapi/assets/workspace`);
     if (res.status === 401 || res.status === 403 || res.status === 404) return null;
     if (res.status !== 200) throw new Error(`workspace lookup: ${res.status}`);
     const id = text(field(list(res.body, 'values')[0], 'workspaceId')) ?? null;
-    if (id) await setSetting(WORKSPACE_SETTING, id); // the workspace id doesn't change; save a call per read
+    if (id) await setSetting(WORKSPACE_SETTING, { id }); // the workspace id doesn't change; save a call per read
     return id;
   },
   aql: (workspaceId, qlQuery) => http('AQL', assets.aql(workspaceId), 'POST', { qlQuery }),
@@ -58,6 +60,21 @@ export function forgeEnvironmentReader(): EnvironmentReader {
     assets: async (e) => readAssets(e, { client: forgeAssetsClient, mappedAttributes, ...(await schemaNames()), now }),
     registry: (e) => readRegistry(e, { mappedAttributes, now }),
   });
+}
+
+/**
+ * The key of the passport object with this name (label), or null if there isn't exactly one. Read-only:
+ * the demo loader uses it to link environments to objects that already exist.
+ */
+export async function findPassportObjectKey(name: string): Promise<string | null> {
+  const workspace = await forgeAssetsClient.workspace();
+  if (!workspace) return null;
+  const { schemaName, typeName } = await schemaNames();
+  const res = await forgeAssetsClient.aql(workspace, `objectSchema = ${aqlString(schemaName)} AND objectType = ${aqlString(typeName)} AND Name = ${aqlString(name)}`);
+  if (res.status !== 200) return null;
+  const values = list(res.body, 'values');
+  if (values.length !== 1) return null;
+  return text(field(values[0], 'objectKey')) ?? null;
 }
 
 /** The account id comes from the Forge context or a stored ask, never from a request payload (CLAUDE.md rule 3). */
