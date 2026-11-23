@@ -227,19 +227,29 @@ Started two days early at the human's request ("Start Phase1").
     - Ask again: Not ready, reason access, and only `Fix requested (TPD-3)`: the frontend check now passes and a
       new ask finds the open request. The "view request" link is
       `https://one-atlas-oibs.atlassian.net/servicedesk/customer/portal/14/TPD-3`.
+  - **The fix loop reaches "Yes, with approval" (Phase 1 sign-off item), live, 2026-11-23:**
+    - With the human's go-ahead ("Yes, create it"), group `kestrel-dev-builders` was created in Atlassian
+      Administration (org one-atlas-oibs) with the admin as its only member and no app access ("Group Created").
+    - The Ask card was open on `Fix requested (TPD-3)`. Without any click it turned to **Yes, with approval**,
+      `KS-DEV · 13.2`, "Allowed in KS-DEV with approval: Needs design review.", chips `Policy rule · Needs design
+      re…`, `Owner-verified · 13.2`, `Mapped access · kestrel-de…`, "Next step: request approval.": the
+      10-second re-check (polling) verified, and the new group membership was read as the app.
+    - TPD-3 resolved as Done. Log 08:59:42: `[issue-event] TPD-3 rechecked`. Comment from tool-passport:
+      `Tool Passport checked again after this request was resolved. Answer now: Yes, with approval. Allowed in
+      KS-DEV with approval: Needs design review. Next step: request approval in Tool Passport.`
+    - Sweep log lines between: `[sweep] requests looked=1 rechecked=0 failed=0` (08:56:29, TPD-3 open).
+  - Demo data set back for moment 1: KS-DEV Build environments back to `standard` in Assets. Ask again: **Not
+    ready**, "Frontend build isn't set up in KS-DEV.", chips `Assets record · read 02:31 PM`, `Owner-verified ·
+    13.2`, `Mapped access · kestrel-de…`, **Request the fix**, "next: Needs design review": the spec's moment 1
+    card (section 15) word for word, now that the admin is in kestrel-dev-builders.
   - **LLM calls in step 6: 0** (every ask was a translation cache hit). Phase 1 total stays 1 `list()` + 2 chat.
 
 ### Not done / untested
 
-- **"Yes, with approval" live (sign-off item) is blocked on the group:** the admin must be in
-  `kestrel-dev-builders`, which doesn't exist on the demo site (E6). Once the human creates it and joins it,
-  resolving TPD-3 should re-check to Yes, with approval and comment that.
-- Untested live: the card flipping by polling (the page was left before TPD-4 was resolved), the sweep
-  re-checking a missed event, the Customer-role message (D23), taking over a stopped raise, a failed comment
-  finished by the sweep (all unit-tested).
-- Demo data changed by the live test: KS-DEV's Build environments is now `standard, frontend` (moment 2 starts
-  without `frontend`). TPD-3 is open, TPD-4 resolved. Reset demo arrives in Phase 4; set it back by hand before a
-  demo run.
+- Untested live (unit-tested): the sweep re-checking a missed event, the Customer-role message (D23), taking
+  over a stopped raise, a failed comment finished by the sweep.
+- Demo site state after the test: group `kestrel-dev-builders` exists with the admin in it (made by hand, not by
+  the app: E6); TPD-3 and TPD-4 resolved; KS-DEV back to `standard`. Reset demo arrives in Phase 4.
 - Untested live: `noteVersion` from the Ask path (setting KS-DEV's baseline; errors there are swallowed by
   design), the sweep's 30-day question purge, "Any environment".
 - No demo data on the fresh site (toolpassport), on purpose (E9 must start fresh).
@@ -249,6 +259,5 @@ Started two days early at the human's request ("Start Phase1").
 
 ### Next
 
-- Finish step 6 live once `kestrel-dev-builders` exists: resolve TPD-3 → Yes, with approval.
 - Step 7: the first 20 eval questions. Then Phase 1 sign-off (safety suite, unit tests, `forge lint`,
   `forge eligibility`, section 14 self-review).
