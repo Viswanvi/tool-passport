@@ -254,14 +254,6 @@ describe('resolution events (D22)', () => {
     expect(x.jsm.comments).toHaveLength(1);
   });
 
-  it('leaves question requests to Ask the owner (Phase 2 step 2)', async () => {
-    const { x } = await raised();
-    x.requests.rows[0]!.kind = 'question';
-    x.jsm.resolutions.set('TPD-1', 'Done');
-    expect(await handleIssueEvent(resolvedEvent('TPD-1'), x.deps)).toBe('not_handled');
-    expect(x.jsm.comments).toEqual([]);
-    expect(x.requests.rows[0]!.status).toBe('open');
-  });
 });
 
 describe('the sweep', () => {

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { raiseApproval, raiseFailure, raiseFix, recheckForAsker, type LoopDeps, type RaiseReply, type RecheckReply, type RequestSetup } from '../loop/requests';
+import { raiseApproval, raiseFailure, raiseFix, raiseQuestion, recheckForAsker, type LoopDeps, type RaiseReply, type RecheckReply, type RequestSetup } from '../loop/requests';
 import type { ResolutionMap } from '../loop/resolution';
 import { mayAdminister, type WriteCheck } from '../registry/authorise';
 import type { ResolverContext } from './handlers';
@@ -12,12 +12,12 @@ import type { ResolverContext } from './handlers';
 
 const AskRef = z.object({ askId: z.number().int().positive() });
 
-async function raiseFor(kind: 'fix' | 'approval', payload: unknown, ctx: ResolverContext, deps: LoopDeps): Promise<RaiseReply> {
+async function raiseFor(kind: 'fix' | 'approval' | 'question', payload: unknown, ctx: ResolverContext, deps: LoopDeps): Promise<RaiseReply> {
   if (!ctx.accountId) return raiseFailure('not_signed_in');
   const p = AskRef.safeParse(payload);
   if (!p.success) return raiseFailure('bad_request');
   try {
-    const raise = kind === 'fix' ? raiseFix : raiseApproval;
+    const raise = kind === 'fix' ? raiseFix : kind === 'approval' ? raiseApproval : raiseQuestion;
     const reply = await raise(p.data.askId, ctx.accountId, deps);
     console.log(`[request] ${kind} ${reply.ok ? `raised=${reply.raised.length}` : `error=${reply.error}`}`);
     return reply;
@@ -30,6 +30,8 @@ async function raiseFor(kind: 'fix' | 'approval', payload: unknown, ctx: Resolve
 export const handleRequestFix = (payload: unknown, ctx: ResolverContext, deps: LoopDeps) => raiseFor('fix', payload, ctx, deps);
 
 export const handleRequestApproval = (payload: unknown, ctx: ResolverContext, deps: LoopDeps) => raiseFor('approval', payload, ctx, deps);
+
+export const handleAskOwner = (payload: unknown, ctx: ResolverContext, deps: LoopDeps) => raiseFor('question', payload, ctx, deps);
 
 export async function handleRecheck(payload: unknown, ctx: ResolverContext, deps: LoopDeps): Promise<RecheckReply> {
   if (!ctx.accountId) return { ok: false, error: 'not_signed_in' };

@@ -1,5 +1,6 @@
 import type { CatalogChoice } from '../../src/engine/catalog';
 import type { Groups } from '../../src/engine/model';
+import type { AnswerWriter } from '../../src/loop/questions';
 import type { ResolutionMap } from '../../src/loop/resolution';
 import {
   JsmError,
@@ -126,6 +127,40 @@ export function memoryRequests(): RequestRepo & { rows: MemRow[] } {
       r.undecided = true;
       return true;
     },
+    async openByKind(toolId, kind, limit) {
+      return rows.filter((r) => r.toolId === toolId && r.kind === kind && r.status === 'open' && r.requestKey).slice(0, limit).map(pub);
+    },
+  };
+}
+
+/** The owner write layer, writing facts straight into the world the engine reads. */
+export function memoryWriter(w: World): AnswerWriter & { audits: Array<{ actor: string; action: string; after: unknown }> } {
+  const audits: Array<{ actor: string; action: string; after: unknown }> = [];
+  return {
+    audits,
+    async upsertFact(f) {
+      const held = w.facts.find((x) => x.toolId === f.toolId && x.environmentId === f.environmentId && x.audienceGroup === f.audienceGroup && x.factKey === f.factKey);
+      if (held) {
+        Object.assign(held, { versionSensitive: f.versionSensitive, status: 'active' });
+        return held.id;
+      }
+      const id = 100 + w.facts.length;
+      w.facts.push({ id, toolId: f.toolId, environmentId: f.environmentId, audienceGroup: f.audienceGroup, status: 'active', factKey: f.factKey, versionSensitive: f.versionSensitive });
+      return id;
+    },
+    async upsertFactVersion(v) {
+      const held = w.factVersions.find((x) => x.factId === v.factId && x.version === v.version);
+      const row = { value: v.value, quote: v.quote, verifiedBy: v.verifiedBy, verifiedAt: '2026-11-24T16:00:00.000Z', status: 'active' as const };
+      if (held) Object.assign(held, row);
+      else w.factVersions.push({ id: 1000 + w.factVersions.length, factId: v.factId, version: v.version, ...row });
+    },
+    async bumpRevision() {
+      w.tool.catalogRevision += 1;
+      w.catalog.revision += 1;
+    },
+    async audit(actor, action, _entity, _id, after) {
+      audits.push({ actor, action, after });
+    },
   };
 }
 
@@ -160,6 +195,9 @@ export interface FakeJsm extends JsmClient {
   resolutions: Map<string, string | null>;
   /** Who set the resolution, by issue key; defaults to the assignee. */
   resolvedBy: Map<string, string | null>;
+  /** Requests the app resolved itself (a settled question). */
+  resolvedByApp: string[];
+  failResolve: boolean;
   failCreate: JsmError | null;
   failAssign: boolean;
   failComment: boolean;
@@ -173,6 +211,8 @@ export function fakeJsm(): FakeJsm {
     resolutionReads: [],
     resolutions: new Map(),
     resolvedBy: new Map(),
+    resolvedByApp: [],
+    failResolve: false,
     failCreate: null,
     failAssign: false,
     failComment: false,
@@ -197,6 +237,12 @@ export function fakeJsm(): FakeJsm {
       const name = jsm.resolutions.get(issueKey) ?? null;
       const resolvedBy = jsm.resolvedBy.has(issueKey) ? jsm.resolvedBy.get(issueKey)! : name ? assignee : null;
       return { name, resolvedBy, assignee };
+    },
+    async resolve(issueKey) {
+      if (jsm.failResolve) return false;
+      jsm.resolvedByApp.push(issueKey);
+      jsm.resolutions.set(issueKey, 'Done');
+      return true;
     },
   };
   return jsm;

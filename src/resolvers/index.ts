@@ -13,7 +13,9 @@ import type { WriteCheck } from '../registry/authorise';
 import { sqlRegistryWriter } from '../registry/write';
 import { seedDemo } from '../seed/demo';
 import { handleAsk, handleEnvironments, handleLoadDemo, handleTools, type AskHandlerDeps, type ResolverContext } from './handlers';
+import { handleMyTools, handleOpenQuestions, handlePublishAnswer, type OwnerDeps } from './owner-handlers';
 import {
+  handleAskOwner,
   handleRecheck,
   handleRequestApproval,
   handleRequestFix,
@@ -86,6 +88,24 @@ resolver.define('loadDemo', ({ context }) =>
 resolver.define('requestFix', ({ payload, context }) => handleRequestFix(payload, ctxOf(context), loopDeps));
 
 resolver.define('requestApproval', ({ payload, context }) => handleRequestApproval(payload, ctxOf(context), loopDeps));
+
+resolver.define('askOwner', ({ payload, context }) => handleAskOwner(payload, ctxOf(context), loopDeps));
+
+// ---- tool owners (My tools): owner or Jira administrator, checked in each handler ----
+
+const ownerDeps: OwnerDeps = {
+  loop: loopDeps,
+  writer: sqlRegistryWriter,
+  check: writeCheck,
+  listTools,
+  listEnvironments,
+};
+
+resolver.define('myTools', ({ context }) => handleMyTools(ctxOf(context), ownerDeps));
+
+resolver.define('openQuestions', ({ payload, context }) => handleOpenQuestions(payload, ctxOf(context), ownerDeps));
+
+resolver.define('publishAnswer', ({ payload, context }) => handlePublishAnswer(payload, ctxOf(context), ownerDeps));
 
 resolver.define('recheck', ({ payload, context }) => handleRecheck(payload, ctxOf(context), loopDeps));
 

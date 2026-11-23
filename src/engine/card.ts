@@ -19,7 +19,7 @@ export interface Chip {
   changedAt?: string | null;
 }
 
-export type ActionKind = 'request_fix' | 'fix_requested' | 'request_approval' | 'approval_requested' | 'ask_owner' | 'recheck' | 'try_again';
+export type ActionKind = 'request_fix' | 'fix_requested' | 'request_approval' | 'approval_requested' | 'ask_owner' | 'owner_asked' | 'recheck' | 'try_again';
 
 /** An open request shown on the card. The page looks the owner's name up from the account id. */
 export interface CardRequest {
@@ -33,7 +33,7 @@ export interface CardAction {
   kind: ActionKind;
   label: string;
   requestKey?: string;
-  /** fix_requested and approval_requested only: one per open request. */
+  /** fix_requested, approval_requested and owner_asked only: one per open request. */
   requests?: CardRequest[];
 }
 

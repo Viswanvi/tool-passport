@@ -104,6 +104,14 @@ export const sqlRequestRepo: RequestRepo = {
     return rows(`SELECT ${COLS} FROM requests WHERE open_key IN (${keys.map(() => '?').join(', ')})`, ...keys);
   },
 
+  async openByKind(toolId, kind, limit) {
+    return rows(
+      `SELECT ${COLS} FROM requests WHERE tool_id = ? AND kind = ? AND status = 'open' AND request_key IS NOT NULL ORDER BY id ASC ${limitClause(limit)}`,
+      toolId,
+      kind,
+    );
+  },
+
   async byKey(requestKey) {
     return first(`SELECT ${COLS} FROM requests WHERE request_key = ?`, requestKey);
   },

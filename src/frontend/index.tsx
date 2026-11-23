@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
   Box,
   Button,
+  Checkbox,
   Heading,
   Inline,
   Link,
@@ -10,6 +11,10 @@ import ForgeReconciler, {
   Select,
   Spinner,
   Stack,
+  Tab,
+  TabList,
+  TabPanel,
+  Tabs,
   Tag,
   Text,
   Textfield,
@@ -19,6 +24,7 @@ import ForgeReconciler, {
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 import type { Card, CardRequest, Chip } from '../engine/card';
+import type { QuestionGroup } from '../loop/questions';
 import type { RaiseReply, RecheckReply, RequestSetup } from '../loop/requests';
 import type { AskReply } from '../resolvers/handlers';
 import type { Option as DeskOption } from '../resolvers/request-handlers';
@@ -77,19 +83,15 @@ function checkLine(c: Card['checks'][number]): string {
 }
 
 // Actions that arrive in Phase 2, shown as the next step in words rather than as buttons that do nothing.
-const NEXT_STEP: Record<string, string> = {
-  ask_owner: 'Next step: ask the tool owner.',
-};
-
 /** Open requests keep the card checking again (spec section 15). */
-const WAITING = new Set(['fix_requested', 'approval_requested']);
+const WAITING = new Set(['fix_requested', 'approval_requested', 'owner_asked']);
 
 /** "Fix requested (TPD-3) from Marco · view request", one line per open request. Names are looked up by the page. */
-const OpenRequests = ({ label, requests }: { label: string; requests: CardRequest[] }) => (
+const OpenRequests = ({ label, to, requests }: { label: string; to: boolean; requests: CardRequest[] }) => (
   <Stack space="space.050">
     {requests.map((r, i) => (
       <Inline key={r.key ?? `raising-${i}`} space="space.100" alignBlock="center" shouldWrap>
-        <Text>{r.key ? `${label} (${r.key}) from` : `${label}, being raised, from`}</Text>
+        <Text>{`${label}${r.key ? ` (${r.key})` : ', being raised,'} ${to ? 'to' : 'from'}`}</Text>
         <User accountId={r.ownerAccountId} />
         {r.key && r.url ? (
           <Link href={r.url} openNewTab>
@@ -104,7 +106,7 @@ const OpenRequests = ({ label, requests }: { label: string; requests: CardReques
 interface CardActions {
   busy: boolean;
   onRecheck: () => void;
-  onRequest: (kind: 'fix' | 'approval') => void;
+  onRequest: (kind: 'fix' | 'approval' | 'question') => void;
   canRecheck: boolean;
 }
 
@@ -113,8 +115,11 @@ const VerdictCard = ({ card, busy, onRecheck, onRequest, canRecheck }: { card: C
   const kind = card.action?.kind;
   // An approval pending with no open request row to show still reads "Approval requested · TPD-12" (text).
   const requestApproval = kind === 'request_approval' && !card.action?.requestKey;
-  const button = kind === 'recheck' || kind === 'try_again' || kind === 'request_fix' || requestApproval;
-  const onPrimary = kind === 'request_fix' ? () => onRequest('fix') : requestApproval ? () => onRequest('approval') : onRecheck;
+  // A question outside the catalog has no checks: the owner can't answer it here yet (D35), so it stays text.
+  const askOwner = kind === 'ask_owner' && card.checks.length > 0;
+  const button = kind === 'recheck' || kind === 'try_again' || kind === 'request_fix' || requestApproval || askOwner;
+  const onPrimary =
+    kind === 'request_fix' ? () => onRequest('fix') : requestApproval ? () => onRequest('approval') : askOwner ? () => onRequest('question') : onRecheck;
   return (
     <Box xcss={cardStyle}>
       <Stack space="space.150">
@@ -137,7 +142,9 @@ const VerdictCard = ({ card, busy, onRecheck, onRequest, canRecheck }: { card: C
             ))}
           </Inline>
         ) : null}
-        {kind && WAITING.has(kind) && card.action?.requests ? <OpenRequests label={card.action.label} requests={card.action.requests} /> : null}
+        {kind && WAITING.has(kind) && card.action?.requests ? (
+          <OpenRequests label={card.action.label} to={kind === 'owner_asked'} requests={card.action.requests} />
+        ) : null}
         <Inline space="space.150" alignBlock="center" shouldWrap>
           {button && card.action ? (
             <Button appearance="primary" onClick={onPrimary} isDisabled={busy}>
@@ -145,7 +152,7 @@ const VerdictCard = ({ card, busy, onRecheck, onRequest, canRecheck }: { card: C
             </Button>
           ) : null}
           {kind === 'request_approval' && !requestApproval ? <Text>{card.action!.label}</Text> : null}
-          {card.action && NEXT_STEP[card.action.kind] ? <Text>{NEXT_STEP[card.action.kind]}</Text> : null}
+          {kind === 'ask_owner' && !askOwner ? <Text>Next step: ask the tool owner.</Text> : null}
           {kind && WAITING.has(kind) && canRecheck ? (
             <Button appearance="subtle" onClick={onRecheck} isDisabled={busy}>
               Re-check
@@ -247,7 +254,7 @@ const AskPage = () => {
   };
 
   /** Request the fix or Request approval: the payload names only the ask; the server builds the request. */
-  const request = async (kind: 'fix' | 'approval') => {
+  const request = async (kind: 'fix' | 'approval' | 'question') => {
     if (askId === null) {
       setNotice('Ask the question again, then try once more.');
       return;
@@ -255,7 +262,7 @@ const AskPage = () => {
     setBusy(true);
     setNotice(null);
     try {
-      const r = await call<RaiseReply>(kind === 'fix' ? 'requestFix' : 'requestApproval', { askId });
+      const r = await call<RaiseReply>(kind === 'fix' ? 'requestFix' : kind === 'approval' ? 'requestApproval' : 'askOwner', { askId });
       if (r.card) setCard(r.card);
       if (!r.ok) setNotice(r.message);
     } catch {
@@ -563,6 +570,196 @@ const SetupPage = () => {
   );
 };
 
+// ---- My tools: the owner's open questions (spec section 15, F5) -----------------------------------------
+
+type QuestionsReply = { ok: true; tool: { id: number; name: string }; environments: EnvInfo[]; groups: QuestionGroup[] } | { ok: false; reason: string };
+type PublishReply = { ok: true; settled: string[]; stillOpen: number } | { ok: false; reason: string };
+interface EnvInfo {
+  id: number;
+  name: string;
+  version: string | null;
+}
+
+const YES_NO: Option[] = [
+  { label: 'Yes', value: 'yes' },
+  { label: 'No', value: 'no' },
+];
+const EVERYWHERE = 'all';
+
+/** One answer for one catalog key: value, scope and version (spec F5). The server checks all of it again. */
+const AnswerForm = ({ toolId, k, environments, onPublished }: { toolId: number; k: QuestionGroup['keys'][number]; environments: EnvInfo[]; onPublished: (text: string) => void }) => {
+  const scopes: Option[] = [{ label: 'All environments', value: EVERYWHERE }, ...environments.map((e) => ({ label: e.name, value: String(e.id) }))];
+  const [value, setValue] = useState<Option | null>(k.valueType === 'boolean' ? YES_NO[0]! : null);
+  const [raw, setRaw] = useState('');
+  const [scope, setScope] = useState<Option>(scopes[0]!);
+  const [version, setVersion] = useState(environments.find((e) => e.version)?.version ?? '');
+  const [every, setEvery] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const publish = async () => {
+    const v = k.valueType === 'boolean' ? value?.value === 'yes' : k.valueType === 'number' ? Number(raw) : raw;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await call<PublishReply>('publishAnswer', {
+        toolId,
+        key: k.key,
+        value: v,
+        environmentId: scope.value === EVERYWHERE ? null : Number(scope.value),
+        version,
+        everyVersion: every,
+      });
+      if (!r.ok) setError(r.reason);
+      else onPublished(`Published. ${r.settled.length ? `Answered and closed: ${r.settled.join(', ')}.` : 'No open question was decided by it.'} Still open: ${r.stillOpen}.`);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Stack space="space.100">
+      <Text weight="bold">{k.label}</Text>
+      <Inline space="space.150" alignBlock="center" shouldWrap>
+        <Box xcss={xcss({ width: '160px' })}>
+          {k.valueType === 'boolean' ? (
+            <Select options={YES_NO} value={value} onChange={(o: Option) => setValue(o)} />
+          ) : (
+            <Textfield placeholder={k.unit ?? (k.valueType === 'number' ? 'Number' : 'Value')} value={raw} onChange={(e) => setRaw(String(e.target.value ?? ''))} />
+          )}
+        </Box>
+        <Box xcss={xcss({ width: '180px' })}>
+          <Select options={scopes} value={scope} onChange={(o: Option) => setScope(o)} />
+        </Box>
+        <Box xcss={xcss({ width: '110px' })}>
+          <Textfield placeholder="Version" value={version} onChange={(e) => setVersion(String(e.target.value ?? ''))} />
+        </Box>
+        <Checkbox label="Holds for every version" isChecked={every} onChange={() => setEvery(!every)} />
+        <Button appearance="primary" onClick={() => void publish()} isDisabled={busy || !version.trim() || (k.valueType !== 'boolean' && !raw.trim())}>
+          Publish
+        </Button>
+      </Inline>
+      {error ? (
+        <SectionMessage appearance="warning">
+          <Text>{error}</Text>
+        </SectionMessage>
+      ) : null}
+    </Stack>
+  );
+};
+
+const QuestionsForTool = ({ toolId, refreshKey }: { toolId: number; refreshKey: number }) => {
+  const [data, setData] = useState<QuestionsReply | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const load = () => void call<QuestionsReply>('openQuestions', { toolId }).then(setData);
+  // Loaded again each time the tab is opened: a question asked meanwhile must show (found live, 4.15.0).
+  useEffect(load, [toolId, refreshKey]);
+
+  if (!data) return <Spinner />;
+  if (!data.ok) {
+    return (
+      <SectionMessage appearance="warning">
+        <Text>{data.reason}</Text>
+      </SectionMessage>
+    );
+  }
+  return (
+    <Stack space="space.200">
+      {message ? (
+        <SectionMessage appearance="success">
+          <Text>{message}</Text>
+        </SectionMessage>
+      ) : null}
+      <Inline>
+        <Button appearance="subtle" onClick={load}>
+          Refresh
+        </Button>
+      </Inline>
+      {data.groups.length === 0 ? <Text>No open questions for {data.tool.name}.</Text> : null}
+      {data.groups.map((g) => (
+        <Box key={g.target} xcss={cardStyle}>
+          <Stack space="space.150">
+            <Text>
+              Asked in {g.environments.join(', ')} · {g.requests.length} open {g.requests.length === 1 ? 'request' : 'requests'}
+            </Text>
+            <Inline space="space.100" shouldWrap>
+              {g.requests.map((r) =>
+                r.key && r.url ? (
+                  <Link key={r.key} href={r.url} openNewTab>
+                    {r.key}
+                  </Link>
+                ) : null,
+              )}
+            </Inline>
+            {g.missing.map((m) => (
+              <Text key={m}>Not verified: {m}</Text>
+            ))}
+            {g.keys.map((k) => (
+              <AnswerForm
+                key={k.key}
+                toolId={data.tool.id}
+                k={k}
+                environments={data.environments}
+                onPublished={(text) => {
+                  setMessage(text);
+                  load();
+                }}
+              />
+            ))}
+            {g.keys.length === 0 ? <Text>Nothing here can be answered as a fact; settle it in the request.</Text> : null}
+          </Stack>
+        </Box>
+      ))}
+    </Stack>
+  );
+};
+
+const MyToolsPage = ({ tools, refreshKey }: { tools: Option[]; refreshKey: number }) => {
+  const [tool, setTool] = useState<Option>(tools[0]!);
+  return (
+    <Stack space="space.200">
+      <Heading as="h2">Open questions</Heading>
+      <Text>Answer each question once. Publishing adds a verified fact and answers every open question it settles, each on the asker's own request.</Text>
+      {tools.length > 1 ? (
+        <Box xcss={xcss({ width: '240px' })}>
+          <Select options={tools} value={tool} onChange={(o: Option) => setTool(o)} />
+        </Box>
+      ) : null}
+      <QuestionsForTool key={tool.value} toolId={Number(tool.value)} refreshKey={refreshKey} />
+    </Stack>
+  );
+};
+
+/** The global page: Ask for everyone, My tools for tool owners and Jira administrators. */
+const HomePage = () => {
+  const [mine, setMine] = useState<Option[]>([]);
+  const [opened, setOpened] = useState(0);
+  useEffect(() => {
+    void call<{ tools: Array<{ id: number; name: string }> }>('myTools').then((r) => setMine(r.tools.map((t) => ({ label: t.name, value: String(t.id) }))));
+  }, []);
+  if (mine.length === 0) return <AskPage />;
+  return (
+    <Tabs id="passport-tabs" onChange={(index: number) => index === 1 && setOpened((n) => n + 1)}>
+      <TabList>
+        <Tab>Ask</Tab>
+        <Tab>My tools</Tab>
+      </TabList>
+      <TabPanel>
+        <Box xcss={xcss({ paddingTop: 'space.200' })}>
+          <AskPage />
+        </Box>
+      </TabPanel>
+      <TabPanel>
+        <Box xcss={xcss({ paddingTop: 'space.200' })}>
+          <MyToolsPage tools={mine} refreshKey={opened} />
+        </Box>
+      </TabPanel>
+    </Tabs>
+  );
+};
+
 const App = () => {
   const context = useProductContext();
   if (!context) return <Spinner />;
@@ -570,7 +767,7 @@ const App = () => {
   return (
     <Stack space="space.300">
       <Heading as="h1">{isSetup ? 'Tool Passport setup' : 'Tool Passport'}</Heading>
-      {isSetup ? <SetupPage /> : <AskPage />}
+      {isSetup ? <SetupPage /> : <HomePage />}
     </Stack>
   );
 };

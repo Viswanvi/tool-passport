@@ -361,13 +361,63 @@ Started a week early at the human's request ("Start Phase 2"), right after the P
     - KS-DEV set back to `standard`.
   - **LLM calls in step 1: 0** (cache hits).
 
+- Step 2, Ask the owner (D35):
+  - Code: `raiseQuestion`, `questionTargets`, `questionRequestText` in `src/loop/requests.ts`;
+    `src/loop/questions.ts` (`checkAnswer`, `writeAnswer`, `settleOpenQuestions`, `openQuestionGroups`);
+    `src/resolvers/owner-handlers.ts` (`myTools`, `openQuestions`, `publishAnswer`); `askOwner` resolver;
+    `openByKind` in `src/db/requests.ts`; `resolve` (issue transition) in `src/loop/jsm-forge.ts`; the page's
+    Ask / My tools tabs, Ask the owner button, "Question sent (TPD-6) to <owner>" state with polling, and the
+    Open questions view with the answer form.
+  - Tests first (red: `Cannot find module '../../src/resolvers/owner-handlers'`). `npx vitest run`:
+    `Test Files 20 passed (20)`, `Tests 286 passed (286)` (adds `questions.test.ts` 15). Mutation check:
+    skipping the owner check in publish/open questions turned 2 tests red; restored, green. tsc exit 0,
+    eslint exit 0, `forge lint`: `No issues found.`
+  - `forge deploy -e development`: 4.15.0, then 4.16.0 (fix below), each "eligible for the Runs on Atlassian
+    program" (no scope or module change; transitions use `write:jira-work`).
+  - **Live on the demo site, in the browser as the admin (2026-11-23, UTC).** To keep the demo's known unknown
+    (websockets) for the video, the loop was run on two other unknowns, in "Any environment":
+    - The page now shows **Ask | My tools** tabs (the admin owns Kestrel Studio).
+    - "Can I run jobs on GPU machines?", Any environment: **Don't know yet**, "Run jobs on GPU machines: No
+      verified answer yet.", the Any-environment banner, chip `Not verified · No verified an…`, button **Ask
+      the owner** (first live check of "Any environment"). Log: `[ask] state=checked verdict=dont_know
+      cached=false model=claude-haiku-5-5`.
+    - Ask the owner (11:08:38): `[request] question raised=1`; card `Question sent (TPD-6) to <owner> · view
+      request`. TPD-6: `Question about Kestrel Studio: Run jobs on GPU machines`, raised via API for the asker,
+      description `Someone asked Tool Passport about Kestrel Studio in any environment, and there is no
+      verified answer yet. … Not verified yet: Run jobs on GPU machines: No verified answer yet. …` (no
+      question text).
+    - Bug found: My tools said "No open questions" (its panel had loaded with the page). After a reload it
+      listed `Asked in Any environment · 1 open request · TPD-6 · Not verified: Run jobs on GPU machines: No
+      verified answer yet` with the form (Yes / All environments / 13.2 / Holds for every version / Publish).
+      Fixed in 4.16.0: the list reloads each time the tab opens, plus a Refresh button.
+    - Publish (Yes, all environments, every version): `Published. Answered and closed: TPD-6. Still open: 0.`
+      Log `[publish] gpu_compute settled=1 open=0`. TPD-6: comment `The tool owner answered in Tool Passport.
+      Answer now: Yes. Kestrel Studio can do this, as verified by its owner.`, status **Resolved**, resolution
+      **Done**, set by the app (the transitions API verified). The app's own resolution event: `[issue-event]
+      TPD-6 already` (nothing done twice).
+    - On 4.16.0: "Can my app send email to my team?", Any environment → Don't know yet → Ask the owner (TPD-7)
+      → My tools tab listed TPD-7 **without a reload** → Publish (Yes, every version): `Published. Answered and
+      closed: TPD-7. Still open: 0.` The Ask card, left open, turned by itself from `Question sent (TPD-7)` to
+      **Yes**, "Kestrel Studio can do this, as verified by its owner.", chip `Owner-verified · 13.2`. Logs
+      `[publish] email_notifications settled=1 open=0`, `[issue-event] TPD-7 already`.
+  - **LLM calls in step 2: 2** chat calls on `claude-haiku-5-5` (the two new questions). Phase 2 total: 2.
+    Project total since Phase 1: 1 `list()` + 4 chat, about $0.005.
+
 ### Not done / untested
 
 - Demo site state: the admin now holds an **approved** grant for custom UI in KS-DEV (TPD-5). Moment 2 on this
   site therefore skips the approval step until Phase 4's Reset demo clears grants. TPD-5 resolved.
 - Untested live (unit-tested): Declined; self-approval refused; hand-over to another assignee; the sweep
   deciding a missed event; a missing pending grant created at decision time.
-- Steps 2-4: Ask the owner; the remaining 20 eval questions and the run of all 40; Rovo (decide Dec 7).
+- **Privacy with two askers untested live** (spec section 19 privacy test, the demo's Priya + Sam): needs a
+  second signed-in person (Sam), which only the human can do. Unit-tested: each asker's own request, identical
+  text built from the requirement only, nobody added as a participant (no participant call exists).
+- Untested live: a question answered for one environment and version only; a "No" answer; a question the
+  owner resolves in the service desk; the websockets demo question itself (kept unanswered for the video).
+- Demo site state: published facts `gpu_compute` and `email_notifications` (Yes, all environments, every
+  version, verified by the admin); TPD-6 and TPD-7 resolved. The catalog revision moved on twice, so cached
+  translations are redone (one model call per question on its next ask).
+- Steps 3-4: the remaining 20 eval questions and the run of all 40; Rovo (decide Dec 7).
 
 ### Waiting on the human
 
@@ -376,6 +426,5 @@ Started a week early at the human's request ("Start Phase 2"), right after the P
 
 ### Next
 
-- Step 2: Ask the owner (spec F5): private question request with the restated requirement, the owner's answer
-  form (value, scope, version), `publishAnswer` adding a fact verification, and re-checking every open question
-  for the tool.
+- Step 3: the remaining 20 eval questions (pairs, outside, injection, environment), an admin-only "Run tests"
+  runner, and one run of all 40 against the real model (about 40-80 calls, roughly $0.05; ask first).

@@ -46,8 +46,8 @@ export async function handleIssueEvent(event: unknown, deps: LoopDeps): Promise<
 }
 
 async function settleIfResolved(row: RequestRow, deps: LoopDeps): Promise<EventOutcome> {
-  // Questions are settled by the owner's published answer (Phase 2 step 2), not by this path.
-  if (row.kind === 'question') return 'not_handled';
+  // A question is usually settled by the owner's published answer (loop/questions.ts), which closes the row
+  // first; one the owner resolves in the service desk instead is checked again like a fix.
   if (row.status !== 'open' || !row.requestKey) return 'already';
   const back = await deps.jsm.resolution(row.requestKey);
   if (!back.name) return 'unresolved';

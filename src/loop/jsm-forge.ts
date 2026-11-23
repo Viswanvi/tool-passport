@@ -57,7 +57,34 @@ export const forgeJsm: JsmClient = {
       assignee: text(field(field(fields, 'assignee'), 'accountId')) ?? null,
     };
   },
+
+  async resolve(issueKey) {
+    const key = checkKey(issueKey);
+    const res = await call(app, 'transitions', route`/rest/api/3/issue/${key}/transitions?expand=transitions.fields`);
+    if (!res.step.ok) return false;
+    const transition = resolvingTransition(list(res.body, 'transitions'));
+    if (!transition) return false;
+    const allowed = list(field(field(field(transition, 'fields'), 'resolution'), 'allowedValues'));
+    const resolution = allowed.find((v) => text(field(v, 'name')) === 'Done') ?? allowed[0];
+    const body = {
+      transition: { id: text(field(transition, 'id')) },
+      ...(resolution ? { fields: { resolution: { id: text(field(resolution, 'id')) } } } : {}),
+    };
+    const done = await call(app, 'resolve', route`/rest/api/3/issue/${key}/transitions`, 'POST', body);
+    return done.step.ok;
+  },
 };
+
+/**
+ * The transition that resolves a request: to a "done" status named Resolved, Done or Closed, or one whose name
+ * says resolve. Never a cancel. None found: the app leaves the request for the owner (no guessing).
+ */
+function resolvingTransition(transitions: unknown[]): unknown {
+  const done = transitions.filter((t) => text(field(field(field(t, 'to'), 'statusCategory'), 'key')) === 'done' && !/cancel/i.test(text(field(t, 'name')) ?? ''));
+  return (
+    done.find((t) => /^(resolved|done|closed)$/i.test(text(field(field(t, 'to'), 'name')) ?? '')) ?? done.find((t) => /resolve/i.test(text(field(t, 'name')) ?? ''))
+  );
+}
 
 /** Jira's resolutions, for the setup mapping. */
 export async function listResolutions(): Promise<DeskOption[]> {

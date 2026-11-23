@@ -71,8 +71,10 @@ export interface RequestRepo {
   markRaised(id: number, requestKey: string, portalUrl: string | null): Promise<void>;
   /** The raise failed: free the open key so it can be tried again. */
   release(id: number, error: string): Promise<void>;
-  /** Rows holding an open key for these targets ('raising' or 'open'). */
-  openFor(asker: string, kind: RequestKind, environmentId: number, targets: string[]): Promise<RequestRow[]>;
+  /** Rows holding an open key for these targets ('raising' or 'open'). A null environment is "Any environment". */
+  openFor(asker: string, kind: RequestKind, environmentId: number | null, targets: string[]): Promise<RequestRow[]>;
+  /** Open requests of one kind for a tool: the owner's open questions. */
+  openByKind(toolId: number, kind: RequestKind, limit: number): Promise<RequestRow[]>;
   byKey(requestKey: string): Promise<RequestRow | null>;
   /** open → resolved, freeing the open key. True if this call won (one re-check per resolution). */
   markResolved(id: number): Promise<boolean>;
@@ -123,6 +125,8 @@ export interface JsmClient {
   comment(issueKey: string, body: string): Promise<void>;
   /** The resolution as the issue shows it now (D22: the event alone is not trusted), with who set it. */
   resolution(issueKey: string): Promise<ResolutionRead>;
+  /** Resolve a request the app settled (an answered question). False if no resolving transition was found. */
+  resolve(issueKey: string): Promise<boolean>;
 }
 
 export class JsmError extends Error {
@@ -230,6 +234,17 @@ export function approvalTargets(answer: Answer): FixTarget[] {
 }
 
 export const APPROVAL_TARGET = 'approval:';
+
+/**
+ * Ask the owner (spec F5): one question per requirement, when the answer is Don't know yet and something the
+ * owner can settle isn't verified. The target is the requirement's hash, so the owner sees questions about the
+ * same thing together, while each asker still gets their own request.
+ */
+export function questionTargets(answer: Answer): FixTarget[] {
+  if (answer.state !== 'checked' || answer.outcome.verdict !== 'dont_know') return [];
+  const forOwner = answer.outcome.unknown.find((r) => r.settle === 'ask_owner');
+  return forOwner ? [{ target: `question:${requirementHash(answer.requirement)}`, result: forOwner }] : [];
+}
 
 /** One open request per person, kind and target (spec F4), as one string a unique key can hold. */
 export const openKey = (kind: RequestKind, environmentId: number | null, target: string, asker: string): string =>
@@ -341,12 +356,42 @@ export function approvalRequestText(
   return { summary: summary.slice(0, 250), description: description.slice(0, 4000) };
 }
 
+/**
+ * A question's text: the tool, where, the restated requirement and what isn't verified, all from code and the
+ * catalog. Never the asker's own words: the same requirement reads the same for every asker (spec F5).
+ */
+export function questionRequestText(now: Pick<Rechecked, 'tool' | 'environment' | 'card'>, restated: string): RequestText {
+  const where = now.environment ? `in ${now.environment.name}` : 'in any environment';
+  const unknown = now.card.checks.filter((c) => c.status === 'unknown').map((c) => `${c.subject}: ${c.chip.detail}`);
+  const subjects = [...new Set(now.card.checks.filter((c) => c.dimension === 'capability' || c.dimension === 'unlinked').map((c) => c.subject))];
+  const summary = `Question about ${now.tool.name}: ${subjects.join('; ') || restated}`;
+  const description = [
+    `Someone asked Tool Passport about ${now.tool.name} ${where}, and there is no verified answer yet.`,
+    '',
+    `What they want to do: ${restated}.`,
+    ...unknown.map((u) => `Not verified yet: ${u}.`),
+    '',
+    'Answer it once in Tool Passport (My tools → Open questions). Publishing the answer settles every open question about the same thing, and each person who asked gets the answer on their own request.',
+  ].join('\n');
+  return { summary: summary.slice(0, 250), description: description.slice(0, 4000) };
+}
+
 // ---- the card -----------------------------------------------------------------------------------------
 
 const REQUESTED = {
   request_fix: { kind: 'fix', becomes: 'fix_requested', label: 'Fix requested' },
   request_approval: { kind: 'approval', becomes: 'approval_requested', label: 'Approval requested' },
+  ask_owner: { kind: 'question', becomes: 'owner_asked', label: 'Question sent' },
 } as const;
+
+type Requestable = keyof typeof REQUESTED;
+const requestable = (k: string | undefined): k is Requestable => k === 'request_fix' || k === 'request_approval' || k === 'ask_owner';
+
+function targetsFor(kind: Requestable, answer: Answer): FixTarget[] {
+  if (kind === 'request_fix') return fixTargets(answer);
+  if (kind === 'request_approval') return approvalTargets(answer);
+  return questionTargets(answer);
+}
 
 /**
  * Request the fix (or Request approval) becomes "Fix requested" ("Approval requested") once every piece has an
@@ -354,7 +399,7 @@ const REQUESTED = {
  */
 export function attachOpenRequests(card: Card, targets: string[], rows: RequestRow[]): Card {
   const a = card.action;
-  if (!a || (a.kind !== 'request_fix' && a.kind !== 'request_approval') || targets.length === 0) return card;
+  if (!a || !requestable(a.kind) || targets.length === 0) return card;
   const want = REQUESTED[a.kind];
   const byTarget = new Map(rows.filter((r) => r.kind === want.kind && (r.status === 'raising' || r.status === 'open')).map((r) => [r.target, r]));
   if (!targets.every((t) => byTarget.has(t))) return card;
@@ -364,10 +409,12 @@ export function attachOpenRequests(card: Card, targets: string[], rows: RequestR
 
 export async function cardWithRequests(now: Pick<Rechecked, 'answer' | 'card' | 'environment'>, asker: string, requests: Pick<RequestRepo, 'openFor'>): Promise<Card> {
   const kind = now.card.action?.kind;
-  if (!now.environment || (kind !== 'request_fix' && kind !== 'request_approval')) return now.card;
-  const targets = (kind === 'request_fix' ? fixTargets(now.answer) : approvalTargets(now.answer)).map((t) => t.target);
+  if (!requestable(kind)) return now.card;
+  // Fixes and approvals need an environment; a question can be about "Any environment".
+  if (!now.environment && kind !== 'ask_owner') return now.card;
+  const targets = targetsFor(kind, now.answer).map((t) => t.target);
   if (!targets.length) return now.card;
-  return attachOpenRequests(now.card, targets, await requests.openFor(asker, REQUESTED[kind].kind, now.environment.id, targets));
+  return attachOpenRequests(now.card, targets, await requests.openFor(asker, REQUESTED[kind].kind, now.environment?.id ?? null, targets));
 }
 
 // ---- Request the fix ----------------------------------------------------------------------------------
@@ -453,6 +500,27 @@ export async function raiseApproval(askId: number, asker: string, deps: LoopDeps
   );
 }
 
+/**
+ * Ask the owner (spec F5): a private question for the asker, routed to the tool owner, holding the restated
+ * requirement and what isn't verified. Questions outside the catalog (no keys) aren't raised: answering
+ * them needs catalog editing, which isn't built (D35).
+ */
+export async function raiseQuestion(askId: number, asker: string, deps: LoopDeps): Promise<RaiseReply> {
+  const ask = await deps.loadAsk(askId);
+  if (!ask || ask.askerAccountId !== asker) return raiseFailure('not_found');
+  const setup = await deps.setup();
+  const requestTypeId = setup?.requestTypeIds.question ?? setup?.requestTypeIds.fix;
+  if (!setup?.serviceDeskId || !requestTypeId) return raiseFailure('not_set_up');
+  const now = await recheckAsk(ask, deps);
+  if (!now) return raiseFailure('not_found');
+  const targets = questionTargets(now.answer);
+  if (!targets.length) return { ok: true, card: now.card, raised: [] };
+  const restated = now.answer.state === 'checked' ? now.answer.restated : '';
+  // The owner answers questions, whoever owns the environment.
+  const toOwner = targets.map((t) => ({ ...t, result: { ...t.result, route: 'tool_owner' } }));
+  return raiseAll('question', toOwner, now, { serviceDeskId: setup.serviceDeskId, requestTypeId }, deps, () => questionRequestText(now, restated));
+}
+
 type RequestText = { summary: string; description: string };
 
 async function raiseAll(
@@ -485,18 +553,19 @@ async function raiseOne(
   text: (t: FixTarget) => RequestText,
   afterRaise?: (t: FixTarget, requestKey: string) => Promise<void>,
 ): Promise<RaiseOne> {
-  const environment = now.environment!;
+  const environment = now.environment;
+  const environmentId = environment?.id ?? null;
   const asker = now.ask.askerAccountId;
   const claim = await deps.requests.claim({
     kind,
     askId: now.ask.id,
     toolId: now.tool.id,
-    environmentId: environment.id,
+    environmentId,
     askerAccountId: asker,
     ownerAccountId: routeOwner(t.result.route, now.tool, environment),
     target: t.target,
     requirementHash: requirementHash(now.ask.requirement ?? []),
-    openKey: openKey(kind, environment.id, t.target, asker),
+    openKey: openKey(kind, environmentId, t.target, asker),
   });
   const row = claim.row;
   if (!claim.mine) {
