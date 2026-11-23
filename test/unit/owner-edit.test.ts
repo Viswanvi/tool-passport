@@ -221,6 +221,19 @@ describe('what each write must say', () => {
   });
 });
 
+describe('a registry environment saved with a new Version', () => {
+  it('notes the version for that environment (a change "Recorded by owner", spec section 11)', async () => {
+    const s = setup();
+    const noted: Array<{ env: string; observed: string | null }> = [];
+    s.x.deps.noteVersion = async (_tool, e, observed) => void noted.push({ env: e.name, observed });
+    await handleEdit({ ...VALID.environment, name: 'KS-DEV', provider: 'registry', providerRef: null, recordedValues: { Version: ['14.0'] } }, { accountId: MARCO }, s.deps);
+    expect(noted).toEqual([{ env: 'KS-DEV', observed: '14.0' }]);
+    // An Assets environment's version comes from its record, read when someone asks or by the sweep.
+    await handleEdit(VALID.environment, { accountId: MARCO }, s.deps);
+    expect(noted).toHaveLength(1);
+  });
+});
+
 describe('tools', () => {
   it('only a Jira administrator adds a tool, and becomes its owner', async () => {
     const s = setup();

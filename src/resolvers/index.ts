@@ -1,6 +1,7 @@
 import api, { route } from '@forge/api';
 import Resolver from '@forge/resolver';
-import { saveAsk } from '../db/asks';
+import { recentAsksFor, saveAsk } from '../db/asks';
+import { sqlChangeRepo } from '../db/changes';
 import { runMigrations } from '../db/migrations';
 import { listEnvironments, listTools, loadCatalog, loadEnvironment, loadRegistry, loadTool, sqlEngineRepo } from '../db/repo';
 import { sqlRequestRepo } from '../db/requests';
@@ -15,6 +16,7 @@ import type { WriteCheck } from '../registry/authorise';
 import { sqlRegistryWriter } from '../registry/write';
 import { seedDemo } from '../seed/demo';
 import { handleAsk, handleEnvironments, handleLoadDemo, handleTools, type AskHandlerDeps, type ResolverContext } from './handlers';
+import { handleChanges, handleRecentAsks, handleStillTrue, type ChangeDeps } from './change-handlers';
 import { handleCreateTool, handleEdit, handleToolDetails, type EditDeps } from './edit-handlers';
 import { handleRunEval, type EvalDeps } from './eval-handlers';
 import { handleMyTools, handleOpenQuestions, handlePublishAnswer, type OwnerDeps } from './owner-handlers';
@@ -103,6 +105,7 @@ const ownerDeps: OwnerDeps = {
   check: writeCheck,
   listTools,
   listEnvironments,
+  changes: sqlChangeRepo,
 };
 
 resolver.define('myTools', ({ context }) => handleMyTools(ctxOf(context), ownerDeps));
@@ -120,7 +123,25 @@ const editDeps: EditDeps = {
   listEnvironments,
   listTools,
   loadRegistry,
+  changes: sqlChangeRepo,
 };
+
+// ---- version changes (spec F6): the Changes screen and "Still true", owner or Jira administrator ----
+
+const changeDeps: ChangeDeps = {
+  loop: loopDeps,
+  changes: sqlChangeRepo,
+  writer: sqlRegistryWriter,
+  check: writeCheck,
+  listEnvironments,
+  loadRegistry,
+};
+
+resolver.define('changes', ({ payload, context }) => handleChanges(payload, ctxOf(context), changeDeps));
+
+resolver.define('stillTrue', ({ payload, context }) => handleStillTrue(payload, ctxOf(context), changeDeps));
+
+resolver.define('recentAsks', ({ context }) => handleRecentAsks(ctxOf(context), { recentAsksFor, loadTool, loadEnvironment }));
 
 resolver.define('toolDetails', ({ payload, context }) => handleToolDetails(payload, ctxOf(context), editDeps));
 

@@ -24,6 +24,7 @@ import ForgeReconciler, {
 } from '@forge/react';
 import type { Card, CardRequest, Chip } from '../engine/card';
 import { call, cardStyle, type Option } from './common';
+import { ChangesSection, RecentQuestions } from './changes';
 import { AddToolSection, ToolRecords } from './records';
 import { EVAL_QUESTIONS } from '../eval/questions';
 import { BATCH, summarise, type EvalResult } from '../eval/summary';
@@ -177,6 +178,7 @@ const AskPage = () => {
   const [failed, setFailed] = useState<Extract<AskReply, { ok: false }>['error'] | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [asked, setAsked] = useState<{ toolId: number; environmentId: number | null; question: string } | null>(null);
+  const [asksMade, setAsksMade] = useState(0);
 
   useEffect(() => {
     void call<{ tools: Array<{ id: number; name: string }> }>('tools').then((r) => {
@@ -218,6 +220,7 @@ const AskPage = () => {
       setFailed('try_again');
     } finally {
       setBusy(false);
+      setAsksMade((n) => n + 1);
     }
   };
 
@@ -236,6 +239,24 @@ const AskPage = () => {
       if (!quiet) setNotice('Could not check again just now. Try again.');
     } finally {
       if (!quiet) setBusy(false);
+    }
+  };
+
+  /** A recent question, checked again with its stored keys (no model call); clears "may have changed". */
+  const askAgain = async (id: number) => {
+    setBusy(true);
+    clear();
+    try {
+      const r = await call<RecheckReply>('recheck', { askId: id });
+      if (r.ok) {
+        setCard(r.card);
+        setAskId(id);
+      } else setNotice('That question can no longer be checked. Ask it again.');
+    } catch {
+      setNotice('Could not check again just now. Try again.');
+    } finally {
+      setBusy(false);
+      setAsksMade((n) => n + 1);
     }
   };
 
@@ -336,6 +357,7 @@ const AskPage = () => {
           <Text>{failed === 'not_found' ? 'That tool or environment no longer exists.' : 'Something went wrong. Try again.'}</Text>
         </SectionMessage>
       ) : null}
+      <RecentQuestions refreshKey={asksMade} onAskAgain={(id) => void askAgain(id)} />
     </Stack>
   );
 };
@@ -785,6 +807,7 @@ const MyToolsPage = ({ tools, refreshKey }: { tools: Option[]; refreshKey: numbe
         </Box>
       ) : null}
       <QuestionsForTool key={tool.value} toolId={Number(tool.value)} refreshKey={refreshKey} />
+      <ChangesSection key={`changes-${tool.value}`} toolId={Number(tool.value)} refreshKey={refreshKey} />
       <ToolRecords key={`records-${tool.value}`} toolId={Number(tool.value)} refreshKey={refreshKey} />
     </Stack>
   );

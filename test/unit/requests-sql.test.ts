@@ -30,7 +30,8 @@ vi.mock('@forge/sql', () => ({
 }));
 
 const { sqlRequestRepo, isDuplicateKey } = await import('../../src/db/requests');
-const { loadAsk, purgeOldQuestions } = await import('../../src/db/asks');
+const { loadAsk, purgeOldQuestions, saveAskResult } = await import('../../src/db/asks');
+const { sqlChangeRepo, utcIso } = await import('../../src/db/changes');
 const { sqlApprovalStore } = await import('../../src/db/approvals');
 
 beforeEach(() => {
@@ -149,6 +150,43 @@ describe('approval grants', () => {
     expect(q.indexOf("decided_at = IF(status = 'pending'")).toBeGreaterThan(0);
     expect(q.indexOf("status = IF(status = 'pending'")).toBeGreaterThan(q.indexOf('decided_at = IF'));
     expect(statements[0]!.params.at(-1)).toBe('approved');
+  });
+});
+
+describe('version changes', () => {
+  it('re-verify items are inserted ignoring duplicates, and closed only for changes to that version', async () => {
+    await sqlChangeRepo.addRecheckItems(3, 'fact', []);
+    expect(statements).toHaveLength(0);
+    replies.push({ affectedRows: 2 }, { affectedRows: 1 });
+    await sqlChangeRepo.addRecheckItems(3, 'fact', [100, 103]);
+    expect(statements[0]!.query).toMatch(/VALUES \(\?, \?, \?\), \(\?, \?, \?\) ON DUPLICATE KEY UPDATE id = id/);
+    expect(statements[0]!.params).toEqual([3, 'fact', 100, 3, 'fact', 103]);
+    await sqlChangeRepo.closeFactRechecks(100, '14.0');
+    expect(statements[1]!.query).toMatch(/status = 'done' .* ref_id = \? AND status = 'open' AND change_id IN \(SELECT id FROM changes WHERE to_version = \?\)/);
+    expect(statements[1]!.params).toEqual([100, '14.0']);
+  });
+
+  it('a listed change records when the owner was shown it, once; recent asks read their evidence', async () => {
+    replies.push({ affectedRows: 1 }, [{ id: 7, evidence_json: { factVersionIds: [1003, 'x'] } }, { id: 8, evidence_json: null }]);
+    await sqlChangeRepo.setStatus(3, 'listed');
+    expect(statements[0]!.query).toContain('owner_notified_at = COALESCE(owner_notified_at, CURRENT_TIMESTAMP)');
+    expect(await sqlChangeRepo.recentAsks(11, 30)).toEqual([
+      { id: 7, factVersionIds: [1003] },
+      { id: 8, factVersionIds: [] },
+    ]);
+    expect(statements[1]!.query).toContain('INTERVAL 30 DAY');
+  });
+
+  it('a change time without a zone is read as UTC (found live)', () => {
+    expect(utcIso('2026-11-23 12:49:51')).toBe('2026-11-23T12:49:51Z');
+    expect(utcIso('2026-11-23T12:49:51.000Z')).toBe('2026-11-23T12:49:51.000Z');
+    expect(utcIso('')).toBe('');
+  });
+
+  it('asking again clears "may have changed"', async () => {
+    replies.push({ affectedRows: 1 });
+    await saveAskResult(70, 'yes', [1000]);
+    expect(statements[0]!.query).toContain('may_have_changed = FALSE');
   });
 });
 

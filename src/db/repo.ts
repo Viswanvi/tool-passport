@@ -226,16 +226,29 @@ export async function loadRegistry(toolId: number): Promise<{
   readinessKeys: ReadinessKeyRow[];
   accessMappings: AccessMappingRow[];
 }> {
-  const facts = (await select(`SELECT ${FACT_COLUMNS} FROM facts WHERE tool_id = ? ORDER BY fact_key, id`, toolId)).map(factRow);
-  const versions = facts.length
-    ? (await select(`SELECT ${VERSION_COLUMNS} FROM fact_versions WHERE fact_id IN (${facts.map(() => '?').join(', ')}) ORDER BY verified_at, id`, ...facts.map((f) => f.id))).map(factVersionRow)
-    : [];
+  const facts = await factsWithVersions(toolId);
   const [rules, readinessKeys, accessMappings] = await Promise.all([
     select(`SELECT ${RULE_COLUMNS} FROM rules WHERE tool_id = ? ORDER BY action_key, id`, toolId).then((rows) => rows.map(ruleRow)),
     select(`SELECT ${READINESS_COLUMNS} FROM readiness_keys WHERE tool_id = ? ORDER BY key_name`, toolId).then((rows) => rows.map(readinessRow)),
     select(`SELECT ${ACCESS_COLUMNS} FROM access_mappings WHERE tool_id = ? ORDER BY environment_id, action_key`, toolId).then((rows) => rows.map(accessRow)),
   ]);
-  return { facts: facts.map((f) => ({ ...f, versions: versions.filter((v) => v.factId === f.id) })), rules, readinessKeys, accessMappings };
+  return { facts, rules, readinessKeys, accessMappings };
+}
+
+/**
+ * A tool's facts with their verifications. With an environment: only the active facts that apply there (its
+ * own and the all-environment ones), for a version change's re-verify list.
+ */
+export async function factsWithVersions(toolId: number, environmentId?: number): Promise<Array<FactRow & { versions: FactVersionRow[] }>> {
+  const facts = (
+    environmentId === undefined
+      ? await select(`SELECT ${FACT_COLUMNS} FROM facts WHERE tool_id = ? ORDER BY fact_key, id`, toolId)
+      : await select(`SELECT ${FACT_COLUMNS} FROM facts WHERE tool_id = ? AND status = 'active' AND (environment_id IS NULL OR environment_id = ?) ORDER BY fact_key, id`, toolId, environmentId)
+  ).map(factRow);
+  const versions = facts.length
+    ? (await select(`SELECT ${VERSION_COLUMNS} FROM fact_versions WHERE fact_id IN (${facts.map(() => '?').join(', ')}) ORDER BY verified_at, id`, ...facts.map((f) => f.id))).map(factVersionRow)
+    : [];
+  return facts.map((f) => ({ ...f, versions: versions.filter((v) => v.factId === f.id) }));
 }
 
 // ---- loaders used by the resolvers ------------------------------------------------------------------

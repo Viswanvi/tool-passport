@@ -447,6 +447,30 @@ Started a week early at the human's request ("Start Phase 2"), right after the P
   - Not tried live: a refusal (needs a second, non-owner account), Setup → Add tool (would add a tool to the
     demo site), saving each of the other six kinds.
 
+### Phase 2 sign-off checks (2026-11-23; the human chose "Phase 3 next")
+
+Step 4 (Rovo, P1) is **not built**: its gate (P0-1 to P0-4 passing on a fresh site) hasn't been run, because the
+only fresh site is kept for E9. Keep-or-drop decision due Dec 7. Everything else in Phase 2 is done.
+
+Results, verbatim: `bash scripts/check-prereqs.sh`: `Result: 18 passed, 0 warnings, 0 failed`. `npx vitest run
+test/safety`: `Tests 46 passed (46)`. `npx vitest run`: `Test Files 22 passed (22)`, `Tests 326 passed (326)`.
+tsc exit 0, eslint exit 0. `forge lint`: `No issues found.` `forge eligibility -e development`: `The version of
+your app [4.19.0] that's deployed to [development] is eligible for the Runs on Atlassian program.` Deployed =
+committed (`git diff --stat 52173eb HEAD -- src manifest.yml package.json` empty). Searches: `external`/`remotes`
+in manifest.yml 0; `participant`/`emailAddress`/`displayName` in src 0.
+
+Section 14 self-review, what Phase 2 changed (the Phase 1 table still holds):
+
+| Risk | Added in Phase 2 | Proven by |
+| --- | --- | --- |
+| A false Yes | An approval counts only with a mapped resolution set by the approver (or the assignee, if not the asker); an unreadable author decides nothing; an undecided resolution keeps the request open | Safety case 12 extended (46/46); `approvals.test.ts` |
+| Non-owner writes | `edit` (7 kinds), `publishAnswer`, `openQuestions`, `toolDetails`: owner or Jira administrator, on the server; refusals audited. `createTool`, `saveResolutionMap`, `runEval`: Jira administrators | `owner-edit.test.ts`, `questions.test.ts`, `approvals.test.ts`, `eval-run.test.ts`; mutation checks |
+| A request pretends to be someone else | `requestApproval`, `askOwner` take only an ask id and check it is the caller's; environment owners and access attesters are the person saving | `approvals.test.ts`, `questions.test.ts`, `owner-edit.test.ts` |
+| One asker's question leaks to another | Question requests hold the requirement and what isn't verified, never question text; two askers' requests read the same; no participant call exists | `questions.test.ts`; search above |
+| An approval nobody gave | as "A false Yes" | as above |
+| Data kept too long / leaves Atlassian | Nothing new about people is stored (the eval run keeps only its start time); no egress | Searches above; `forge eligibility` |
+| Rovo | Not built | — |
+
 ### Not done / untested
 
 - Demo site state: the admin now holds an **approved** grant for custom UI in KS-DEV (TPD-5). Moment 2 on this
@@ -476,3 +500,69 @@ Started a week early at the human's request ("Start Phase 2"), right after the P
   With F1 built, the check can run on the fresh site (toolpassport): add a tool, environments and records,
   ask, request a fix and an approval. That site has no service desk set up and no demo data on purpose (E9);
   using it for this check is the human's call. Also: the privacy test with Sam signed in.
+
+## Phase 3 (version validity), started 2026-11-23 on branch `phase-3` (from `phase-2`)
+
+Started early, right after Phase 2, at the human's request ("Phase 3 next").
+
+### Works (verified)
+
+- Step 1, version validity (spec F6, section 11; D39):
+  - Code: `src/change/changes.ts` (`buildRecheckList`, `sweepChanges`, `detectVersions`, `stillTrue`),
+    `src/db/changes.ts` (changes and recheck items), `src/resolvers/change-handlers.ts` (`changes`,
+    `stillTrue`, `recentAsks`), `src/frontend/changes.tsx` (My tools → Changes; Ask → Your recent questions),
+    the sweep (`src/change/sweep.ts`: notes every environment's version, then builds open lists), and a
+    registry environment save that notes the version (`src/registry/edit.ts`). Read-time comparison and
+    `noteVersion` were already in place from Phase 1.
+  - `npx vitest run`: `Test Files 23 passed (23)`, `Tests 342 passed (342)` (adds `changes.test.ts` 12, plus
+    version tests in `owner-edit.test.ts` and `requests-sql.test.ts`); `npx vitest run test/safety`:
+    `Tests 46 passed (46)`. tsc exit 0, eslint exit 0. `forge lint`: `No issues found.` Deployed 4.20.0, then
+    4.21.0 (the time fix below). `forge eligibility -e development`: `The version of your app [4.21.0] that's
+    deployed to [development] is eligible for the Runs on Atlassian program.`
+  - **Moment 3 live on the demo site (2026-11-23, as the admin acting as both Priya and Marco):**
+    1. KS-DEV and KS-PROD on 13.2. "Can I upload a 3 GB file?" in KS-DEV: **No** (2 GB on 13.2).
+    2. The admin set KS-DEV's Version to 14.0 in Assets (TPENV-4679), 12:49 UTC. Asked again at once:
+       **Don't know yet**, "Verified on 13.2; KS-DEV runs 14.0" (read-time comparison, before any background
+       work). The ask noted the change.
+    3. Sweep, 12:51:31 UTC: `[sweep] versions changed=0 lists listed=1 failed=0`. My tools → Changes:
+       `KS-DEV: 13.2 → 14.0 · Found in Assets record`, 4 facts to re-verify on 14.0, `Not listed: 4 facts
+       that don't depend on the version. Policy rules untouched: 8. Other environments untouched: KS-PROD
+       (13.2).` Recent questions whose evidence used those facts showed **May have changed**.
+    4. The change time first showed as 12:49 PM in a UTC+5:30 browser (Forge SQL returns UTC with no zone).
+       Fixed with `utcIso` (4.21.0); it now shows 06:19 PM.
+    5. **Changed** on "Upload a file of a given size", 5 GB: `Upload a file of a given size: changed on 14.0.`
+       **Still true** on "Build a custom web front end or dashboard": `…: still true on 14.0.` Both left the
+       list; two remain (community app framework, runtime 3.9).
+    6. Ask again on the badged 3 GB KS-DEV question: **Yes**, `KS-DEV · 14.0`, `Owner-verified · 14.0`; the
+       same ask row now reads Yes and the badge is gone.
+    7. **Rollback:** the admin set KS-DEV back to 13.2 (12:58 UTC). Ask again: **No**, `KS-DEV · 13.2`, "the
+       recorded limit on 13.2 is 2 GB; you asked for 3 GB", with no edits. A second change row appeared,
+       `KS-DEV: 14.0 → 13.2 · Found in Assets record · Nov 23, 06:28 PM`; sweep 13:01:31 UTC `listed=1`;
+       the screen then read `Every version-dependent fact is verified on 13.2.` KS-PROD stayed 13.2 throughout.
+  - **LLM calls in Phase 3: 1** chat call (the first 3 GB ask; every later one was a re-check of the stored
+    keys).
+
+### Not done / untested
+
+- **Gap found in the rollback (spec wording):** an ask is flagged "may have changed" only if its evidence used an
+  *affected* fact (one with no verification for the new version). On a rollback to 13.2 every fact has a 13.2
+  verification, so nothing is flagged, though an ask answered Yes on 14.0 (5 GB) would now get No. The answer
+  itself is right whenever it is asked again; only the badge is missing. Proposed fix: also flag recent asks whose
+  evidence used a verification for a version other than the new one, where the new version's value differs or is
+  missing. Not built.
+- The Refresh button in My tools reloads open questions only; the Changes list reloads when the tab is opened.
+  While a list is being built it says so until then. Polish item.
+- Step 2 (spec section 19 change-detection test): written and green as `changes.test.ts` "the change-detection
+  test" (two stale detections at once and a repeat after a crash make one row; the rollback restores No with no
+  edits and is its own row), plus `detect.test.ts` from Phase 1. Those use in-memory fakes; against the real
+  database only the rollback was run (live, above), not two detections at the same moment.
+- Step 3: release-note labels (F9), only if steps 1-2 are done by Dec 10.
+- Demo site state now: KS-DEV back on 13.2 (as the seed). New 14.0 verifications: max upload 5 GB, custom web
+  front end Yes (copied from 13.2). Two change rows (13.2 → 14.0 with 2 items still open; 14.0 → 13.2 listed).
+  Phase 4's Reset demo must clear these so the video's moment 3 starts clean.
+
+### Next
+
+- Fix the rollback badge gap (above), then step 3 (F9) if there is time before Dec 10, then polish.
+- Still open from Phase 2: Rovo keep-or-drop by Dec 7; the privacy test with Sam signed in; the root commit
+  `6693b75` decision before any push.

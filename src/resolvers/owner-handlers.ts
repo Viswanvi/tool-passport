@@ -16,6 +16,8 @@ export interface OwnerDeps {
   check: WriteCheck;
   listTools(): Promise<Array<{ id: number; name: string }>>;
   listEnvironments(toolId: number): Promise<Environment[]>;
+  /** Version changes: a published verification closes the matching re-verify items. */
+  changes?: { closeFactRechecks(factId: number, version: string): Promise<void> };
 }
 
 type Refusal = { ok: false; reason: string };
@@ -88,7 +90,8 @@ export async function handlePublishAnswer(payload: unknown, ctx: ResolverContext
     const [catalog, environments] = await Promise.all([deps.loop.loadCatalog(tool), deps.listEnvironments(tool.id)]);
     const checked = checkAnswer({ ...p.data, quote: p.data.quote ?? null }, tool, catalog, environments);
     if (!checked.ok) return checked;
-    await writeAnswer(tool, checked.fact, ctx.accountId!, deps.writer);
+    const factId = await writeAnswer(tool, checked.fact, ctx.accountId!, deps.writer);
+    await deps.changes?.closeFactRechecks(factId, checked.fact.version);
     const result = await settleOpenQuestions(tool.id, deps.loop);
     console.log(`[publish] ${checked.fact.key} settled=${result.settled.length} open=${result.stillOpen}`);
     return { ok: true, ...result };

@@ -27,6 +27,8 @@ export interface EditDeps {
   listEnvironments(toolId: number): Promise<Environment[]>;
   listTools?(): Promise<Array<{ id: number; name: string }>>;
   loadRegistry(toolId: number): Promise<RegistryRows>;
+  /** Version changes: a saved verification closes the matching re-verify items. */
+  changes?: { closeFactRechecks(factId: number, version: string): Promise<void> };
 }
 
 type Refusal = { ok: false; reason: string };
@@ -52,7 +54,13 @@ export async function handleEdit(payload: unknown, ctx: ResolverContext, deps: E
     return { ok: false, reason: allowed.reason };
   }
   try {
-    const r = await applyEdit(p.data, tool, ctx.accountId, { writer: deps.writer, loop: deps.loop, listEnvironments: deps.listEnvironments });
+    const r = await applyEdit(p.data, tool, ctx.accountId, {
+      writer: deps.writer,
+      loop: deps.loop,
+      listEnvironments: deps.listEnvironments,
+      closeFactRechecks: deps.changes ? (factId, version) => deps.changes!.closeFactRechecks(factId, version) : undefined,
+      noteVersion: deps.loop.noteVersion,
+    });
     console.log(`[edit] ${p.data.entity} ${r.ok ? 'saved' : 'refused'}`);
     return r;
   } catch (e) {

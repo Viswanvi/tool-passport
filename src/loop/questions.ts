@@ -65,11 +65,12 @@ export async function writeFact(
   return factId;
 }
 
-/** Write the fact verification, move the catalog revision on, and record who did it. */
-export async function writeAnswer(tool: Tool, fact: CheckedFact, actor: string, writer: AnswerWriter): Promise<void> {
+/** Write the fact verification, move the catalog revision on, and record who did it. Returns the fact's id. */
+export async function writeAnswer(tool: Tool, fact: CheckedFact, actor: string, writer: AnswerWriter): Promise<number> {
   const factId = await writeFact(tool, fact, actor, writer, { source: 'published_question', audienceGroup: null });
   await writer.bumpRevision(tool.id);
   await writer.audit(actor, 'fact.published', 'facts', String(factId), fact);
+  return factId;
 }
 
 /** The comment a settled question gets: the card's fixed words, and the next step if there is one. */

@@ -93,6 +93,10 @@ export interface ApplyDeps {
   writer: RegistryWriter;
   loop: LoopDeps;
   listEnvironments(toolId: number): Promise<Environment[]>;
+  /** A verification for a version closes that fact's re-verify items for changes to it (spec F6, "Changed"). */
+  closeFactRechecks?(factId: number, version: string): Promise<void>;
+  /** Version bookkeeping: a registry environment saved with a new Version is a change "Recorded by owner" (spec 11). */
+  noteVersion?(tool: Tool, environment: Environment, observed: string | null): Promise<unknown>;
   now?(): string;
 }
 
@@ -148,6 +152,11 @@ export async function applyEdit(edit: Edit, tool: Tool, actor: string, deps: App
       };
       await writer.upsertEnvironment(input);
       after = input;
+      const recordedVersion = recorded?.values.Version?.[0];
+      if (recordedVersion && deps.noteVersion) {
+        const saved = (await deps.listEnvironments(tool.id)).find((e) => e.name === edit.name);
+        if (saved) await deps.noteVersion(tool, saved, recordedVersion);
+      }
       break;
     }
     case 'catalogKey': {
@@ -169,7 +178,8 @@ export async function applyEdit(edit: Edit, tool: Tool, actor: string, deps: App
       const catalog = await deps.loop.loadCatalog(tool);
       const checked = checkAnswer({ key: edit.key, value: edit.value, environmentId: edit.environmentId, version: edit.version, everyVersion: edit.everyVersion, quote: edit.quote }, tool, catalog, environments);
       if (!checked.ok) return checked;
-      await writeFact(tool, checked.fact, actor, writer, { source: 'owner', audienceGroup: edit.audienceGroup });
+      const factId = await writeFact(tool, checked.fact, actor, writer, { source: 'owner', audienceGroup: edit.audienceGroup });
+      await deps.closeFactRechecks?.(factId, checked.fact.version);
       after = { ...checked.fact, audienceGroup: edit.audienceGroup };
       settle = true;
       break;

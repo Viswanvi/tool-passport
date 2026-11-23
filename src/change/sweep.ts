@@ -1,13 +1,16 @@
 /**
  * The five-minute sweep (spec section 11). Runs with no user; reads go through the app context (D25).
- * It keeps the tables current, re-checks open requests, and deletes old question text. Phase 3 adds the
- * version detection (`noteVersion` in ./detect.ts) and re-verify lists.
+ * It keeps the tables current, re-checks open requests, notes version changes and builds the owner's
+ * re-verify lists, and deletes old question text.
  */
 import { purgeOldQuestions } from '../db/asks';
+import { sqlChangeRepo } from '../db/changes';
 import { runMigrations } from '../db/migrations';
 import { clearPhase0Settings } from '../db/phase0-cleanup';
+import { listEnvironments, listTools, loadTool } from '../db/repo';
 import { sweepRequests } from '../loop/events';
-import { loopDeps } from '../loop/forge';
+import { loopDeps, noteEnvironmentVersion } from '../loop/forge';
+import { detectVersions, sweepChanges } from './changes';
 
 export async function sweep(): Promise<void> {
   try {
@@ -24,6 +27,19 @@ export async function sweep(): Promise<void> {
     if (r.looked) console.log(`[sweep] requests looked=${r.looked} rechecked=${r.rechecked} failed=${r.failed}`);
   } catch (e) {
     console.error(`[sweep] request re-check failed: ${String(e).slice(0, 300)}`);
+  }
+  try {
+    // Version changes without an ask (F6, E10), then the owner's re-verify lists (spec section 11).
+    const tools = await Promise.all((await listTools()).map(async (t) => ({ tool: await loadTool(t.id), environments: await listEnvironments(t.id) })));
+    const found = await detectVersions(
+      tools.flatMap((t) => (t.tool ? [{ tool: t.tool, environments: t.environments }] : [])),
+      loopDeps.environments,
+      noteEnvironmentVersion,
+    );
+    const lists = await sweepChanges(sqlChangeRepo, 10);
+    if (found || lists.listed || lists.failed) console.log(`[sweep] versions changed=${found} lists listed=${lists.listed} failed=${lists.failed}`);
+  } catch (e) {
+    console.error(`[sweep] version check failed: ${String(e).slice(0, 300)}`);
   }
   try {
     // Spec section 14: question text is kept 30 days.

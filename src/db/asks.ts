@@ -2,8 +2,8 @@ import { sql, type UpdateQueryResponse } from '@forge/sql';
 import { z } from 'zod';
 import type { CatalogChoice } from '../engine/catalog';
 import type { StoredAsk } from '../loop/requests';
-import { id, idOrNull, text } from './repo';
-import { fromJsonColumn } from './store';
+import { bool, id, idOrNull, text, textOrNull, time } from './repo';
+import { fromJsonColumn, limitClause } from './store';
 
 /**
  * The `asks` table (spec section 10). Stored about people: account ids, the question (deleted after 30 days,
@@ -68,12 +68,37 @@ export async function loadAsk(askId: number): Promise<StoredAsk | null> {
   };
 }
 
-/** The newest verdict and evidence after a re-check; the question text is untouched. */
+/**
+ * The newest verdict and evidence after a re-check; the question text is untouched. Asking again answers
+ * "may have changed", so the flag is cleared (spec F6).
+ */
 export async function saveAskResult(askId: number, verdict: string, factVersionIds: number[]): Promise<void> {
   await sql
-    .prepare<UpdateQueryResponse>('UPDATE asks SET verdict = ?, evidence_json = ? WHERE id = ?')
+    .prepare<UpdateQueryResponse>('UPDATE asks SET verdict = ?, evidence_json = ?, may_have_changed = FALSE WHERE id = ?')
     .bindParams(verdict, JSON.stringify({ factVersionIds }), askId)
     .execute();
+}
+
+/** The caller's own recent questions (spec section 15, Ask: "recent questions with may-have-changed badges"). */
+export async function recentAsksFor(
+  asker: string,
+  limit: number,
+): Promise<Array<{ askId: number; toolId: number; environmentId: number | null; question: string | null; verdict: string | null; mayHaveChanged: boolean; createdAt: string }>> {
+  const res = await sql
+    .prepare<Record<string, unknown>>(
+      `SELECT id, tool_id, environment_id, question_text, verdict, may_have_changed, created_at FROM asks WHERE asker_account_id = ? ORDER BY id DESC ${limitClause(limit)}`,
+    )
+    .bindParams(asker)
+    .execute();
+  return ((res.rows ?? []) as Array<Record<string, unknown>>).map((r) => ({
+    askId: id(r.id, 'asks', 'id'),
+    toolId: id(r.tool_id, 'asks', 'tool_id'),
+    environmentId: idOrNull(r.environment_id, 'asks', 'environment_id'),
+    question: textOrNull(r.question_text, 'asks', 'question_text'),
+    verdict: textOrNull(r.verdict, 'asks', 'verdict'),
+    mayHaveChanged: bool(r.may_have_changed, 'asks', 'may_have_changed'),
+    createdAt: time(r.created_at, 'asks', 'created_at') ?? '',
+  }));
 }
 
 /** Spec section 14: question text is deleted after 30 days. Safe to repeat; the sweep runs it. */
