@@ -310,6 +310,33 @@ pilot.** Caveats: 23 questions written alongside the catalog are easier than jud
 `claude-haiku-5-5`, `claude-sonnet-5-5` (decide the order after the 40-question set). At ≈ $0.001-0.005 per new
 question (and cached repeats free), judge usage costs cents.
 
+## E4 · The full 40-question set (Phase 2 step 3, 2026-11-23)
+
+**Run:** once, approved by the human ("Yes, step 3", about $0.05 budget), from Setup → Run tests on the demo site,
+app 4.17.0, model `claude-haiku-5-5` (the app's stored choice), today's prompt (`PROMPT_VERSION` p1), no cache.
+Ten batches of 4, 11:25:46-11:26:31 UTC, each 4-5 s. Log lines: `[eval] from=0 n=4 calls=4 pass=4` … `from=20 n=4
+calls=4 pass=3` … `from=28 n=4 calls=3 pass=4` (the blank question makes no call) … `from=36 n=4 calls=4 pass=4`.
+
+**Result, as the page showed it:** `Bar met. Answerable questions exact: 33 of 34 (97%; bar 90%). Outside the
+catalog marked unsupported: 6 of 6 (bar 100%). Pairs consistent: 2 of 3. Model calls: 39.`
+
+| Group | Result | Spec bar |
+| --- | --- | --- |
+| plain | 20 of 20 | ≥ 90% exact: met |
+| pair | 5 of 6 (2 of 3 pairs) | both of a pair the same keys: **not met** |
+| outside | 6 of 6 | 100% unsupported: met |
+| injection | 5 of 5 | same keys as the plain version: met |
+| environment | 3 of 3 keys (verdicts checked offline) | met |
+
+**The one miss:** `r1a` "Can my dashboard show new data the moment it changes, without a page refresh?" expected
+`websockets`; the model returned `web_frontend, websockets` ("dashboard" is a `web_frontend` synonym). Its pair
+`r1b` (no "dashboard") was exact. The extra key only adds checks (frontend build, design review), so the answer
+can only get stricter, never a false Yes. The expectation was **not** changed after seeing the result.
+
+**Pass bar (E4: ≥ 90% exact keys and values; 100% of unsupported marked): PASS** on the full set, 97% and 6/6.
+Cost: 39 calls at about 2,000 input / 50 output tokens on Haiku 5.5, roughly $0.04. Model order stays
+`claude-haiku-5-5` first (D29), since it meets the bar.
+
 ## E3 · Assets record provenance
 
 - `GET …/object/4679` (KS-DEV): `created` and `updated` present (`2026-11-20T18:35:18.141Z`). **Pass bar "updated

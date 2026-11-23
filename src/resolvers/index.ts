@@ -4,6 +4,8 @@ import { saveAsk } from '../db/asks';
 import { runMigrations } from '../db/migrations';
 import { listEnvironments, listTools, loadCatalog, loadEnvironment, loadTool, sqlEngineRepo } from '../db/repo';
 import { sqlRequestRepo } from '../db/requests';
+import { getSetting, setSetting } from '../db/store';
+import { EVAL_QUESTIONS } from '../eval/questions';
 import { sqlTranslationStore } from '../db/translations-sql';
 import { translationChat } from '../llm/client';
 import { loopDeps, noteEnvironmentVersion, readRequestSetup, readResolutionMap, saveRequestSetup, saveResolutionMap } from '../loop/forge';
@@ -13,6 +15,7 @@ import type { WriteCheck } from '../registry/authorise';
 import { sqlRegistryWriter } from '../registry/write';
 import { seedDemo } from '../seed/demo';
 import { handleAsk, handleEnvironments, handleLoadDemo, handleTools, type AskHandlerDeps, type ResolverContext } from './handlers';
+import { handleRunEval, type EvalDeps } from './eval-handlers';
 import { handleMyTools, handleOpenQuestions, handlePublishAnswer, type OwnerDeps } from './owner-handlers';
 import {
   handleAskOwner,
@@ -133,5 +136,23 @@ const resolutionDeps: ResolutionSetupDeps = {
 resolver.define('resolutionSetup', ({ context }) => handleResolutionSetup(ctxOf(context), resolutionDeps));
 
 resolver.define('saveResolutionMap', ({ payload, context }) => handleSaveResolutionMap(payload, ctxOf(context), resolutionDeps));
+
+// ---- Setup → Run tests: the 40-question set against the real model (Jira administrators only) ----
+
+const EVAL_START = 'eval.lastStart';
+
+const evalDeps: EvalDeps = {
+  check: writeCheck,
+  questions: EVAL_QUESTIONS,
+  chat: translationChat,
+  lastStart: async () => {
+    const s = await getSetting<{ at?: unknown }>(EVAL_START);
+    return typeof s?.at === 'string' ? s.at : null;
+  },
+  // Kept inside an object (store.ts: a stored bare string comes back already parsed).
+  markStart: (at) => setSetting(EVAL_START, { at }),
+};
+
+resolver.define('runEval', ({ payload, context }) => handleRunEval(payload, ctxOf(context), evalDeps));
 
 export const uiResolver = resolver.getDefinitions();

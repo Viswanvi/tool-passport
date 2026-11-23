@@ -403,6 +403,25 @@ Started a week early at the human's request ("Start Phase 2"), right after the P
   - **LLM calls in step 2: 2** chat calls on `claude-haiku-5-5` (the two new questions). Phase 2 total: 2.
     Project total since Phase 1: 1 `list()` + 4 chat, about $0.005.
 
+- Step 3, the 40-question set and its first full run (D36):
+  - `test/eval/questions.json` complete at 40 (20 plain, 6 pairs, 6 outside, 5 injection, 3 environment).
+    Offline checks (`eval-set.test.ts`): groups at their targets, pairs point at each other with the same
+    keys, injections match their plain question, and the engine gives the expected different verdicts on the
+    demo data (KS-DEV Not ready, KS-PROD No) for the environment group.
+  - Runner: `src/eval/score.ts` (translate without cache, score), `src/eval/summary.ts` (bars),
+    `src/resolvers/eval-handlers.ts` (admin only, batches of 4, 10-minute gap between runs), Setup → Tests.
+  - `npx vitest run`: `Test Files 21 passed (21)`, `Tests 297 passed (297)` (adds `eval-run.test.ts` 8; the
+    first run of it failed in the test's own fake model, which matched i04 to p02 by contained text; fixed in
+    the fake). tsc exit 0, eslint exit 0, `forge lint`: `No issues found.` `forge deploy`: 4.17.0, eligible
+    for Runs on Atlassian.
+  - **Live run, once, approved ("Yes, step 3"):** `Bar met. Answerable questions exact: 33 of 34 (97%; bar
+    90%). Outside the catalog marked unsupported: 6 of 6 (bar 100%). Pairs consistent: 2 of 3. Model calls:
+    39.` plain 20/20, pair 5/6 (pair bar **not met**), outside 6/6, injection 5/5, environment 3/3. The miss:
+    `r1a` ("Can my dashboard show new data the moment it changes…") got `web_frontend, websockets` instead of
+    `websockets`: stricter, never a false Yes; expectation not changed. Details: `docs/experiments.md`.
+  - **LLM calls in step 3: 39** (about $0.04). Phase 2 total: 41. Project total since Phase 1: 1 `list()` + 43
+    chat, about $0.045.
+
 ### Not done / untested
 
 - Demo site state: the admin now holds an **approved** grant for custom UI in KS-DEV (TPD-5). Moment 2 on this
@@ -417,7 +436,11 @@ Started a week early at the human's request ("Start Phase 2"), right after the P
 - Demo site state: published facts `gpu_compute` and `email_notifications` (Yes, all environments, every
   version, verified by the admin); TPD-6 and TPD-7 resolved. The catalog revision moved on twice, so cached
   translations are redone (one model call per question on its next ask).
-- Steps 3-4: the remaining 20 eval questions and the run of all 40; Rovo (decide Dec 7).
+- The pair bar is not met (2 of 3 pairs): `r1a` adds `web_frontend` for "my dashboard". Options, not taken
+  without the human: a worked example that separates "live updates on my dashboard" from "build a dashboard"
+  (changes the prompt version, so every cached translation is redone, and a second run costs about $0.04), or
+  accept it as fail-safe.
+- Step 4: Rovo (spec F8), only if P0-1 to P0-4 pass on a fresh site; keep-or-drop decision Dec 7.
 
 ### Waiting on the human
 
@@ -426,5 +449,5 @@ Started a week early at the human's request ("Start Phase 2"), right after the P
 
 ### Next
 
-- Step 3: the remaining 20 eval questions (pairs, outside, injection, environment), an admin-only "Run tests"
-  runner, and one run of all 40 against the real model (about 40-80 calls, roughly $0.05; ask first).
+- Step 4 (Rovo) depends on a fresh-site check of P0-1 to P0-4 (spec Phase 2 step 4); the decision is due Dec 7.
+  Before that: the pair miss above (human's call), and the privacy test with Sam signed in.

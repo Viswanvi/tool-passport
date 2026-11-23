@@ -24,7 +24,10 @@ import ForgeReconciler, {
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 import type { Card, CardRequest, Chip } from '../engine/card';
+import { EVAL_QUESTIONS } from '../eval/questions';
+import { BATCH, summarise, type EvalResult } from '../eval/summary';
 import type { QuestionGroup } from '../loop/questions';
+import type { RunReply } from '../resolvers/eval-handlers';
 import type { RaiseReply, RecheckReply, RequestSetup } from '../loop/requests';
 import type { AskReply } from '../resolvers/handlers';
 import type { Option as DeskOption } from '../resolvers/request-handlers';
@@ -523,6 +526,75 @@ const ApprovalSetupSection = () => {
   );
 };
 
+// ---- Setup → Run tests (spec P0-7, section 16 step 7) ----------------------------------------------------
+
+const keysText = (keys: Array<{ key: string; value?: unknown }> | null) =>
+  keys === null ? 'not covered (unsupported)' : keys.map((k) => (k.value === undefined ? k.key : `${k.key} = ${String(k.value)}`)).join(', ') || 'nothing';
+
+const TestsSection = () => {
+  const [running, setRunning] = useState(false);
+  const [results, setResults] = useState<EvalResult[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  // One run: the set in batches of BATCH, one after another (a resolver call has about 25 seconds).
+  const run = async () => {
+    setRunning(true);
+    setError(null);
+    setResults([]);
+    const all: EvalResult[] = [];
+    try {
+      for (let from = 0; from < EVAL_QUESTIONS.length; from += BATCH) {
+        const r = await call<RunReply>('runEval', { from, count: BATCH });
+        if (!r.ok) {
+          setError(r.reason);
+          break;
+        }
+        all.push(...r.results);
+        setResults([...all]);
+      }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const s = results.length ? summarise(EVAL_QUESTIONS, results) : null;
+  return (
+    <Stack space="space.150">
+      <Heading as="h2">Tests</Heading>
+      <Text>
+        Run the 40-question set against the model this app uses. It makes about 40 model calls, which cost money, so a new run can start only 10 minutes after the last.
+        Answers are not cached during the run.
+      </Text>
+      <Inline space="space.150" alignBlock="center">
+        <Button appearance="primary" onClick={() => void run()} isDisabled={running}>
+          Run the 40-question set
+        </Button>
+        {running ? <Text>{`${results.length} of ${EVAL_QUESTIONS.length}`}</Text> : null}
+      </Inline>
+      {error ? (
+        <SectionMessage appearance="warning">
+          <Text>{error}</Text>
+        </SectionMessage>
+      ) : null}
+      {s ? (
+        <Stack space="space.100">
+          <SectionMessage appearance={s.complete ? (s.answerable.met ? 'success' : 'error') : 'information'} title={s.complete ? (s.answerable.met ? 'Bar met' : 'Bar not met') : 'Running'}>
+            <Text>{`Answerable questions exact: ${s.answerable.pass} of ${s.answerable.total} (${Math.round(s.answerable.rate * 100)}%; bar 90%). Outside the catalog marked unsupported: ${s.groups.outside.pass} of ${s.groups.outside.total} (bar 100%). Pairs consistent: ${s.pairs.consistent} of ${s.pairs.total}. Model calls: ${s.calls}.`}</Text>
+          </SectionMessage>
+          {Object.entries(s.groups).map(([g, v]) => (
+            <Text key={g}>{`${g}: ${v.pass} of ${v.total} · ${v.bar} · ${v.met ? 'met' : 'not met'}`}</Text>
+          ))}
+          {s.failures.map((f) => (
+            <Text key={f.id}>{`Missed ${f.id} (${f.group}): expected ${keysText(f.expected)}; got ${f.status === 'ok' ? keysText(f.got) : f.status}`}</Text>
+          ))}
+        </Stack>
+      ) : null}
+    </Stack>
+  );
+};
+
 const SetupPage = () => {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<SeedResult | null>(null);
@@ -565,6 +637,7 @@ const SetupPage = () => {
       ) : null}
       <RequestSetupSection />
       <ApprovalSetupSection />
+      <TestsSection />
       <Text>The rest of the setup wizard (a request type per kind, model choice) arrives in Phase 4.</Text>
     </Stack>
   );
