@@ -7,23 +7,30 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const statements: Array<{ query: string; params: unknown[] }> = [];
 const replies: Array<unknown[] | { affectedRows: number; insertId?: number } | Error> = [];
+// Like the real SqlStatement: bindParams returns the statement, and execute works with or without it.
 vi.mock('@forge/sql', () => ({
   sql: {
-    prepare: (query: string) => ({
-      bindParams: (...params: unknown[]) => ({
+    prepare: (query: string) => {
+      let params: unknown[] = [];
+      const statement = {
+        bindParams: (...p: unknown[]) => {
+          params = p;
+          return statement;
+        },
         execute: async () => {
           statements.push({ query, params });
           const next = replies.shift();
           if (next instanceof Error) throw next;
           return { rows: next ?? [] };
         },
-      }),
-    }),
+      };
+      return statement;
+    },
   },
 }));
 
 const { sqlRequestRepo, isDuplicateKey } = await import('../../src/db/requests');
-const { loadAsk } = await import('../../src/db/asks');
+const { loadAsk, purgeOldQuestions } = await import('../../src/db/asks');
 
 beforeEach(() => {
   statements.length = 0;
@@ -131,5 +138,15 @@ describe('stored asks', () => {
     }
     replies.push([]);
     expect(await loadAsk(71)).toBeNull();
+  });
+
+  it('question text is cleared after 30 days, and only the text (spec section 14)', async () => {
+    replies.push({ affectedRows: 3 });
+    expect(await purgeOldQuestions()).toBe(3);
+    const q = statements[0]!.query;
+    expect(q).toMatch(/^UPDATE asks SET question_text = NULL WHERE/);
+    expect(q).toContain('created_at < DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 30 DAY)');
+    // Verdicts, keys and evidence stay; nothing is deleted.
+    expect(q).not.toMatch(/DELETE|requirement_json|verdict|evidence_json/);
   });
 });

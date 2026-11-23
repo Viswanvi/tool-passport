@@ -258,6 +258,42 @@ Started two days early at the human's request ("Start Phase1").
     removed at Phase 0 sign-off). The pilot ran 18 of the 20 exact on `claude-haiku-5-5` with essentially
     today's prompt; `p16`, `p17` and the ≥ 90% bar on the current prompt are untested until the Phase 2 run.
 
+### Phase 1 sign-off checks (2026-11-23, awaiting the human's approval)
+
+Sign-off bar (CLAUDE.md): moment 1 on the development site by Nov 26 → **met Nov 23** (step 5; the spec's exact
+card since step 6); the fix loop reaches Yes, with approval by Nov 30 → **met Nov 23** (step 6); safety suite
+100%; unit tests green.
+
+Results, verbatim:
+- `bash scripts/check-prereqs.sh`: `Result: 18 passed, 0 warnings, 0 failed`.
+- `npx vitest run test/safety`: `Test Files 1 passed (1)`, `Tests 45 passed (45)`.
+- `npx vitest run`: `Test Files 18 passed (18)`, `Tests 247 passed (247)` (adds a purge test found missing
+  in the review below; its first run failed only because the test's fake SQL lacked `execute()` without
+  `bindParams`, which the real `SqlStatement` has: `execute(): Promise<APIResponse>`).
+- `npx tsc --noEmit -p tsconfig.json`: exit 0. `npx eslint "src/**/*.{ts,tsx}" "test/**/*.ts"`: exit 0.
+- `forge lint`: `No issues found.`
+- `forge eligibility -e development`: `The version of your app [4.13.0] that's deployed to [development] is
+  eligible for the Runs on Atlassian program.`
+- `forge install list`: toolpassport and one-atlas-oibs, development, version 4, `Up-to-date`.
+- Deployed 4.13.0 = committed code: `git diff --stat bae8d9a HEAD -- src manifest.yml package.json` is empty.
+- `forge logs -e development --since 2h`: no `purge`, `failed` or `ERROR` lines.
+
+Security self-review against spec section 14 (what exists after Phase 1; code searches run on 2026-11-23):
+
+| Risk | Control in the code now | Proven by |
+| --- | --- | --- |
+| A false Yes from missing data | Missing input is Not verified in every check; `combine()` throws on an empty list; empty and unsupported translations stop before evaluation; a stored ask whose keys no longer fit the catalog is Don't know yet | Safety suite 45/45 (13 spec cases, audience, every Not verified says why); mutation checks in steps 1, 3, 4, 6 |
+| Someone other than the owner writes | Write resolvers today: `loadDemo`, `saveRequestSetup` (and `requestSetup`/`requestTypes` reads): Jira administrator, checked on the server (`mayAdminister`). No owner edit forms yet (My tools, Phase 2). `ask`, `requestFix`, `recheck` write only the caller's own asks and requests | `resolvers.test.ts` (loadDemo as a non-admin), `fix-loop.test.ts` "request setup (Jira administrators only)" |
+| A request pretends to be someone else | 10 resolvers; payload schemas `AskPayload`, `ToolPayload`, `AskRef {askId}`, `DeskRef`/`SaveSetup`: none takes an account id (search for `payload.accountId`/`asker`: 0). A fix request is rebuilt from the stored ask, re-evaluated on the server, for its own asker only | `resolvers.test.ts`, `fix-loop.test.ts` "take the asker from the Forge context" (an account id in the payload is ignored; another person's ask id is not_found) |
+| Environment data shown to the wrong people | Assets read as the app (D25), only mapped attributes plus Version, only objects of the passport schema and type (AQL); audience groups enforced on the server in `environments`, `ask` and every re-check | `providers.test.ts`; safety case 14 |
+| The model infers permission from wording | The model gets the catalog, worked examples and the question only; its keys are checked against the catalog; access comes only from mapped groups, policy only from rules | Safety case 13, incl. "the model is never shown facts, rules, environment values or groups" |
+| An approval nobody gave | `approvalOutcome`: an unmapped resolution never approves. Approval requests aren't built (Phase 2); the event path returns `not_handled` for them | Safety case 12; `fix-loop.test.ts` "leaves approval and question requests to their own loop" |
+| One asker's question leaks to another | Each asker gets their own request (the open key includes the asker); raised on behalf of the asker only; no participant call anywhere (search for `participant`: 0); request text holds no question text; the card lists only the caller's requests | `fix-loop.test.ts` (Sam's fix is his own request); live TPD-3/TPD-4. The spec's full privacy test (Priya and Sam asking the same unknown) belongs to Ask the owner, Phase 2 |
+| The app changes environments | Providers are read-only; the Assets create path builders in `assets-api.ts` have no caller (search: definitions only); the demo seed links existing objects and writes no Assets data | Code search |
+| Rovo acts without the user meaning it | Not built (P1; keep-or-drop decision Dec 7) | — |
+| Data kept longer than needed | The sweep clears question text after 30 days (text only); translations keep keys, values and model id; requests and their desk text hold no question text; no emails or display names stored (search for `emailAddress`/`displayName`: 0); log lines carry states, counts and request keys, not question text or account ids | `requests-sql.test.ts` (purge statement), `translate-cache.test.ts`; the purge itself is untested live (no ask is 30 days old yet) |
+| Data leaves Atlassian | No `permissions.external`, no remotes (manifest search: 0) | `forge eligibility`: eligible (above) |
+
 ### Not done / untested
 
 - Untested live (unit-tested): the sweep re-checking a missed event, the Customer-role message (D23), taking
@@ -271,7 +307,14 @@ Started two days early at the human's request ("Start Phase1").
 - Demo seed (Phase 4) must add facts and links for the action keys `external_api_calls` and `external_sharing`,
   or those questions answer Don't know yet (D28 h).
 
+### Waiting on the human
+
+- Approve the Phase 1 sign-off above.
+- Still open from Phase 0: before any push, decide whether to rewrite root commit `6693b75` (D9). Branches
+  `phase-0` and `phase-1` are local only; nothing has been merged or pushed.
+
 ### Next
 
-- Phase 1 sign-off: safety suite, unit tests, `forge lint`, `forge eligibility`, section 14 self-review,
-  results pasted here verbatim.
+- Phase 2 (planned Dec 1-7, can start early): approvals through the same request loop with resolution
+  mapping in setup; Ask the owner; the remaining 20 eval questions and one run of all 40 (D33); Rovo only if
+  P0-1 to P0-4 pass on a fresh site.
