@@ -22,8 +22,9 @@ import ForgeReconciler, {
   useProductContext,
   xcss,
 } from '@forge/react';
-import { invoke } from '@forge/bridge';
 import type { Card, CardRequest, Chip } from '../engine/card';
+import { call, cardStyle, type Option } from './common';
+import { AddToolSection, ToolRecords } from './records';
 import { EVAL_QUESTIONS } from '../eval/questions';
 import { BATCH, summarise, type EvalResult } from '../eval/summary';
 import type { QuestionGroup } from '../loop/questions';
@@ -40,27 +41,9 @@ import type { SeedResult } from '../seed/demo';
  * and Phase 2) are shown as the next step in words, not as buttons that do nothing.
  */
 
-interface Option {
-  label: string;
-  value: string;
-}
-
 const ANY = 'any';
 const POLL_MS = 10_000;
 const POLL_LIMIT = 90;
-
-const cardStyle = xcss({
-  borderColor: 'color.border',
-  borderWidth: 'border.width',
-  borderStyle: 'solid',
-  borderRadius: 'radius.medium',
-  padding: 'space.200',
-});
-
-/** invoke() resolves to the resolver's return value when no metadata is asked for. */
-async function call<T>(key: string, payload: Record<string, unknown> = {}): Promise<T> {
-  return (await invoke(key, payload)) as T;
-}
 
 const time = (iso: string | null | undefined) => {
   if (!iso) return '';
@@ -635,6 +618,7 @@ const SetupPage = () => {
           <Text>{result.reason}</Text>
         </SectionMessage>
       ) : null}
+      <AddToolSection />
       <RequestSetupSection />
       <ApprovalSetupSection />
       <TestsSection />
@@ -801,6 +785,7 @@ const MyToolsPage = ({ tools, refreshKey }: { tools: Option[]; refreshKey: numbe
         </Box>
       ) : null}
       <QuestionsForTool key={tool.value} toolId={Number(tool.value)} refreshKey={refreshKey} />
+      <ToolRecords key={`records-${tool.value}`} toolId={Number(tool.value)} refreshKey={refreshKey} />
     </Stack>
   );
 };

@@ -2,7 +2,7 @@ import api, { route } from '@forge/api';
 import Resolver from '@forge/resolver';
 import { saveAsk } from '../db/asks';
 import { runMigrations } from '../db/migrations';
-import { listEnvironments, listTools, loadCatalog, loadEnvironment, loadTool, sqlEngineRepo } from '../db/repo';
+import { listEnvironments, listTools, loadCatalog, loadEnvironment, loadRegistry, loadTool, sqlEngineRepo } from '../db/repo';
 import { sqlRequestRepo } from '../db/requests';
 import { getSetting, setSetting } from '../db/store';
 import { EVAL_QUESTIONS } from '../eval/questions';
@@ -15,6 +15,7 @@ import type { WriteCheck } from '../registry/authorise';
 import { sqlRegistryWriter } from '../registry/write';
 import { seedDemo } from '../seed/demo';
 import { handleAsk, handleEnvironments, handleLoadDemo, handleTools, type AskHandlerDeps, type ResolverContext } from './handlers';
+import { handleCreateTool, handleEdit, handleToolDetails, type EditDeps } from './edit-handlers';
 import { handleRunEval, type EvalDeps } from './eval-handlers';
 import { handleMyTools, handleOpenQuestions, handlePublishAnswer, type OwnerDeps } from './owner-handlers';
 import {
@@ -109,6 +110,23 @@ resolver.define('myTools', ({ context }) => handleMyTools(ctxOf(context), ownerD
 resolver.define('openQuestions', ({ payload, context }) => handleOpenQuestions(payload, ctxOf(context), ownerDeps));
 
 resolver.define('publishAnswer', ({ payload, context }) => handlePublishAnswer(payload, ctxOf(context), ownerDeps));
+
+// ---- owner editing (spec F1): owner or Jira administrator, checked in each handler; refusals audited ----
+
+const editDeps: EditDeps = {
+  writer: sqlRegistryWriter,
+  check: writeCheck,
+  loop: loopDeps,
+  listEnvironments,
+  listTools,
+  loadRegistry,
+};
+
+resolver.define('toolDetails', ({ payload, context }) => handleToolDetails(payload, ctxOf(context), editDeps));
+
+resolver.define('edit', ({ payload, context }) => handleEdit(payload, ctxOf(context), editDeps));
+
+resolver.define('createTool', ({ payload, context }) => handleCreateTool(payload, ctxOf(context), editDeps));
 
 resolver.define('recheck', ({ payload, context }) => handleRecheck(payload, ctxOf(context), loopDeps));
 

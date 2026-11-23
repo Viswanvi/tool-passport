@@ -427,6 +427,26 @@ Started a week early at the human's request ("Start Phase 2"), right after the P
   - **LLM calls in step 3: 78** (two runs, about $0.08). Phase 2 total: 80. Project total since Phase 1: 1
     `list()` + 82 chat, about $0.09.
 
+- Owner editing, spec F1 / P0-1 (D38), built before Rovo because Rovo's gate needs P0-1:
+  - Code: `src/registry/edit.ts` (seven edit shapes and their checks), `src/resolvers/edit-handlers.ts`
+    (`edit`, `createTool`, `toolDetails`), `loadRegistry` in `src/db/repo.ts` (readiness and access row
+    readers shared with the engine), `writeFact` in `src/loop/questions.ts` (one fact write path), and the
+    screens: My tools → Records (pick a kind, see what is recorded, add or change one) and Setup → Tools.
+  - Tests first (red: `Cannot find module '../../src/resolvers/edit-handlers'`). `npx vitest run`:
+    `Test Files 22 passed (22)`, `Tests 326 passed (326)` (adds `owner-edit.test.ts` 28); safety suite
+    `Tests 46 passed (46)`. Mutation check: dropping the owner check turned 7 tests red (one per kind);
+    restored, green. tsc exit 0, eslint exit 0, `forge lint`: `No issues found.` Deployed 4.19.0, eligible for
+    Runs on Atlassian.
+  - **Live on the demo site (2026-11-23, as the admin; only identical re-saves, so the demo data is unchanged):**
+    My tools → Records listed both environments (`KS-DEV · Assets record TPENV-4679 · version 13.2 · owner
+    <admin>`, the same for KS-PROD: the version baseline from asks, first seen live), the 8 policy rules, the
+    8 facts (the seed's 6 plus GPU jobs and email from step 2) and the 4 access mappings, all as in spec
+    section 16. Re-saved "custom_ui · KS-DEV · Needs approval · Tool owner · Needs design review": `Saved.`;
+    log `[edit] rule saved` (12:28:10 UTC); the list still shows 8 rules (updated in place by its scope key).
+    The save moved the catalog revision on, so each question's next ask costs one model call.
+  - Not tried live: a refusal (needs a second, non-owner account), Setup → Add tool (would add a tool to the
+    demo site), saving each of the other six kinds.
+
 ### Not done / untested
 
 - Demo site state: the admin now holds an **approved** grant for custom UI in KS-DEV (TPD-5). Moment 2 on this
@@ -453,4 +473,6 @@ Started a week early at the human's request ("Start Phase 2"), right after the P
 ### Next
 
 - Step 4 (Rovo) depends on a fresh-site check of P0-1 to P0-4 (spec Phase 2 step 4); the decision is due Dec 7.
-  Before that: the privacy test with Sam signed in.
+  With F1 built, the check can run on the fresh site (toolpassport): add a tool, environments and records,
+  ask, request a fix and an approval. That site has no service desk set up and no demo data on purpose (E9);
+  using it for this check is the human's call. Also: the privacy test with Sam signed in.

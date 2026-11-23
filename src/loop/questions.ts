@@ -43,17 +43,31 @@ export function checkAnswer(a: Answer, tool: Tool, catalog: Catalog, environment
   return { ok: true, fact: { key: a.key, value, environmentId: a.environmentId, version, versionSensitive: !a.everyVersion, quote: a.quote?.trim() || null } };
 }
 
-/** Write the fact verification, move the catalog revision on, and record who did it. */
-export async function writeAnswer(tool: Tool, fact: Extract<Checked, { ok: true }>['fact'], actor: string, writer: AnswerWriter): Promise<void> {
+type CheckedFact = Extract<Checked, { ok: true }>['fact'];
+
+/** The fact and its verification for this version: the one write path for owner edits and published answers. */
+export async function writeFact(
+  tool: Tool,
+  fact: CheckedFact,
+  actor: string,
+  writer: Pick<AnswerWriter, 'upsertFact' | 'upsertFactVersion'>,
+  opts: { source: 'owner' | 'published_question'; audienceGroup: string | null },
+): Promise<number> {
   const factId = await writer.upsertFact({
     toolId: tool.id,
     environmentId: fact.environmentId,
-    audienceGroup: null,
+    audienceGroup: opts.audienceGroup,
     factKey: fact.key,
     versionSensitive: fact.versionSensitive,
-    source: 'published_question',
+    source: opts.source,
   });
   await writer.upsertFactVersion({ factId, version: fact.version, value: fact.value, quote: fact.quote, verifiedBy: actor });
+  return factId;
+}
+
+/** Write the fact verification, move the catalog revision on, and record who did it. */
+export async function writeAnswer(tool: Tool, fact: CheckedFact, actor: string, writer: AnswerWriter): Promise<void> {
+  const factId = await writeFact(tool, fact, actor, writer, { source: 'published_question', audienceGroup: null });
   await writer.bumpRevision(tool.id);
   await writer.audit(actor, 'fact.published', 'facts', String(factId), fact);
 }

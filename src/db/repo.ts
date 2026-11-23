@@ -149,12 +149,7 @@ export const sqlEngineRepo: EngineRepo = {
   },
 
   async rules(toolId, action) {
-    const rows = await select(
-      'SELECT id, tool_id, environment_id, audience_group, action_key, effect, approval_route, reason, revision, status FROM rules WHERE tool_id = ? AND action_key = ?',
-      toolId,
-      action,
-    );
-    return rows.map(ruleRow);
+    return (await select(`SELECT ${RULE_COLUMNS} FROM rules WHERE tool_id = ? AND action_key = ?`, toolId, action)).map(ruleRow);
   },
 
   async approvalGrant(asker, toolId, environmentId, action) {
@@ -182,51 +177,66 @@ export const sqlEngineRepo: EngineRepo = {
   },
 
   async readinessKey(toolId, key) {
-    const rows = await select(
-      'SELECT id, tool_id, key_name, provider_attribute, match_kind, expected, label, fix_route FROM readiness_keys WHERE tool_id = ? AND key_name = ?',
-      toolId,
-      key,
-    );
-    const r = rows[0];
-    if (!r) return null;
-    const rk: ReadinessKeyRow = {
-      id: id(r.id, 'readiness_keys', 'id'),
-      toolId: id(r.tool_id, 'readiness_keys', 'tool_id'),
-      key: text(r.key_name, 'readiness_keys', 'key_name'),
-      providerAttribute: text(r.provider_attribute, 'readiness_keys', 'provider_attribute'),
-      match: oneOf(r.match_kind, ['has', 'eq', 'gte'] as const, 'readiness_keys', 'match_kind'),
-      expected: text(r.expected, 'readiness_keys', 'expected'),
-      label: text(r.label, 'readiness_keys', 'label'),
-      fixRoute: textOrNull(r.fix_route, 'readiness_keys', 'fix_route'),
-    };
-    return rk;
+    const rows = await select(`SELECT ${READINESS_COLUMNS} FROM readiness_keys WHERE tool_id = ? AND key_name = ?`, toolId, key);
+    return rows[0] ? readinessRow(rows[0]) : null;
   },
 
   async accessMapping(toolId, environmentId, action) {
-    const rows = await select(
-      `SELECT id, tool_id, environment_id, action_key, group_name, grants, source, attested_by, attested_at, grant_route
-       FROM access_mappings WHERE tool_id = ? AND environment_id = ? AND action_key = ?`,
-      toolId,
-      environmentId,
-      action,
-    );
-    const r = rows[0];
-    if (!r) return null;
-    const m: AccessMappingRow = {
-      id: id(r.id, 'access_mappings', 'id'),
-      toolId: id(r.tool_id, 'access_mappings', 'tool_id'),
-      environmentId: id(r.environment_id, 'access_mappings', 'environment_id'),
-      actionKey: text(r.action_key, 'access_mappings', 'action_key'),
-      groupName: textOrNull(r.group_name, 'access_mappings', 'group_name'),
-      grants: textOrNull(r.grants, 'access_mappings', 'grants'),
-      source: oneOf(r.source, ['idp_synced', 'manual'] as const, 'access_mappings', 'source'),
-      attestedBy: text(r.attested_by, 'access_mappings', 'attested_by'),
-      attestedAt: time(r.attested_at, 'access_mappings', 'attested_at') ?? '',
-      grantRoute: textOrNull(r.grant_route, 'access_mappings', 'grant_route'),
-    };
-    return m;
+    const rows = await select(`SELECT ${ACCESS_COLUMNS} FROM access_mappings WHERE tool_id = ? AND environment_id = ? AND action_key = ?`, toolId, environmentId, action);
+    return rows[0] ? accessRow(rows[0]) : null;
   },
 };
+
+const RULE_COLUMNS = 'id, tool_id, environment_id, audience_group, action_key, effect, approval_route, reason, revision, status';
+const READINESS_COLUMNS = 'id, tool_id, key_name, provider_attribute, match_kind, expected, label, fix_route';
+const ACCESS_COLUMNS = 'id, tool_id, environment_id, action_key, group_name, grants, source, attested_by, attested_at, grant_route';
+
+function readinessRow(r: Row): ReadinessKeyRow {
+  return {
+    id: id(r.id, 'readiness_keys', 'id'),
+    toolId: id(r.tool_id, 'readiness_keys', 'tool_id'),
+    key: text(r.key_name, 'readiness_keys', 'key_name'),
+    providerAttribute: text(r.provider_attribute, 'readiness_keys', 'provider_attribute'),
+    match: oneOf(r.match_kind, ['has', 'eq', 'gte'] as const, 'readiness_keys', 'match_kind'),
+    expected: text(r.expected, 'readiness_keys', 'expected'),
+    label: text(r.label, 'readiness_keys', 'label'),
+    fixRoute: textOrNull(r.fix_route, 'readiness_keys', 'fix_route'),
+  };
+}
+
+function accessRow(r: Row): AccessMappingRow {
+  return {
+    id: id(r.id, 'access_mappings', 'id'),
+    toolId: id(r.tool_id, 'access_mappings', 'tool_id'),
+    environmentId: id(r.environment_id, 'access_mappings', 'environment_id'),
+    actionKey: text(r.action_key, 'access_mappings', 'action_key'),
+    groupName: textOrNull(r.group_name, 'access_mappings', 'group_name'),
+    grants: textOrNull(r.grants, 'access_mappings', 'grants'),
+    source: oneOf(r.source, ['idp_synced', 'manual'] as const, 'access_mappings', 'source'),
+    attestedBy: text(r.attested_by, 'access_mappings', 'attested_by'),
+    attestedAt: time(r.attested_at, 'access_mappings', 'attested_at') ?? '',
+    grantRoute: textOrNull(r.grant_route, 'access_mappings', 'grant_route'),
+  };
+}
+
+/** Everything the owner records for a tool, for My tools (spec section 15). Read-only. */
+export async function loadRegistry(toolId: number): Promise<{
+  facts: Array<FactRow & { versions: FactVersionRow[] }>;
+  rules: RuleRow[];
+  readinessKeys: ReadinessKeyRow[];
+  accessMappings: AccessMappingRow[];
+}> {
+  const facts = (await select(`SELECT ${FACT_COLUMNS} FROM facts WHERE tool_id = ? ORDER BY fact_key, id`, toolId)).map(factRow);
+  const versions = facts.length
+    ? (await select(`SELECT ${VERSION_COLUMNS} FROM fact_versions WHERE fact_id IN (${facts.map(() => '?').join(', ')}) ORDER BY verified_at, id`, ...facts.map((f) => f.id))).map(factVersionRow)
+    : [];
+  const [rules, readinessKeys, accessMappings] = await Promise.all([
+    select(`SELECT ${RULE_COLUMNS} FROM rules WHERE tool_id = ? ORDER BY action_key, id`, toolId).then((rows) => rows.map(ruleRow)),
+    select(`SELECT ${READINESS_COLUMNS} FROM readiness_keys WHERE tool_id = ? ORDER BY key_name`, toolId).then((rows) => rows.map(readinessRow)),
+    select(`SELECT ${ACCESS_COLUMNS} FROM access_mappings WHERE tool_id = ? ORDER BY environment_id, action_key`, toolId).then((rows) => rows.map(accessRow)),
+  ]);
+  return { facts: facts.map((f) => ({ ...f, versions: versions.filter((v) => v.factId === f.id) })), rules, readinessKeys, accessMappings };
+}
 
 // ---- loaders used by the resolvers ------------------------------------------------------------------
 
