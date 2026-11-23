@@ -258,7 +258,7 @@ Started two days early at the human's request ("Start Phase1").
     removed at Phase 0 sign-off). The pilot ran 18 of the 20 exact on `claude-haiku-5-5` with essentially
     today's prompt; `p16`, `p17` and the ≥ 90% bar on the current prompt are untested until the Phase 2 run.
 
-### Phase 1 sign-off checks (2026-11-23, awaiting the human's approval)
+### Phase 1 sign-off (2026-11-23, approved by the human: "Approve sign-off")
 
 Sign-off bar (CLAUDE.md): moment 1 on the development site by Nov 26 → **met Nov 23** (step 5; the spec's exact
 card since step 6); the fix loop reaches Yes, with approval by Nov 30 → **met Nov 23** (step 6); safety suite
@@ -309,7 +309,6 @@ Security self-review against spec section 14 (what exists after Phase 1; code se
 
 ### Waiting on the human
 
-- Approve the Phase 1 sign-off above.
 - Still open from Phase 0: before any push, decide whether to rewrite root commit `6693b75` (D9). Branches
   `phase-0` and `phase-1` are local only; nothing has been merged or pushed.
 
