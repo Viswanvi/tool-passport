@@ -419,8 +419,13 @@ Started a week early at the human's request ("Start Phase 2"), right after the P
     39.` plain 20/20, pair 5/6 (pair bar **not met**), outside 6/6, injection 5/5, environment 3/3. The miss:
     `r1a` ("Can my dashboard show new data the moment it changes…") got `web_frontend, websockets` instead of
     `websockets`: stricter, never a false Yes; expectation not changed. Details: `docs/experiments.md`.
-  - **LLM calls in step 3: 39** (about $0.04). Phase 2 total: 41. Project total since Phase 1: 1 `list()` + 43
-    chat, about $0.045.
+  - **Fix and re-run (human: "Yes, fix and re-run"; D37):** prompt p2 adds rule 6 (something the person already
+    has is context, not a request to build it) and one worked example on another capability; expectations
+    untouched. `npx vitest run`: `Tests 298 passed (298)`; deployed 4.18.0. Re-run 11:39:46-11:40:34 UTC:
+    `Bar met. Answerable questions exact: 34 of 34 (100%; bar 90%). Outside the catalog marked unsupported: 6
+    of 6 (bar 100%). Pairs consistent: 3 of 3. Model calls: 39.` Every group met; none got worse.
+  - **LLM calls in step 3: 78** (two runs, about $0.08). Phase 2 total: 80. Project total since Phase 1: 1
+    `list()` + 82 chat, about $0.09.
 
 ### Not done / untested
 
@@ -436,10 +441,8 @@ Started a week early at the human's request ("Start Phase 2"), right after the P
 - Demo site state: published facts `gpu_compute` and `email_notifications` (Yes, all environments, every
   version, verified by the admin); TPD-6 and TPD-7 resolved. The catalog revision moved on twice, so cached
   translations are redone (one model call per question on its next ask).
-- The pair bar is not met (2 of 3 pairs): `r1a` adds `web_frontend` for "my dashboard". Options, not taken
-  without the human: a worked example that separates "live updates on my dashboard" from "build a dashboard"
-  (changes the prompt version, so every cached translation is redone, and a second run costs about $0.04), or
-  accept it as fail-safe.
+- The prompt was tuned once on this same set (D37); judges' own wording is still the real test. Prompt p2
+  means every question's first ask after 4.18.0 costs one model call.
 - Step 4: Rovo (spec F8), only if P0-1 to P0-4 pass on a fresh site; keep-or-drop decision Dec 7.
 
 ### Waiting on the human
@@ -450,4 +453,4 @@ Started a week early at the human's request ("Start Phase 2"), right after the P
 ### Next
 
 - Step 4 (Rovo) depends on a fresh-site check of P0-1 to P0-4 (spec Phase 2 step 4); the decision is due Dec 7.
-  Before that: the pair miss above (human's call), and the privacy test with Sam signed in.
+  Before that: the privacy test with Sam signed in.

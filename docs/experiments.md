@@ -337,6 +337,18 @@ can only get stricter, never a false Yes. The expectation was **not** changed af
 Cost: 39 calls at about 2,000 input / 50 output tokens on Haiku 5.5, roughly $0.04. Model order stays
 `claude-haiku-5-5` first (D29), since it meets the bar.
 
+**Re-run after the prompt fix (human: "Yes, fix and re-run"), 2026-11-23, app 4.18.0, prompt p2 (D37):** rule 6
+("something they already have … is context, not a request to build it") and one worked example on a different
+capability (email from a dashboard the person already has). The expectations were not touched. Ten batches,
+11:39:46-11:40:34 UTC, every log line `pass=4` (`from=28 … calls=3`, the blank question). The page:
+`Bar met. Answerable questions exact: 34 of 34 (100%; bar 90%). Outside the catalog marked unsupported: 6 of 6
+(bar 100%). Pairs consistent: 3 of 3. Model calls: 39.` Every group met (plain 20/20, pair 6/6, outside 6/6,
+injection 5/5, environment 3/3); no group got worse. Cost about $0.04; E4 total for the full set: 78 calls,
+about $0.08.
+
+Caveat: one fix and one re-run on the same 40 questions. The rule is general and the example uses another
+capability, but the set now also served to tune the prompt; judges' own wording remains the real test.
+
 ## E3 · Assets record provenance
 
 - `GET …/object/4679` (KS-DEV): `created` and `updated` present (`2026-11-20T18:35:18.141Z`). **Pass bar "updated

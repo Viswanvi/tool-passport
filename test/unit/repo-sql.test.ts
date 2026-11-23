@@ -112,7 +112,7 @@ describe('loaders', () => {
     expect(c.keys.get('web_frontend')).toMatchObject({ valueType: 'boolean', requiresValue: false });
     expect(c.links.get('max_upload_gb')).toEqual({ capabilityKey: 'max_upload_gb', actions: [], readinessKeys: null });
     expect(c.links.get('gpu_compute')).toEqual({ capabilityKey: 'gpu_compute', actions: null, readinessKeys: [] });
-    expect(c.examples.length).toBe(8);
+    expect(c.examples.length).toBe(9);
   });
 
   it('lists the mapped attributes of a tool', async () => {

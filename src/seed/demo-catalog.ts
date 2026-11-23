@@ -61,7 +61,10 @@ export const DEMO_CATALOG: CatalogKey[] = [
   has('role_based_access', 'Give different people different permissions inside an app', ['roles', 'permissions', 'access levels']),
 ];
 
-/** Eight worked examples (four plain, two unsupported, two that try to talk the model out of the rules). */
+/**
+ * Nine worked examples (five plain, two unsupported, two that try to talk the model out of the rules). The
+ * fifth plain one shows rule 6: a dashboard the person already has is context, not a request to build one (D37).
+ */
 export const DEMO_EXAMPLES: WorkedExample[] = [
   {
     question: 'Can I keep my app code in git?',
@@ -82,6 +85,10 @@ export const DEMO_EXAMPLES: WorkedExample[] = [
       unsupported: null,
       restated: 'Keep an audit log and run a long task in the background.',
     },
+  },
+  {
+    question: 'Can the dashboard I already have send an email to my team?',
+    reply: { capabilities: [{ key: 'email_notifications' }], unsupported: null, restated: 'Send email from an existing dashboard.' },
   },
   {
     question: 'Can I use it to edit videos?',
