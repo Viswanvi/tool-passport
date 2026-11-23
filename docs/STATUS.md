@@ -356,14 +356,13 @@ Started a week early at the human's request ("Start Phase 2"), right after the P
       after this request was resolved. Answer now: Yes. Everything this needs is in place in KS-DEV.` The open
       card turned by itself to **Yes**, `KS-DEV · 13.2`, chips `Owner-verified · 13.2`, `Approved · TPD-5`,
       `Mapped access · kestrel-de…`, no action. This confirms the changelog read-back (who resolved it) on the
-      real API. (The log line for this decision had not appeared in `forge logs` 3 minutes later; see below.)
+      real API. Log: `[issue-event] TPD-5 rechecked` at 10:00:34 (it reached `forge logs` about 5 minutes
+      later; log delivery lags, the handler didn't).
     - KS-DEV set back to `standard`.
   - **LLM calls in step 1: 0** (cache hits).
 
 ### Not done / untested
 
-- `forge logs` did not yet show the line for the Done decision on TPD-5 (resolved about 10:00:30 UTC, checked
-  10:03:42); the comment and the card prove it ran. Recheck the log.
 - Demo site state: the admin now holds an **approved** grant for custom UI in KS-DEV (TPD-5). Moment 2 on this
   site therefore skips the approval step until Phase 4's Reset demo clears grants. TPD-5 resolved.
 - Untested live (unit-tested): Declined; self-approval refused; hand-over to another assignee; the sweep
