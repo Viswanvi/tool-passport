@@ -52,12 +52,31 @@ export function affectedFacts(facts: FactWithVersions[], toVersion: string): Fac
   return facts.filter((f) => f.status === 'active' && f.versionSensitive && !f.versions.some((v) => v.status === 'active' && v.version === toVersion));
 }
 
+/**
+ * The verifications an answer may no longer match on the new version: for each version-sensitive fact, every
+ * verification other than the one that counts on `toVersion`, unless it holds the same value. With no
+ * verification for `toVersion`, all of them. Wider than the spec's "evidence used an affected fact" (D40):
+ * after a rollback every fact was verified on 13.2, so that rule marked nothing, though an ask answered Yes on
+ * 14.0 with 5 GB now gets No (found live).
+ */
+export function staleVerifications(facts: FactWithVersions[], toVersion: string): Set<number> {
+  const stale = new Set<number>();
+  for (const f of facts) {
+    if (f.status !== 'active' || !f.versionSensitive) continue;
+    const now = f.versions.find((v) => v.status === 'active' && v.version === toVersion);
+    for (const v of f.versions) if (!now || (v.id !== now.id && !sameValue(v.value, now.value))) stale.add(v.id);
+  }
+  return stale;
+}
+
+const sameValue = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
 export async function buildRecheckList(change: ChangeRecord, repo: ChangeRepo): Promise<'listed' | 'retry' | 'failed'> {
   try {
-    const facts = affectedFacts(await repo.factsInScope(change.toolId, change.environmentId), change.toVersion);
-    await repo.addRecheckItems(change.id, 'fact', facts.map((f) => f.id));
-    const used = new Set(facts.flatMap((f) => f.versions.map((v) => v.id)));
-    const asks = (await repo.recentAsks(change.environmentId, RECENT_DAYS)).filter((a) => a.factVersionIds.some((id) => used.has(id)));
+    const inScope = await repo.factsInScope(change.toolId, change.environmentId);
+    await repo.addRecheckItems(change.id, 'fact', affectedFacts(inScope, change.toVersion).map((f) => f.id));
+    const stale = staleVerifications(inScope, change.toVersion);
+    const asks = (await repo.recentAsks(change.environmentId, RECENT_DAYS)).filter((a) => a.factVersionIds.some((id) => stale.has(id)));
     if (asks.length) {
       await repo.addRecheckItems(change.id, 'ask', asks.map((a) => a.id));
       await repo.markMayHaveChanged(asks.map((a) => a.id));

@@ -542,14 +542,33 @@ Started early, right after Phase 2, at the human's request ("Phase 3 next").
   - **LLM calls in Phase 3: 1** chat call (the first 3 GB ask; every later one was a re-check of the stored
     keys).
 
+- Rollback badge fix (D40; human: "Yes, fix the gap"). Found in step 7 above: an ask was marked "may have
+  changed" only if its evidence used an *affected* fact. After the rollback to 13.2 every fact had a 13.2
+  verification, so nothing was marked, though an ask answered Yes on 14.0 (5 GB) would now get No. Now an ask is
+  marked when its evidence used a verification other than the one that counts on the new version, unless the
+  value is the same (`staleVerifications` in `src/change/changes.ts`).
+  - Tests first, red as expected: `expected [ false, false, false ] to deeply equal [ true, false, false ]` and
+    `expected [ false, false ] to deeply equal [ true, false ]`. Then `npx vitest run`: `Test Files 23 passed
+    (23)`, `Tests 344 passed (344)`; `npx vitest run test/safety`: `Tests 46 passed (46)`. Mutation check:
+    dropping the same-value condition turned both new tests red; restored, green. tsc exit 0, eslint exit 0,
+    `forge lint`: `No issues found.` `forge deploy`: `The version of your app [4.22.0] that was just deployed to
+    [development] is eligible for the Runs on Atlassian program.`
+  - **Live, 4.22.0 (2026-11-23 UTC, as the admin; the human signed in again in the browser pane first):**
+    1. KS-DEV set to 14.0 in Assets. Sweep 19:11:29 UTC: `[sweep] versions changed=1 lists listed=1
+       failed=0` (the sweep noted the change itself, with no ask). The 3 GB KS-DEV question (No, answered on
+       13.2) showed **May have changed**. The old rule missed this case too, because 14.0 already had its own
+       verification (5 GB). The KS-PROD question was not marked.
+    2. Ask again: **Yes**, `KS-DEV · 14.0`, `Owner-verified · 14.0`; the badge cleared.
+    3. KS-DEV set back to 13.2. Sweep 19:16:29 UTC: `[sweep] versions changed=1 lists listed=1 failed=0`. The
+       same question, now **Yes · May have changed**: the gap is closed.
+    4. Ask again: **No**, `KS-DEV · 13.2`, "the recorded limit on 13.2 is 2 GB; you asked for 3 GB"; the
+       badge cleared. No LLM calls (re-checks only).
+  - Limits, as D40 says: the KS-DEV "Don't know yet" question (asked on 14.0 before 14.0 was verified) used no
+    verification, so it is not marked although asking again would now answer it; questions marked by an earlier
+    change keep their badge until asked again.
+
 ### Not done / untested
 
-- **Gap found in the rollback (spec wording):** an ask is flagged "may have changed" only if its evidence used an
-  *affected* fact (one with no verification for the new version). On a rollback to 13.2 every fact has a 13.2
-  verification, so nothing is flagged, though an ask answered Yes on 14.0 (5 GB) would now get No. The answer
-  itself is right whenever it is asked again; only the badge is missing. Proposed fix: also flag recent asks whose
-  evidence used a verification for a version other than the new one, where the new version's value differs or is
-  missing. Not built.
 - The Refresh button in My tools reloads open questions only; the Changes list reloads when the tab is opened.
   While a list is being built it says so until then. Polish item.
 - Step 2 (spec section 19 change-detection test): written and green as `changes.test.ts` "the change-detection
@@ -558,11 +577,14 @@ Started early, right after Phase 2, at the human's request ("Phase 3 next").
   database only the rollback was run (live, above), not two detections at the same moment.
 - Step 3: release-note labels (F9), only if steps 1-2 are done by Dec 10.
 - Demo site state now: KS-DEV back on 13.2 (as the seed). New 14.0 verifications: max upload 5 GB, custom web
-  front end Yes (copied from 13.2). Two change rows (13.2 → 14.0 with 2 items still open; 14.0 → 13.2 listed).
-  Phase 4's Reset demo must clear these so the video's moment 3 starts clean.
+  front end Yes (copied from 13.2). Four change rows for KS-DEV (13.2 → 14.0 twice, each with 2 items still
+  open; 14.0 → 13.2 twice, listed). Several recent questions carry "May have changed". Phase 4's Reset demo must
+  clear these so the video's moment 3 starts clean.
 
 ### Next
 
-- Fix the rollback badge gap (above), then step 3 (F9) if there is time before Dec 10, then polish.
+- Step 3 (F9 release-note labels) if there is time before Dec 10, then polish: the Changes list refresh above,
+  and its order. The screen sorts by id, but Forge SQL (TiDB) doesn't hand out ids in time order. Seen live: the
+  Nov 23 06:19 change listed above the 06:28 one. Sort shown lists by `created_at`, then id.
 - Still open from Phase 2: Rovo keep-or-drop by Dec 7; the privacy test with Sam signed in; the root commit
   `6693b75` decision before any push.

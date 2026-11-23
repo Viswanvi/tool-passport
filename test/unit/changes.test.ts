@@ -179,6 +179,49 @@ describe('the re-verify list', () => {
     expect(m.items.filter((i) => i.kind === 'ask').map((i) => i.refId)).toEqual([1]);
   });
 
+  it('after a rollback, asks answered on 14.0 with a value 13.2 doesn\'t share are marked; the others are not (found live)', async () => {
+    const w = demoWorld();
+    const upload13 = w.factVersions.find((v) => v.factId === factId(w, 'max_upload_gb'))!.id;
+    w.factVersions.push(
+      { id: 2001, factId: factId(w, 'max_upload_gb'), version: '14.0', value: 5, quote: null, verifiedBy: MARCO, verifiedAt: 'x', status: 'active' },
+      { id: 2002, factId: factId(w, 'web_frontend'), version: '14.0', value: true, quote: null, verifiedBy: MARCO, verifiedAt: 'x', status: 'active' },
+    );
+    const asks: MemAsk[] = [
+      { id: 1, environmentId: DEV, factVersionIds: [2001], daysAgo: 0, mayHaveChanged: false }, // Yes to 3 GB on 14.0 (5 GB); 13.2 says 2 GB
+      { id: 2, environmentId: DEV, factVersionIds: [2002], daysAgo: 0, mayHaveChanged: false }, // web front end Yes on 14.0, Yes on 13.2 too
+      { id: 3, environmentId: DEV, factVersionIds: [upload13], daysAgo: 2, mayHaveChanged: false }, // answered on 13.2: right again
+    ];
+    const m = memoryChanges(w, asks);
+    w.records.get(DEV)!.Version = ['14.0'];
+    await noteVersion(snapshot(w, DEV), '14.0', m.detect);
+    w.records.get(DEV)!.Version = ['13.2'];
+    await noteVersion(snapshot(w, DEV), '13.2', m.detect);
+    const rollback = m.changes.find((c) => c.toVersion === '13.2')!;
+    expect(await buildRecheckList(rollback, m.repo)).toBe('listed');
+    expect(asks.map((a) => a.mayHaveChanged)).toEqual([true, false, false]);
+    expect(m.items.filter((i) => i.changeId === rollback.id)).toEqual([{ changeId: rollback.id, kind: 'ask', refId: 1, status: 'open' }]); // no fact to re-verify
+    expect(await verdict(w, DEV)).toBe('no');
+  });
+
+  it('an upgrade to a version already verified with another value marks asks answered on the old one; the same value does not', async () => {
+    const w0 = demoWorld();
+    const upload13 = w0.factVersions.find((v) => v.factId === factId(w0, 'max_upload_gb'))!.id;
+    const web13 = w0.factVersions.find((v) => v.factId === factId(w0, 'web_frontend'))!.id;
+    const asks: MemAsk[] = [
+      { id: 1, environmentId: DEV, factVersionIds: [upload13], daysAgo: 1, mayHaveChanged: false },
+      { id: 2, environmentId: DEV, factVersionIds: [web13], daysAgo: 1, mayHaveChanged: false },
+    ];
+    const { w, m } = await upgraded(asks);
+    w.factVersions.push(
+      { id: 2001, factId: factId(w, 'max_upload_gb'), version: '14.0', value: 5, quote: null, verifiedBy: MARCO, verifiedAt: 'x', status: 'active' },
+      { id: 2002, factId: factId(w, 'web_frontend'), version: '14.0', value: true, quote: null, verifiedBy: MARCO, verifiedAt: 'x', status: 'active' },
+    );
+    await buildRecheckList(m.changes[0]!, m.repo);
+    expect(asks.map((a) => a.mayHaveChanged)).toEqual([true, false]);
+    const listed = m.items.filter((i) => i.kind === 'fact').map((i) => w.facts.find((f) => f.id === i.refId)!.factKey);
+    expect(listed.sort()).toEqual(['community_app_framework', 'runtime_3_9']); // the re-verify list is unchanged by this
+  });
+
   it('a failing list is retried, then marked failed after three tries; answers are unaffected', async () => {
     const { w, m } = await upgraded();
     m.failNextScope(3);
