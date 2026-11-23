@@ -1,7 +1,9 @@
 import type { CatalogChoice } from '../../src/engine/catalog';
 import type { Groups } from '../../src/engine/model';
+import type { ResolutionMap } from '../../src/loop/resolution';
 import {
   JsmError,
+  type ApprovalStore,
   type JsmClient,
   type LoopDeps,
   type NewRequest,
@@ -27,6 +29,8 @@ export interface MemRow extends RequestRow {
   looked: number;
   result: RecheckNote | null;
   resolvedLongAgo: boolean;
+  /** An approval request resolved without a decision that counts was commented once. */
+  undecided: boolean;
 }
 
 export function memoryRequests(): RequestRepo & { rows: MemRow[] } {
@@ -68,6 +72,7 @@ export function memoryRequests(): RequestRepo & { rows: MemRow[] } {
         looked: 0,
         result: null,
         resolvedLongAgo: false,
+        undecided: false,
       };
       rows.push(row);
       return { row: pub(row), mine: true };
@@ -115,7 +120,35 @@ export function memoryRequests(): RequestRepo & { rows: MemRow[] } {
       const r = find(id);
       if (r) r.looked += 1;
     },
+    async markUndecided(id) {
+      const r = find(id);
+      if (!r || r.status !== 'open' || r.undecided) return false;
+      r.undecided = true;
+      return true;
+    },
   };
+}
+
+/** Approval grants written straight into the world the engine reads, as the SQL store writes the table. */
+export function memoryApprovals(w: World): ApprovalStore & { decided: Array<{ requestKey: string; status: string }> } {
+  const decided: Array<{ requestKey: string; status: string }> = [];
+  const store = {
+    decided,
+    async addPending(g: Parameters<ApprovalStore['addPending']>[0]) {
+      if (w.grants.some((x) => x.requestKey === g.requestKey)) return;
+      w.grants.push({ id: 600 + w.grants.length, ...g, status: 'pending', decidedAt: null });
+    },
+    async decide(g: Parameters<ApprovalStore['decide']>[0]) {
+      decided.push({ requestKey: g.requestKey, status: g.status });
+      const held = w.grants.find((x) => x.requestKey === g.requestKey);
+      if (held) {
+        if (held.status === 'pending') Object.assign(held, { status: g.status, decidedAt: '2026-11-24T15:00:00.000Z' });
+        return;
+      }
+      w.grants.push({ id: 600 + w.grants.length, ...g, decidedAt: '2026-11-24T15:00:00.000Z' });
+    },
+  };
+  return store;
 }
 
 export interface FakeJsm extends JsmClient {
@@ -125,6 +158,8 @@ export interface FakeJsm extends JsmClient {
   resolutionReads: string[];
   /** Resolution name by issue key, as a read-back would show it. */
   resolutions: Map<string, string | null>;
+  /** Who set the resolution, by issue key; defaults to the assignee. */
+  resolvedBy: Map<string, string | null>;
   failCreate: JsmError | null;
   failAssign: boolean;
   failComment: boolean;
@@ -137,6 +172,7 @@ export function fakeJsm(): FakeJsm {
     comments: [],
     resolutionReads: [],
     resolutions: new Map(),
+    resolvedBy: new Map(),
     failCreate: null,
     failAssign: false,
     failComment: false,
@@ -157,7 +193,10 @@ export function fakeJsm(): FakeJsm {
     },
     async resolution(issueKey) {
       jsm.resolutionReads.push(issueKey);
-      return { name: jsm.resolutions.get(issueKey) ?? null };
+      const assignee = [...jsm.assigned].reverse().find((a) => a.issueKey === issueKey)?.accountId ?? null;
+      const name = jsm.resolutions.get(issueKey) ?? null;
+      const resolvedBy = jsm.resolvedBy.has(issueKey) ? jsm.resolvedBy.get(issueKey)! : name ? assignee : null;
+      return { name, resolvedBy, assignee };
     },
   };
   return jsm;
@@ -176,6 +215,8 @@ export function loopWorld(w: World = demoWorld()) {
   // The loop never translates: a model call here would throw.
   const base = depsFor(w, modelThrowing());
   let setup: RequestSetup | null = SETUP;
+  let resolutionMap: ResolutionMap | null = RESOLUTION_MAP;
+  const approvals = memoryApprovals(w);
   const deps: LoopDeps = {
     loadTool: async (id) => (id === w.tool.id ? w.tool : null),
     loadEnvironment: async (id) => w.environments.find((e) => e.id === id) ?? null,
@@ -193,6 +234,8 @@ export function loopWorld(w: World = demoWorld()) {
     requests,
     jsm,
     setup: async () => setup,
+    approvals,
+    resolutionMap: async () => resolutionMap,
     log: (line) => logs.push(line),
   };
   const addAsk = (environmentId: number | null, asker = PRIYA, requirement: CatalogChoice[] | null = WEB_REQUIREMENT): number => {
@@ -213,8 +256,15 @@ export function loopWorld(w: World = demoWorld()) {
     setSetup: (s: RequestSetup | null) => {
       setup = s;
     },
+    approvals,
+    setResolutionMap: (m: ResolutionMap | null) => {
+      resolutionMap = m;
+    },
   };
 }
+
+/** The demo desk has no "Approved" resolution: setup maps Done to approved (D34). */
+export const RESOLUTION_MAP: ResolutionMap = { Done: 'approved', Declined: 'declined' };
 
 export const customerRoleError = () => new JsmError('customer_role', '401 they need the customer role');
 

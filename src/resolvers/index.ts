@@ -6,14 +6,25 @@ import { listEnvironments, listTools, loadCatalog, loadEnvironment, loadTool, sq
 import { sqlRequestRepo } from '../db/requests';
 import { sqlTranslationStore } from '../db/translations-sql';
 import { translationChat } from '../llm/client';
-import { loopDeps, noteEnvironmentVersion, readRequestSetup, saveRequestSetup } from '../loop/forge';
-import { listDesks, usableRequestTypes } from '../loop/jsm-forge';
+import { loopDeps, noteEnvironmentVersion, readRequestSetup, readResolutionMap, saveRequestSetup, saveResolutionMap } from '../loop/forge';
+import { listDesks, listResolutions, usableRequestTypes } from '../loop/jsm-forge';
 import { findPassportObjectKey, readGroups } from '../providers/forge';
 import type { WriteCheck } from '../registry/authorise';
 import { sqlRegistryWriter } from '../registry/write';
 import { seedDemo } from '../seed/demo';
 import { handleAsk, handleEnvironments, handleLoadDemo, handleTools, type AskHandlerDeps, type ResolverContext } from './handlers';
-import { handleRecheck, handleRequestFix, handleRequestSetup, handleRequestTypes, handleSaveRequestSetup, type SetupDeps } from './request-handlers';
+import {
+  handleRecheck,
+  handleRequestApproval,
+  handleRequestFix,
+  handleRequestSetup,
+  handleRequestTypes,
+  handleResolutionSetup,
+  handleSaveRequestSetup,
+  handleSaveResolutionMap,
+  type ResolutionSetupDeps,
+  type SetupDeps,
+} from './request-handlers';
 
 /**
  * UI resolvers. Identity always comes from the Forge context (req.context.accountId), never the payload
@@ -74,6 +85,8 @@ resolver.define('loadDemo', ({ context }) =>
 
 resolver.define('requestFix', ({ payload, context }) => handleRequestFix(payload, ctxOf(context), loopDeps));
 
+resolver.define('requestApproval', ({ payload, context }) => handleRequestApproval(payload, ctxOf(context), loopDeps));
+
 resolver.define('recheck', ({ payload, context }) => handleRecheck(payload, ctxOf(context), loopDeps));
 
 const setupDeps: SetupDeps = {
@@ -89,5 +102,16 @@ resolver.define('requestSetup', ({ context }) => handleRequestSetup(ctxOf(contex
 resolver.define('requestTypes', ({ payload, context }) => handleRequestTypes(payload, ctxOf(context), setupDeps));
 
 resolver.define('saveRequestSetup', ({ payload, context }) => handleSaveRequestSetup(payload, ctxOf(context), setupDeps));
+
+const resolutionDeps: ResolutionSetupDeps = {
+  check: writeCheck,
+  resolutions: listResolutions,
+  getMap: readResolutionMap,
+  saveMap: saveResolutionMap,
+};
+
+resolver.define('resolutionSetup', ({ context }) => handleResolutionSetup(ctxOf(context), resolutionDeps));
+
+resolver.define('saveResolutionMap', ({ payload, context }) => handleSaveResolutionMap(payload, ctxOf(context), resolutionDeps));
 
 export const uiResolver = resolver.getDefinitions();

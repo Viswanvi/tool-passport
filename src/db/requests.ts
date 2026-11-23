@@ -130,4 +130,10 @@ export const sqlRequestRepo: RequestRepo = {
   async touch(requestId) {
     await update("UPDATE requests SET rechecked_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open'", requestId);
   },
+
+  // An open approval request resolved without a decision that counts: resolved_at marks "the asker was told".
+  // The row stays open (and keeps its open key), so a later decision is still processed (D34).
+  async markUndecided(requestId) {
+    return (await update("UPDATE requests SET resolved_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open' AND resolved_at IS NULL", requestId)) === 1;
+  },
 };

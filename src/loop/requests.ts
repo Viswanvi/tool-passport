@@ -3,6 +3,7 @@ import { answerRequirement, type Answer } from '../engine/answer';
 import { buildCard, type Card } from '../engine/card';
 import type { CatalogChoice } from '../engine/catalog';
 import type { Catalog, CheckResult, EngineRepo, Environment, EnvironmentReader, Groups, Tool } from '../engine/model';
+import { approvalOutcome, type ResolutionMap } from './resolution';
 
 /**
  * The request loop (spec section 11, F4), without Forge. Request the fix re-evaluates the stored ask for the
@@ -83,6 +84,34 @@ export interface RequestRepo {
   listUnfinished(limit: number): Promise<RequestRow[]>;
   /** The sweep looked at it and nothing changed. */
   touch(id: number): Promise<void>;
+  /**
+   * An approval request resolved without a decision that counts: note it once (the row stays open, so a later
+   * decision still counts). True the first time, so the asker is told once.
+   */
+  markUndecided(id: number): Promise<boolean>;
+}
+
+/** The approval_grants table, written only by the request loop. */
+export interface ApprovalStore {
+  /** A pending grant for a raised approval request; safe to repeat. */
+  addPending(g: GrantKey): Promise<void>;
+  /** Record the decision once: a pending or missing grant becomes approved or declined; a decided one stays. */
+  decide(g: GrantKey & { status: 'approved' | 'declined' }): Promise<void>;
+}
+
+export interface GrantKey {
+  askerAccountId: string;
+  toolId: number;
+  environmentId: number;
+  actionKey: string;
+  requestKey: string;
+}
+
+/** What reading the request back shows: the resolution, who set it, and who it is assigned to now. */
+export interface ResolutionRead {
+  name: string | null;
+  resolvedBy: string | null;
+  assignee: string | null;
 }
 
 export interface JsmClient {
@@ -92,8 +121,8 @@ export interface JsmClient {
   assign(issueKey: string, accountId: string): Promise<boolean>;
   /** A comment the asker can see. */
   comment(issueKey: string, body: string): Promise<void>;
-  /** The resolution as the issue shows it now (D22: the event alone is not trusted). */
-  resolution(issueKey: string): Promise<{ name: string | null }>;
+  /** The resolution as the issue shows it now (D22: the event alone is not trusted), with who set it. */
+  resolution(issueKey: string): Promise<ResolutionRead>;
 }
 
 export class JsmError extends Error {
@@ -129,6 +158,9 @@ export interface LoopDeps extends RecheckDeps {
   requests: RequestRepo;
   jsm: JsmClient;
   setup(): Promise<RequestSetup | null>;
+  approvals: ApprovalStore;
+  /** Set in setup: which resolution names approve or decline. */
+  resolutionMap(): Promise<ResolutionMap | null>;
   log?(line: string): void;
 }
 
@@ -188,6 +220,16 @@ export function fixTargets(answer: Answer): FixTarget[] {
     return [];
   });
 }
+
+/** One target per policy that needs approval, only once everything else is in place (Yes, with approval). */
+export function approvalTargets(answer: Answer): FixTarget[] {
+  if (answer.state !== 'checked' || answer.outcome.verdict !== 'yes_with_approval') return [];
+  return answer.outcome.approvals.flatMap((r): FixTarget[] =>
+    r.status === 'approval' && r.check.dimension === 'policy' ? [{ target: `approval:${r.check.action}`, result: r }] : [],
+  );
+}
+
+export const APPROVAL_TARGET = 'approval:';
 
 /** One open request per person, kind and target (spec F4), as one string a unique key can hold. */
 export const openKey = (kind: RequestKind, environmentId: number | null, target: string, asker: string): string =>
@@ -258,26 +300,79 @@ export function fixRequestText(t: FixTarget, x: { tool: Tool; environment: Envir
   return { summary: summary.slice(0, 250), description: description.slice(0, 4000) };
 }
 
+/** The resolution names setup mapped to each decision, in a stable order. */
+export function decisionNames(map: ResolutionMap | null | undefined): { approved: string[]; declined: string[] } {
+  const names = map && typeof map === 'object' ? Object.keys(map).sort() : [];
+  return {
+    approved: names.filter((n) => approvalOutcome(n, map) === 'approved'),
+    declined: names.filter((n) => approvalOutcome(n, map) === 'declined'),
+  };
+}
+
+const quoted = (names: string[]) => names.map((n) => `"${n}"`).join(' or ');
+
+/** How to decide, in the mapped resolution names. Anything else leaves the approval pending. */
+export function howToDecide(map: ResolutionMap | null | undefined): string {
+  const { approved, declined } = decisionNames(map);
+  const decline = declined.length ? ` or ${quoted(declined)} to decline` : '';
+  return `Resolve this request as ${quoted(approved)} to approve${decline}.`;
+}
+
+/** An approval request's text, built by code from the stored answer, the policy rule and setup's mapping. */
+export function approvalRequestText(
+  t: FixTarget,
+  x: { tool: Tool; environment: Environment; restated: string; catalog: Catalog; map: ResolutionMap | null },
+): { summary: string; description: string } {
+  const r = t.result;
+  const env = x.environment.name;
+  const action = r.check.dimension === 'policy' ? r.check.action : '';
+  const label = x.catalog.keys.get(action)?.label;
+  const actionName = label ? label[0]!.toLowerCase() + label.slice(1) : action.replace(/_/g, ' ');
+  const reason = r.label.kind === 'policy_rule' ? r.label.reason : null;
+  const summary = `Approval needed in ${env}: ${actionName}${reason ? ` (${reason})` : ''}`;
+  const description = [
+    `Tool Passport checked ${x.tool.name} in ${env} for the person this request was raised for. Everything else is in place; the policy needs an approval.`,
+    '',
+    `Policy: ${actionName} in ${env} needs approval${reason ? `: ${reason}` : ''}.`,
+    `What they want to do: ${x.restated}.`,
+    '',
+    `${howToDecide(x.map)} Any other resolution leaves the approval pending. Tool Passport records the decision and adds the new answer here as a comment.`,
+  ].join('\n');
+  return { summary: summary.slice(0, 250), description: description.slice(0, 4000) };
+}
+
 // ---- the card -----------------------------------------------------------------------------------------
 
-/** Request the fix becomes "Fix requested" once every missing piece has an open request; nothing else changes. */
+const REQUESTED = {
+  request_fix: { kind: 'fix', becomes: 'fix_requested', label: 'Fix requested' },
+  request_approval: { kind: 'approval', becomes: 'approval_requested', label: 'Approval requested' },
+} as const;
+
+/**
+ * Request the fix (or Request approval) becomes "Fix requested" ("Approval requested") once every piece has an
+ * open request of that kind; nothing else changes.
+ */
 export function attachOpenRequests(card: Card, targets: string[], rows: RequestRow[]): Card {
-  if (card.action?.kind !== 'request_fix' || targets.length === 0) return card;
-  const byTarget = new Map(rows.filter((r) => r.status === 'raising' || r.status === 'open').map((r) => [r.target, r]));
+  const a = card.action;
+  if (!a || (a.kind !== 'request_fix' && a.kind !== 'request_approval') || targets.length === 0) return card;
+  const want = REQUESTED[a.kind];
+  const byTarget = new Map(rows.filter((r) => r.kind === want.kind && (r.status === 'raising' || r.status === 'open')).map((r) => [r.target, r]));
   if (!targets.every((t) => byTarget.has(t))) return card;
   const requests = targets.map((t) => byTarget.get(t)!).map((r) => ({ key: r.requestKey, url: r.portalUrl, ownerAccountId: r.ownerAccountId }));
-  return { ...card, action: { kind: 'fix_requested', label: 'Fix requested', requests } };
+  return { ...card, action: { kind: want.becomes, label: want.label, requests } };
 }
 
 export async function cardWithRequests(now: Pick<Rechecked, 'answer' | 'card' | 'environment'>, asker: string, requests: Pick<RequestRepo, 'openFor'>): Promise<Card> {
-  const targets = fixTargets(now.answer).map((t) => t.target);
-  if (!targets.length || !now.environment || now.card.action?.kind !== 'request_fix') return now.card;
-  return attachOpenRequests(now.card, targets, await requests.openFor(asker, 'fix', now.environment.id, targets));
+  const kind = now.card.action?.kind;
+  if (!now.environment || (kind !== 'request_fix' && kind !== 'request_approval')) return now.card;
+  const targets = (kind === 'request_fix' ? fixTargets(now.answer) : approvalTargets(now.answer)).map((t) => t.target);
+  if (!targets.length) return now.card;
+  return attachOpenRequests(now.card, targets, await requests.openFor(asker, REQUESTED[kind].kind, now.environment.id, targets));
 }
 
 // ---- Request the fix ----------------------------------------------------------------------------------
 
-export type RaiseError = 'not_signed_in' | 'bad_request' | 'not_found' | 'not_set_up' | 'customer_role' | 'request_failed' | 'try_again';
+export type RaiseError = 'not_signed_in' | 'bad_request' | 'not_found' | 'not_set_up' | 'approvals_not_set_up' | 'customer_role' | 'request_failed' | 'try_again';
 
 export type RaiseReply = { ok: true; card: Card; raised: string[] } | { ok: false; error: RaiseError; message: string; card: Card | null };
 
@@ -286,6 +381,8 @@ export const RAISE_MESSAGES: Record<RaiseError, string> = {
   bad_request: 'That request could not be read. Ask the question again.',
   not_found: 'That answer is no longer available. Ask the question again.',
   not_set_up: "Requests aren't set up yet. A Jira administrator picks the service desk under Apps → Manage apps → Tool Passport setup.",
+  approvals_not_set_up:
+    "Approvals aren't set up yet. A Jira administrator chooses which resolution means Approved under Apps → Manage apps → Tool Passport setup.",
   // D23: raiseOnBehalfOf needs the org-level Jira Service Management Customer role (E5).
   customer_role:
     'Tool Passport can only raise requests for people with the Jira Service Management Customer role. Ask your organization admin to give you that role in Atlassian Administration, then try again.',
@@ -310,11 +407,68 @@ export async function raiseFix(askId: number, asker: string, deps: LoopDeps): Pr
   const targets = fixTargets(now.answer);
   if (!targets.length || !now.environment) return { ok: true, card: now.card, raised: [] };
 
+  const restated = now.answer.state === 'checked' ? now.answer.restated : '';
+  return raiseAll('fix', targets, now, { serviceDeskId: setup.serviceDeskId, requestTypeId }, deps, (t) =>
+    fixRequestText(t, { tool: now.tool, environment: now.environment!, restated }),
+  );
+}
+
+/**
+ * Request approval (spec F4): one private request per policy that needs approval, raised for the asker and
+ * routed by the rule's approval route, with a pending grant. Only offered once everything else is in place,
+ * and only when setup maps at least one resolution to Approved: otherwise nothing could ever decide it.
+ */
+export async function raiseApproval(askId: number, asker: string, deps: LoopDeps): Promise<RaiseReply> {
+  const ask = await deps.loadAsk(askId);
+  if (!ask || ask.askerAccountId !== asker) return raiseFailure('not_found');
+  const setup = await deps.setup();
+  // One request type serves every kind until setup offers one per kind (D34).
+  const requestTypeId = setup?.requestTypeIds.approval ?? setup?.requestTypeIds.fix;
+  if (!setup?.serviceDeskId || !requestTypeId) return raiseFailure('not_set_up');
+  const map = await deps.resolutionMap();
+  if (!decisionNames(map).approved.length) return raiseFailure('approvals_not_set_up');
+
+  const now = await recheckAsk(ask, deps);
+  if (!now) return raiseFailure('not_found');
+  const targets = approvalTargets(now.answer);
+  if (!targets.length || !now.environment) return { ok: true, card: now.card, raised: [] };
+  const restated = now.answer.state === 'checked' ? now.answer.restated : '';
+  const environment = now.environment;
+  return raiseAll(
+    'approval',
+    targets,
+    now,
+    { serviceDeskId: setup.serviceDeskId, requestTypeId },
+    deps,
+    (t) => approvalRequestText(t, { tool: now.tool, environment, restated, catalog: now.catalog, map }),
+    async (t, requestKey) => {
+      const actionKey = t.target.slice(APPROVAL_TARGET.length);
+      try {
+        await deps.approvals.addPending({ askerAccountId: asker, toolId: now.tool.id, environmentId: environment.id, actionKey, requestKey });
+      } catch (e) {
+        // The decision writes the grant anyway (decide() inserts a missing one); until then the open request shows.
+        deps.log?.(`[request] pending grant for ${requestKey} not written: ${String(e).slice(0, 200)}`);
+      }
+    },
+  );
+}
+
+type RequestText = { summary: string; description: string };
+
+async function raiseAll(
+  kind: RequestKind,
+  targets: FixTarget[],
+  now: Rechecked,
+  desk: { serviceDeskId: string; requestTypeId: string },
+  deps: LoopDeps,
+  text: (t: FixTarget) => RequestText,
+  afterRaise?: (t: FixTarget, requestKey: string) => Promise<void>,
+): Promise<RaiseReply> {
   const rows: RequestRow[] = [];
   const raised: string[] = [];
   const names = targets.map((t) => t.target);
   for (const t of targets) {
-    const one = await raiseOne(t, now, setup.serviceDeskId, requestTypeId, deps);
+    const one = await raiseOne(kind, t, now, desk, deps, text, afterRaise);
     if (!one.ok) return raiseFailure(one.error, attachOpenRequests(now.card, names, rows));
     rows.push(one.row);
     if (one.raised && one.row.requestKey) raised.push(one.row.requestKey);
@@ -322,11 +476,19 @@ export async function raiseFix(askId: number, asker: string, deps: LoopDeps): Pr
   return { ok: true, card: attachOpenRequests(now.card, names, rows), raised };
 }
 
-async function raiseOne(t: FixTarget, now: Rechecked, serviceDeskId: string, requestTypeId: string, deps: LoopDeps): Promise<RaiseOne> {
+async function raiseOne(
+  kind: RequestKind,
+  t: FixTarget,
+  now: Rechecked,
+  desk: { serviceDeskId: string; requestTypeId: string },
+  deps: LoopDeps,
+  text: (t: FixTarget) => RequestText,
+  afterRaise?: (t: FixTarget, requestKey: string) => Promise<void>,
+): Promise<RaiseOne> {
   const environment = now.environment!;
   const asker = now.ask.askerAccountId;
   const claim = await deps.requests.claim({
-    kind: 'fix',
+    kind,
     askId: now.ask.id,
     toolId: now.tool.id,
     environmentId: environment.id,
@@ -334,7 +496,7 @@ async function raiseOne(t: FixTarget, now: Rechecked, serviceDeskId: string, req
     ownerAccountId: routeOwner(t.result.route, now.tool, environment),
     target: t.target,
     requirementHash: requirementHash(now.ask.requirement ?? []),
-    openKey: openKey('fix', environment.id, t.target, asker),
+    openKey: openKey(kind, environment.id, t.target, asker),
   });
   const row = claim.row;
   if (!claim.mine) {
@@ -343,17 +505,17 @@ async function raiseOne(t: FixTarget, now: Rechecked, serviceDeskId: string, req
     if (!(await deps.requests.takeOver(row.id))) return { ok: true, row, raised: false };
   }
 
-  const restated = now.answer.state === 'checked' ? now.answer.restated : '';
   let created: { issueKey: string; portalUrl: string | null };
   try {
-    created = await deps.jsm.createRequest({ serviceDeskId, requestTypeId, raiseOnBehalfOf: asker, ...fixRequestText(t, { tool: now.tool, environment, restated }) });
+    created = await deps.jsm.createRequest({ ...desk, raiseOnBehalfOf: asker, ...text(t) });
   } catch (e) {
     await deps.requests.release(row.id, String(e).slice(0, 300));
-    deps.log?.(`[request] raising a fix request failed: ${String(e).slice(0, 200)}`);
+    deps.log?.(`[request] raising a ${kind} request failed: ${String(e).slice(0, 200)}`);
     const customerRole = e instanceof JsmError ? e.code === 'customer_role' : (e as { code?: unknown } | null)?.code === 'customer_role';
     return { ok: false, error: customerRole ? 'customer_role' : 'request_failed' };
   }
   await deps.requests.markRaised(row.id, created.issueKey, created.portalUrl);
+  if (afterRaise) await afterRaise(t, created.issueKey);
   let assigned = false;
   try {
     assigned = await deps.jsm.assign(created.issueKey, row.ownerAccountId);

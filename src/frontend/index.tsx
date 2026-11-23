@@ -78,16 +78,18 @@ function checkLine(c: Card['checks'][number]): string {
 
 // Actions that arrive in Phase 2, shown as the next step in words rather than as buttons that do nothing.
 const NEXT_STEP: Record<string, string> = {
-  request_approval: 'Next step: request approval.',
   ask_owner: 'Next step: ask the tool owner.',
 };
 
-/** "Fix requested from Marco · view request", one line per open request. Names are looked up by the page. */
-const OpenRequests = ({ requests }: { requests: CardRequest[] }) => (
+/** Open requests keep the card checking again (spec section 15). */
+const WAITING = new Set(['fix_requested', 'approval_requested']);
+
+/** "Fix requested (TPD-3) from Marco · view request", one line per open request. Names are looked up by the page. */
+const OpenRequests = ({ label, requests }: { label: string; requests: CardRequest[] }) => (
   <Stack space="space.050">
     {requests.map((r, i) => (
       <Inline key={r.key ?? `raising-${i}`} space="space.100" alignBlock="center" shouldWrap>
-        <Text>{r.key ? `Fix requested (${r.key}) from` : 'Fix being requested from'}</Text>
+        <Text>{r.key ? `${label} (${r.key}) from` : `${label}, being raised, from`}</Text>
         <User accountId={r.ownerAccountId} />
         {r.key && r.url ? (
           <Link href={r.url} openNewTab>
@@ -102,14 +104,17 @@ const OpenRequests = ({ requests }: { requests: CardRequest[] }) => (
 interface CardActions {
   busy: boolean;
   onRecheck: () => void;
-  onRequestFix: () => void;
+  onRequest: (kind: 'fix' | 'approval') => void;
   canRecheck: boolean;
 }
 
-const VerdictCard = ({ card, busy, onRecheck, onRequestFix, canRecheck }: { card: Card } & CardActions) => {
+const VerdictCard = ({ card, busy, onRecheck, onRequest, canRecheck }: { card: Card } & CardActions) => {
   const [open, setOpen] = useState(false);
   const kind = card.action?.kind;
-  const button = kind === 'recheck' || kind === 'try_again' || kind === 'request_fix';
+  // An approval pending with no open request row to show still reads "Approval requested · TPD-12" (text).
+  const requestApproval = kind === 'request_approval' && !card.action?.requestKey;
+  const button = kind === 'recheck' || kind === 'try_again' || kind === 'request_fix' || requestApproval;
+  const onPrimary = kind === 'request_fix' ? () => onRequest('fix') : requestApproval ? () => onRequest('approval') : onRecheck;
   return (
     <Box xcss={cardStyle}>
       <Stack space="space.150">
@@ -132,17 +137,16 @@ const VerdictCard = ({ card, busy, onRecheck, onRequestFix, canRecheck }: { card
             ))}
           </Inline>
         ) : null}
-        {kind === 'fix_requested' && card.action?.requests ? <OpenRequests requests={card.action.requests} /> : null}
+        {kind && WAITING.has(kind) && card.action?.requests ? <OpenRequests label={card.action.label} requests={card.action.requests} /> : null}
         <Inline space="space.150" alignBlock="center" shouldWrap>
           {button && card.action ? (
-            <Button appearance="primary" onClick={kind === 'request_fix' ? onRequestFix : onRecheck} isDisabled={busy}>
+            <Button appearance="primary" onClick={onPrimary} isDisabled={busy}>
               {card.action.label}
             </Button>
           ) : null}
-          {card.action && NEXT_STEP[card.action.kind] ? (
-            <Text>{card.action.kind === 'request_approval' && card.action.requestKey ? card.action.label : NEXT_STEP[card.action.kind]}</Text>
-          ) : null}
-          {kind === 'fix_requested' && canRecheck ? (
+          {kind === 'request_approval' && !requestApproval ? <Text>{card.action!.label}</Text> : null}
+          {card.action && NEXT_STEP[card.action.kind] ? <Text>{NEXT_STEP[card.action.kind]}</Text> : null}
+          {kind && WAITING.has(kind) && canRecheck ? (
             <Button appearance="subtle" onClick={onRecheck} isDisabled={busy}>
               Re-check
             </Button>
@@ -242,15 +246,16 @@ const AskPage = () => {
     }
   };
 
-  const requestFix = async () => {
+  /** Request the fix or Request approval: the payload names only the ask; the server builds the request. */
+  const request = async (kind: 'fix' | 'approval') => {
     if (askId === null) {
-      setNotice('Ask the question again, then request the fix.');
+      setNotice('Ask the question again, then try once more.');
       return;
     }
     setBusy(true);
     setNotice(null);
     try {
-      const r = await call<RaiseReply>('requestFix', { askId });
+      const r = await call<RaiseReply>(kind === 'fix' ? 'requestFix' : 'requestApproval', { askId });
       if (r.card) setCard(r.card);
       if (!r.ok) setNotice(r.message);
     } catch {
@@ -260,8 +265,8 @@ const AskPage = () => {
     }
   };
 
-  // While a fix request is open the card checks again every 10 seconds (spec section 15), for 15 minutes.
-  const polling = card?.action?.kind === 'fix_requested' && askId !== null;
+  // While a request is open the card checks again every 10 seconds (spec section 15), for 15 minutes.
+  const polling = WAITING.has(card?.action?.kind ?? '') && askId !== null;
   useEffect(() => {
     if (!polling) return undefined;
     let polls = 0;
@@ -331,7 +336,7 @@ const AskPage = () => {
         </SectionMessage>
       ) : null}
       {card ? (
-        <VerdictCard card={card} busy={busy} canRecheck={askId !== null} onRecheck={() => void recheck()} onRequestFix={() => void requestFix()} />
+        <VerdictCard card={card} busy={busy} canRecheck={askId !== null} onRecheck={() => void recheck()} onRequest={(kind) => void request(kind)} />
       ) : null}
       {failed && !card ? (
         <SectionMessage appearance="warning">
@@ -426,6 +431,91 @@ const RequestSetupSection = () => {
   );
 };
 
+type ResolutionReply = { ok: true; resolutions: DeskOption[]; map: Record<string, unknown> | null } | { ok: false; reason: string };
+type Decision = 'none' | 'approved' | 'declined';
+
+const DECISIONS: Option[] = [
+  { label: 'No decision', value: 'none' },
+  { label: 'Approved', value: 'approved' },
+  { label: 'Declined', value: 'declined' },
+];
+
+/** Which resolutions decide an approval request. Unmapped ones never approve (spec section 14). */
+const ApprovalSetupSection = () => {
+  const [names, setNames] = useState<string[] | null>(null);
+  const [map, setMap] = useState<Record<string, Decision>>({});
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void call<ResolutionReply>('resolutionSetup').then((r) => {
+      if (!r.ok) return setMessage({ ok: false, text: r.reason });
+      setNames(r.resolutions.map((x) => x.name));
+      const current: Record<string, Decision> = {};
+      for (const [name, v] of Object.entries(r.map ?? {})) if (v === 'approved' || v === 'declined') current[name] = v;
+      setMap(current);
+    });
+  }, []);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const chosen = Object.fromEntries(Object.entries(map).filter(([, v]) => v !== 'none'));
+      const r = await call<{ ok: true } | { ok: false; reason: string }>('saveResolutionMap', { map: chosen });
+      const approve = Object.keys(chosen).filter((n) => chosen[n] === 'approved');
+      setMessage(
+        r.ok
+          ? { ok: true, text: approve.length ? `Saved. Resolving an approval request as ${approve.map((n) => `"${n}"`).join(' or ')} approves it.` : 'Saved. No resolution approves yet, so approvals stay off.' }
+          : { ok: false, text: r.reason },
+      );
+    } catch (e) {
+      setMessage({ ok: false, text: String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Stack space="space.150">
+      <Heading as="h2">Approvals</Heading>
+      <Text>
+        Request approval raises a private request for the approver. Choose which resolutions decide it. Any other resolution leaves the approval pending, and a decision
+        only counts when the approver (or the person the request is assigned to) resolves it.
+      </Text>
+      {names ? (
+        <Stack space="space.100">
+          {names.map((name) => (
+            <Inline key={name} space="space.200" alignBlock="center">
+              <Box xcss={xcss({ width: '200px' })}>
+                <Text>{name}</Text>
+              </Box>
+              <Box xcss={xcss({ width: '200px' })}>
+                <Select
+                  options={DECISIONS}
+                  value={DECISIONS.find((d) => d.value === (map[name] ?? 'none'))}
+                  onChange={(o: Option) => setMap({ ...map, [name]: o.value as Decision })}
+                />
+              </Box>
+            </Inline>
+          ))}
+          <Inline>
+            <Button appearance="primary" onClick={() => void save()} isDisabled={busy}>
+              Save
+            </Button>
+          </Inline>
+        </Stack>
+      ) : message ? null : (
+        <Spinner />
+      )}
+      {message ? (
+        <SectionMessage appearance={message.ok ? 'success' : 'warning'}>
+          <Text>{message.text}</Text>
+        </SectionMessage>
+      ) : null}
+    </Stack>
+  );
+};
+
 const SetupPage = () => {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<SeedResult | null>(null);
@@ -467,7 +557,8 @@ const SetupPage = () => {
         </SectionMessage>
       ) : null}
       <RequestSetupSection />
-      <Text>The rest of the setup wizard (approval and question request types, resolution mapping, model choice) arrives in Phase 4.</Text>
+      <ApprovalSetupSection />
+      <Text>The rest of the setup wizard (a request type per kind, model choice) arrives in Phase 4.</Text>
     </Stack>
   );
 };

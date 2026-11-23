@@ -1,4 +1,16 @@
-import { fixTargets, pieceName, recheckAsk, saveResult, type LoopDeps, type Rechecked, type RequestRow } from './requests';
+import {
+  APPROVAL_TARGET,
+  fixTargets,
+  howToDecide,
+  pieceName,
+  recheckAsk,
+  saveResult,
+  type LoopDeps,
+  type Rechecked,
+  type RequestRow,
+  type ResolutionRead,
+} from './requests';
+import { approvalOutcome, type ResolutionMap } from './resolution';
 
 /**
  * avi:jira:updated:issue and the sweep (spec section 11, F4). An issue the app didn't raise is ignored. A
@@ -8,7 +20,7 @@ import { fixTargets, pieceName, recheckAsk, saveResult, type LoopDeps, type Rech
  * saw a window of missed events), and finishes re-checks that stopped part way. No Forge imports here.
  */
 
-export type EventOutcome = 'ignored' | 'not_ours' | 'unresolved' | 'already' | 'not_handled' | 'rechecked' | 'comment_failed';
+export type EventOutcome = 'ignored' | 'not_ours' | 'unresolved' | 'already' | 'not_handled' | 'undecided' | 'rechecked' | 'comment_failed';
 
 /** Own properties only: `toString` must not find Object.prototype.toString. */
 const own = (o: unknown, k: string): unknown => (o !== null && typeof o === 'object' && Object.hasOwn(o, k) ? (o as Record<string, unknown>)[k] : undefined);
@@ -34,14 +46,64 @@ export async function handleIssueEvent(event: unknown, deps: LoopDeps): Promise<
 }
 
 async function settleIfResolved(row: RequestRow, deps: LoopDeps): Promise<EventOutcome> {
-  // Approvals and questions get their own outcomes in Phase 2 (resolution mapping, publishAnswer).
-  if (row.kind !== 'fix') return 'not_handled';
+  // Questions are settled by the owner's published answer (Phase 2 step 2), not by this path.
+  if (row.kind === 'question') return 'not_handled';
   if (row.status !== 'open' || !row.requestKey) return 'already';
   const back = await deps.jsm.resolution(row.requestKey);
   if (!back.name) return 'unresolved';
+  if (row.kind === 'approval') {
+    if (row.environmentId === null) return 'not_handled';
+    const map = await deps.resolutionMap();
+    const decision = approvalDecision(row, back, map);
+    if (!decision.ok) {
+      // The request stays open so a later decision still counts; the asker is told once.
+      if (!(await deps.requests.markUndecided(row.id))) return 'already';
+      try {
+        await deps.jsm.comment(row.requestKey, undecidedComment(decision.why, back.name, map));
+      } catch (e) {
+        deps.log?.(`[request] comment on ${row.requestKey} failed: ${String(e).slice(0, 200)}`);
+        return 'comment_failed';
+      }
+      return 'undecided';
+    }
+    // Recorded before the compare-and-set below, and safe to repeat: if this stops part way, the next event
+    // or sweep records the same decision again and carries on.
+    await deps.approvals.decide({
+      askerAccountId: row.askerAccountId,
+      toolId: row.toolId,
+      environmentId: row.environmentId,
+      actionKey: row.target.slice(APPROVAL_TARGET.length),
+      requestKey: row.requestKey,
+      status: decision.outcome,
+    });
+  }
   // Compare-and-set: of an event and a sweep arriving together, one re-checks and comments.
   if (!(await deps.requests.markResolved(row.id))) return 'already';
   return finishRecheck(row, deps);
+}
+
+type Decision = { ok: true; outcome: 'approved' | 'declined' } | { ok: false; why: 'unmapped' | 'not_approver' };
+
+/**
+ * Whether a resolution decides an approval (spec section 14, D34). It must be a name setup mapped to Approved
+ * or Declined, set by the approver the request was routed to, or by the person it is assigned to now if that
+ * isn't the asker. A customer resolving their own request in the portal decides nothing, and neither does a
+ * resolution whose author can't be read.
+ */
+export function approvalDecision(row: Pick<RequestRow, 'ownerAccountId' | 'askerAccountId'>, back: ResolutionRead, map: ResolutionMap | null): Decision {
+  const outcome = approvalOutcome(back.name, map);
+  if (!outcome) return { ok: false, why: 'unmapped' };
+  const by = back.resolvedBy;
+  const counts = by !== null && (by === row.ownerAccountId || (by === back.assignee && by !== row.askerAccountId));
+  return counts ? { ok: true, outcome } : { ok: false, why: 'not_approver' };
+}
+
+function undecidedComment(why: 'unmapped' | 'not_approver', name: string, map: ResolutionMap | null): string {
+  const first =
+    why === 'unmapped'
+      ? `Tool Passport: "${name}" is not an approval decision, so the approval is still pending.`
+      : 'Tool Passport: this request was not resolved by the approver, so the approval is still pending.';
+  return `${first} To decide, the approver reopens it. ${howToDecide(map)}`;
 }
 
 /** Re-check for the asker, comment the verdict, close the row. A failed comment leaves it for the sweep. */

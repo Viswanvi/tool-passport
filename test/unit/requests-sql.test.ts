@@ -31,6 +31,7 @@ vi.mock('@forge/sql', () => ({
 
 const { sqlRequestRepo, isDuplicateKey } = await import('../../src/db/requests');
 const { loadAsk, purgeOldQuestions } = await import('../../src/db/asks');
+const { sqlApprovalStore } = await import('../../src/db/approvals');
 
 beforeEach(() => {
   statements.length = 0;
@@ -107,6 +108,14 @@ describe('status changes are guarded by the current status', () => {
     expect(statements[0]!.query).toContain('open_key = NULL');
   });
 
+  it('an undecided approval keeps its row open and is noted once', async () => {
+    replies.push({ affectedRows: 1 }, { affectedRows: 0 });
+    expect(await sqlRequestRepo.markUndecided(5)).toBe(true);
+    expect(await sqlRequestRepo.markUndecided(5)).toBe(false);
+    expect(statements[0]!.query).toMatch(/SET resolved_at = CURRENT_TIMESTAMP WHERE id = \? AND status = 'open' AND resolved_at IS NULL/);
+    expect(statements[0]!.query).not.toMatch(/status = '(resolved|closed)'|open_key/);
+  });
+
   it('looks up open requests by their open keys only', async () => {
     replies.push([]);
     expect(await sqlRequestRepo.openFor('acct-priya', 'fix', 11, [])).toEqual([]);
@@ -120,6 +129,26 @@ describe('status changes are guarded by the current status', () => {
     await expect(sqlRequestRepo.byKey('TPD-1')).rejects.toThrow(/requests\.status/);
     replies.push([{ ...ROW, kind: 'vendor' }]);
     await expect(sqlRequestRepo.byKey('TPD-1')).rejects.toThrow(/requests\.kind/);
+  });
+});
+
+describe('approval grants', () => {
+  const G = { askerAccountId: 'acct-priya', toolId: 1, environmentId: 11, actionKey: 'custom_ui', requestKey: 'TPD-5' };
+
+  it('a pending grant is an upsert on the request key that changes nothing when it exists', async () => {
+    await sqlApprovalStore.addPending(G);
+    expect(statements[0]!.query).toMatch(/INSERT INTO approval_grants .* 'pending'\)\s+ON DUPLICATE KEY UPDATE id = id/s);
+    expect(statements[0]!.params).toEqual(['acct-priya', 1, 11, 'custom_ui', 'TPD-5']);
+  });
+
+  it('a decision changes only a pending grant, and inserts a missing one', async () => {
+    await sqlApprovalStore.decide({ ...G, status: 'approved' });
+    const q = statements[0]!.query;
+    expect(q).toMatch(/INSERT INTO approval_grants .* VALUES \(\?, \?, \?, \?, \?, \?, CURRENT_TIMESTAMP\)/s);
+    // decided_at before status, both guarded by the old status.
+    expect(q.indexOf("decided_at = IF(status = 'pending'")).toBeGreaterThan(0);
+    expect(q.indexOf("status = IF(status = 'pending'")).toBeGreaterThan(q.indexOf('decided_at = IF'));
+    expect(statements[0]!.params.at(-1)).toBe('approved');
   });
 });
 

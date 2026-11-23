@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { noteVersion } from '../change/detect';
 import { sqlDetectRepo } from '../change/detect-sql';
+import { sqlApprovalStore } from '../db/approvals';
 import { loadAsk, saveAskResult } from '../db/asks';
 import { loadCatalog, loadEnvironment, loadTool, sqlEngineRepo } from '../db/repo';
 import { sqlRequestRepo } from '../db/requests';
@@ -10,6 +11,7 @@ import { forgeEnvironmentReader, readGroups } from '../providers/forge';
 import { handleIssueEvent } from './events';
 import { forgeJsm } from './jsm-forge';
 import type { LoopDeps, RequestSetup } from './requests';
+import type { ResolutionMap } from './resolution';
 
 /** Forge wiring for the request loop: the resolvers, the issue trigger and the sweep share these. */
 
@@ -28,6 +30,20 @@ export async function readRequestSetup(): Promise<RequestSetup | null> {
 
 export async function saveRequestSetup(s: RequestSetup): Promise<void> {
   await setSetting(SETUP_SETTING, SetupShape.parse(s));
+}
+
+const MAP_SETTING = 'requests.resolutionMap';
+const MapShape = z.object({ map: z.record(z.string().min(1).max(255), z.enum(['approved', 'declined'])) });
+
+/** Which resolutions decide an approval. A stored map that doesn't read cleanly is no map: nothing approves. */
+export async function readResolutionMap(): Promise<ResolutionMap | null> {
+  const parsed = MapShape.safeParse(await getSetting<unknown>(MAP_SETTING));
+  return parsed.success ? parsed.data.map : null;
+}
+
+export async function saveResolutionMap(map: Record<string, 'approved' | 'declined'>): Promise<void> {
+  // Kept inside an object (see store.ts: a stored bare string comes back already parsed).
+  await setSetting(MAP_SETTING, MapShape.parse({ map }));
 }
 
 /** Version bookkeeping for every evaluation (spec section 11); answers never depend on it. */
@@ -53,6 +69,8 @@ export const loopDeps: LoopDeps = {
   requests: sqlRequestRepo,
   jsm: forgeJsm,
   setup: readRequestSetup,
+  approvals: sqlApprovalStore,
+  resolutionMap: readResolutionMap,
   log: (line) => console.log(line),
 };
 

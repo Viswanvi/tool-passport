@@ -317,3 +317,66 @@ Security self-review against spec section 14 (what exists after Phase 1; code se
 - Phase 2 (planned Dec 1-7, can start early): approvals through the same request loop with resolution
   mapping in setup; Ask the owner; the remaining 20 eval questions and one run of all 40 (D33); Rovo only if
   P0-1 to P0-4 pass on a fresh site.
+
+## Phase 2 (approvals, Ask the owner, optional Rovo), started 2026-11-23 on branch `phase-2`
+
+Started a week early at the human's request ("Start Phase 2"), right after the Phase 1 sign-off.
+
+### Works (verified)
+
+- Step 1, approvals through the request loop (D34):
+  - Code: `raiseApproval`, `approvalTargets`, `approvalRequestText`, `howToDecide` and the generalised
+    "requested" card state in `src/loop/requests.ts`; approval decisions in `src/loop/events.ts`
+    (`approvalDecision`: mapped name and the right person, `undecided` keeps the request open);
+    `resolvedBy` (changelog) in `src/loop/resolution.ts`; `src/db/approvals.ts` (pending and decide upserts);
+    `markUndecided` in `src/db/requests.ts`; resolution list and changelog read-back in `src/loop/jsm-forge.ts`;
+    `requestApproval`, `resolutionSetup`, `saveResolutionMap` resolvers; Request approval button, "Approval
+    requested" state and polling, and an Approvals section in setup.
+  - Tests first (red: `TypeError: raiseApproval is not a function`, 19 failed). Now `npx vitest run`:
+    `Test Files 19 passed (19)`, `Tests 272 passed (272)`; safety suite `Tests 46 passed (46)` (case 12 adds
+    self-approval and an unreadable author through the real event path). Mutation checks: counting any resolver
+    turned 2 approval tests red; skipping the mapping check turned 4 red; restored, green. tsc exit 0, eslint
+    exit 0, `forge lint`: `No issues found.`
+  - `forge deploy -e development`: 4.14.0, "eligible for the Runs on Atlassian program" (no scope or module
+    change; resolutions and changelog are read with `read:jira-work`).
+  - **Live on the demo site, in the browser as the admin (2026-11-23, UTC):**
+    - Setup → Approvals listed Jira's 13 resolutions (as the app); Done → Approved, Declined → Declined, Save:
+      `Saved. Resolving an approval request as "Done" approves it.`
+    - KS-DEV Build environments set to `standard, frontend` (moment 2). Ask → **Yes, with approval**, "Allowed in
+      KS-DEV with approval: Needs design review.", button **Request approval**. Log: `[ask] state=checked
+      verdict=yes_with_approval cached=true model=-`.
+    - Request approval (09:56:47): `[request] approval raised=1`; card `Approval requested (TPD-5) from <owner> ·
+      view request` with Re-check. TPD-5: `Approval needed in KS-DEV: custom ui (Needs design review)`, raised
+      via API for the asker, assigned to the owner, description ends `Resolve this request as "Done" to approve
+      or "Declined" to decline. Any other resolution leaves the approval pending. …`
+    - Resolved as **Won't Do** (unmapped): log 09:57:42 `[issue-event] TPD-5 undecided`; one comment `Tool
+      Passport: "Won't Do" is not an approval decision, so the approval is still pending. To decide, the
+      approver reopens it. Resolve this request as "Done" to approve or "Declined" to decline.`
+    - Reopened (Back to in progress) and resolved as **Done** by the owner: comment `Tool Passport checked again
+      after this request was resolved. Answer now: Yes. Everything this needs is in place in KS-DEV.` The open
+      card turned by itself to **Yes**, `KS-DEV · 13.2`, chips `Owner-verified · 13.2`, `Approved · TPD-5`,
+      `Mapped access · kestrel-de…`, no action. This confirms the changelog read-back (who resolved it) on the
+      real API. (The log line for this decision had not appeared in `forge logs` 3 minutes later; see below.)
+    - KS-DEV set back to `standard`.
+  - **LLM calls in step 1: 0** (cache hits).
+
+### Not done / untested
+
+- `forge logs` did not yet show the line for the Done decision on TPD-5 (resolved about 10:00:30 UTC, checked
+  10:03:42); the comment and the card prove it ran. Recheck the log.
+- Demo site state: the admin now holds an **approved** grant for custom UI in KS-DEV (TPD-5). Moment 2 on this
+  site therefore skips the approval step until Phase 4's Reset demo clears grants. TPD-5 resolved.
+- Untested live (unit-tested): Declined; self-approval refused; hand-over to another assignee; the sweep
+  deciding a missed event; a missing pending grant created at decision time.
+- Steps 2-4: Ask the owner; the remaining 20 eval questions and the run of all 40; Rovo (decide Dec 7).
+
+### Waiting on the human
+
+- Still open: before any push, decide whether to rewrite root commit `6693b75` (D9). Branches `phase-0`,
+  `phase-1` and `phase-2` are local only.
+
+### Next
+
+- Step 2: Ask the owner (spec F5): private question request with the restated requirement, the owner's answer
+  form (value, scope, version), `publishAnswer` adding a fact verification, and re-checking every open question
+  for the tool.

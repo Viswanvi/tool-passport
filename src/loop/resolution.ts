@@ -7,6 +7,24 @@
 
 export type ResolutionMap = Record<string, unknown>;
 
+const own = (o: unknown, k: string): unknown => (o !== null && typeof o === 'object' && Object.hasOwn(o, k) ? (o as Record<string, unknown>)[k] : undefined);
+const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
+
+/**
+ * Who set the resolution most recently, from an issue's `changelog.histories`: the author of the newest entry
+ * that sets a resolution. Null when the changelog shows none, which decides nothing (D34).
+ */
+export function resolvedBy(histories: unknown): string | null {
+  if (!Array.isArray(histories)) return null;
+  const sets = histories.filter((h) => {
+    const items = own(h, 'items');
+    return Array.isArray(items) && items.some((i) => own(i, 'field') === 'resolution' && (str(own(i, 'to')) ?? str(own(i, 'toString'))));
+  });
+  const created = (h: unknown) => Date.parse(String(own(h, 'created') ?? '')) || 0;
+  const newest = sets.sort((a, b) => created(b) - created(a))[0];
+  return str(own(own(newest, 'author'), 'accountId'));
+}
+
 export function approvalOutcome(resolutionName: string | null | undefined, map: ResolutionMap | null | undefined): 'approved' | 'declined' | null {
   if (!resolutionName || !map || typeof map !== 'object') return null;
   if (!Object.hasOwn(map, resolutionName)) return null;

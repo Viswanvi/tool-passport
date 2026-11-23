@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { answerQuestion, type Answer } from '../../src/engine/answer';
 import type { CheckResult, Groups } from '../../src/engine/model';
 import { combine } from '../../src/engine/verdict';
+import { handleIssueEvent } from '../../src/loop/events';
+import { raiseApproval, recheckForAsker } from '../../src/loop/requests';
 import { approvalOutcome } from '../../src/loop/resolution';
+import { loopWorld, resolvedEvent } from '../support/fix-world';
 import {
   askInput,
   DASHBOARD,
@@ -408,6 +411,23 @@ describe('false-Yes suite', () => {
       const a = await ask(w);
       expect(verdictOf(a)).not.toBe('yes');
       expect(resultFor(a, 'policy')).toMatchObject({ status: 'approval', pending: { requestKey: 'TPD-12' } });
+    });
+
+    // D34, beyond the spec's case: a mapped name is not enough. The asker resolving their own request (or a
+    // resolution whose author can't be read) decides nothing, through the real event path.
+    it('an approval the asker gave themselves, or nobody can be named for, never makes the answer Yes', async () => {
+      for (const by of [PRIYA, null]) {
+        const x = loopWorld();
+        x.w.records.get(DEV)!['Build environments'] = ['standard', 'frontend'];
+        const askId = x.addAsk(DEV);
+        expect(await raiseApproval(askId, PRIYA, x.deps)).toMatchObject({ ok: true, raised: ['TPD-1'] });
+        x.jsm.resolutions.set('TPD-1', 'Done'); // mapped to approved
+        x.jsm.resolvedBy.set('TPD-1', by);
+        expect(await handleIssueEvent(resolvedEvent('TPD-1'), x.deps)).toBe('undecided');
+        const card = await recheckForAsker(askId, PRIYA, x.deps);
+        expect(card).toMatchObject({ ok: true, card: { verdict: 'yes_with_approval' } });
+        if (card.ok) expect(card.card.verdict).not.toBe('yes');
+      }
     });
   });
 

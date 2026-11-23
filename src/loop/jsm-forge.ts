@@ -1,6 +1,7 @@
 import { route } from '@forge/api';
 import { call, field, list, requester, text } from '../providers/assets-api';
 import { JsmError, type JsmClient } from './requests';
+import { resolvedBy } from './resolution';
 
 /**
  * Jira Service Management calls, all as the app. Raising on behalf of the asker, assigning, and reading the
@@ -47,11 +48,27 @@ export const forgeJsm: JsmClient = {
   },
 
   async resolution(issueKey) {
-    const res = await call(app, 'read resolution', route`/rest/api/3/issue/${checkKey(issueKey)}?fields=resolution`);
+    const res = await call(app, 'read resolution', route`/rest/api/3/issue/${checkKey(issueKey)}?fields=resolution,assignee&expand=changelog`);
     if (!res.step.ok) throw new Error(`read ${issueKey}: ${res.step.status ?? 'no reply'} ${res.step.note ?? ''}`);
-    return { name: text(field(field(field(res.body, 'fields'), 'resolution'), 'name')) ?? null };
+    const fields = field(res.body, 'fields');
+    return {
+      name: text(field(field(fields, 'resolution'), 'name')) ?? null,
+      resolvedBy: resolvedBy(field(field(res.body, 'changelog'), 'histories')),
+      assignee: text(field(field(fields, 'assignee'), 'accountId')) ?? null,
+    };
   },
 };
+
+/** Jira's resolutions, for the setup mapping. */
+export async function listResolutions(): Promise<DeskOption[]> {
+  const res = await call(app, 'list resolutions', route`/rest/api/3/resolution/search?maxResults=100`);
+  if (!res.step.ok) throw new Error(`resolutions: ${res.step.status ?? 'no reply'}`);
+  return list(res.body, 'values').flatMap((r) => {
+    const id = text(field(r, 'id'));
+    const name = text(field(r, 'name'));
+    return id && name ? [{ id, name }] : [];
+  });
+}
 
 // ---- setup lists ----
 
