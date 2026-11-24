@@ -725,8 +725,15 @@ desk's done statuses on a site with no resolutions.
     Deployed 4.28.0 (eligible for Runs on Atlassian). The same draft agent, new chat, same question: **"Not
     ready. Frontend build isn't set up in KS-DEV."**, then the labelled evidence and the next step; no "No".
     Log `[ask] … cached=true model=-` (05:04:33 UTC).
-  - **toolpassport (a free developer site) has no Rovo:** no Ask Rovo button. The human will switch it on
-    there for E8's second-site check. The judge guide must say Rovo may need switching on.
+  - **toolpassport (a free developer site) has no Rovo:** no Ask Rovo button, also at full width. Checked in
+    Atlassian Administration (read only, 2026-11-24): AI and Rovo → Access says `You haven't blocked Rovo
+    features for any apps`, and the overview shows Rovo credits (0 used), so nothing is switched off. But Apps →
+    Atlassian apps lists 9 apps with **no Rovo and no Studio**, while the demo site's organization lists 17,
+    including `Rovo | Free` and `Studio | Free` (its other plans are Enterprise, Premium and "Service Collection
+    Enterprise Demo"). Add app on toolpassport offers no single Rovo app; Rovo agents come only in the
+    "Teamwork Collection" ("Start a free trial"). Nothing was added. So a judge on a free developer site likely
+    has no Rovo unless they start that trial; E8's "invoke them on a second site" can't run on toolpassport
+    as it is.
   - LLM calls for the Rovo checks: 2 (two new wordings; the Studio call was a cache hit).
 - Left on the demo site: the draft Studio agent "Untitled Agent" (not published) and TPD-8 (open). The Phase 4
   Reset demo should clear TPD-8; the draft can be deleted in Rovo Studio.
@@ -753,8 +760,9 @@ desk's done statuses on a site with no resolutions.
 
 ### Next
 
-- Rovo (F8): built and working on the demo site (D42). Left: E8's second site, once the human has switched
-  Rovo on for toolpassport; then the keep-or-drop call (due Dec 7) can be made. After that, F9 release-note
+- Rovo (F8): built and working on the demo site (D42). E8's second site is blocked: toolpassport has no Rovo,
+  and the only offer is a Teamwork Collection free trial (the human's call). Then the keep-or-drop call (due
+  Dec 7) can be made. After that, F9 release-note
   labels (re-read spec F9 first).
 - Still open from Phase 2: Rovo keep-or-drop by Dec 7; the privacy test with Sam signed in; the root commit
   `6693b75` decision before any push.
