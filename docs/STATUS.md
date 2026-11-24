@@ -898,4 +898,12 @@ timed fresh-site runs, with the human.
     admin fallback → `2 failed`; a group failure hidden → `1 failed`; restored, green. `npx vitest run`: `Test
     Files 28 passed (28)`, `Tests 405 passed (405)`; safety 47/47; tsc, eslint exit 0. `forge lint`: one
     approval, `This deployment triggers a major version upgrade … because: Change due to scope modification`.
-  - Needs the human: a `forge install --upgrade` on the sites (standing rule: ask first), then a live run.
+  - Deploy and upgrade (human: "Yes, both sites"): `forge deploy -e development --approve MAJOR_VERSION_RULE`:
+    `Deployed tool-passport to the development environment with 1 approval acknowledged.` 5.0.0, eligible for Runs
+    on Atlassian. `forge install --upgrade` on one-atlas-oibs and toolpassport: `√ Upgrade complete!` each;
+    `forge install list`: both version 5, `Up-to-date`.
+  - **Live on the demo site, 5.0.0:** Load demo data → `Demo data loaded` · `… accessMappings: 4 ·
+    groupsCreated: 1` · `KS-DEV → TPENV-4679 · KS-PROD → TPENV-4680`, no warning. Read back in the browser:
+    `kestrel-dev-builders` 1 member (the admin, already there, so no "addedToGroup"), `kestrel-prod-deployers`
+    0 members: the app made the missing group. Whether it went as the app or as the admin isn't recorded; a
+    `[loadDemo] … groups=created=… as=…` log line is added for the fresh-site run.

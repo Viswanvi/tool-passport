@@ -37,6 +37,10 @@ export async function loadDemoData(
   if (!seeded.ok || !deps.ensureGroups) return seeded;
 
   const groups = await deps.ensureGroups();
+  // One line per load, for diagnosing a judge's site: what was made and as whom. No names or account ids.
+  console.log(
+    `[loadDemo] mode=${mode} ${seeded.counts.assetsRecordsCreated ? `assets_created=${seeded.counts.assetsRecordsCreated} ` : ''}groups=${groups.ok ? `created=${groups.created.length} joined=${groups.joined} as=${groups.as}` : 'failed'}`,
+  );
   if (!groups.ok) {
     return {
       ...seeded,
