@@ -982,3 +982,35 @@ timed fresh-site runs, with the human.
     case gave a Yes it should not have.`, then 16 rows, each `Passed`, from `combine() refuses an empty check
     list · 1 of 1` through `13. Injection and pressure · 4 of 4` to `Every result that is not a pass says why ·
     1 of 1`. Forge log: `[runSafety] passed=47/47`. LLM calls: 0.
+- Step 7, `README.md` and `docs/JUDGE_GUIDE.md`. The README replaces the Forge template: what the app does, how an
+  answer is made, the false-Yes suite, the Atlassian parts used, security in short, layout, development commands,
+  and every dependency's licence (spec section 2 rows 6 and 16). The judge guide follows spec section 16: what you
+  need, install and prepare the site, the five setup steps, moments 1-3, the unknown loop, Rovo (optional), Reset
+  demo and a troubleshooting table, with **No Assets?** notes for registry mode at each step.
+  - Navigation checked live in the browser on the demo site, because the old wording was wrong: the setup page is
+    **Jira settings (gear) → Marketplace apps → sidebar Apps → Tool Passport setup** (the old "Apps → Manage
+    apps" now shows "App management has moved to Administration"); the app is **sidebar → Apps → Your apps →
+    Tool Passport**; resolutions are under **Jira settings → Work items → Resolutions**; Assets is **Assets →
+    Schemas → Tool Passport Environments → Tool Environment → KS-DEV**. The app's own three messages that named
+    "Apps → Manage apps" now name the Marketplace apps path (`src/loop/requests.ts`, the Ask page's "No tools
+    yet").
+  - **Setup's "Before you start" corrected** against the fresh-site notes above: the admin trying the demo needs
+    no Customer role (only other askers do); during a new desk's first ~10 minutes, raising requests worked but
+    they opened in the customer portal and couldn't be resolved as an agent (the old text said requests "can
+    fail"); and a site with no resolutions must get Done and Declined, because Jira's agent view refuses to
+    resolve without one (the old text said "Nothing else is needed"). Step 2's no-resolutions message says the
+    same.
+  - The guide's questions asked live on 5.8.0 in KS-DEV: "Does Kestrel Studio support WebSockets for live
+    dashboards?" → **Don't know yet**, `Keep two-way connections open (websockets): No verified answer yet.`,
+    one check; "Can I upload a 3 GB file?" → **No**, `the recorded limit on 13.2 is 2 GB; you asked for 3 GB.`;
+    "Can I embed my dashboard in an internal page?" → **Don't know yet** (the Rovo step's example). The
+    dashboard suggestion → **Not ready** (cached). LLM calls: 3.
+  - `npx vitest run`: `Test Files 31 passed (31)`, `Tests 433 passed (433)`; safety 47/47; tsc, eslint exit 0;
+    `forge lint`: `No issues found.` Deployed 5.8.0 (copy only), eligible for Runs on Atlassian. A scan of both
+    docs found no personal names or emails.
+  - **Not yet run end to end:** the whole guide on a fresh site with a timer (step 8, E9), including the parts not
+    re-run here: the fix and approval resolves on a site where resolutions were just added, the registry-mode
+    edits through My tools → Records, Publish in Open questions, and the version change. The installation link
+    goes in at step 8. The guide leaves out the two-asker privacy check until that test is done.
+  - Demo site state: four new recent questions from these checks; run Reset demo before recording the video.
+  - Open: `package.json` declares MIT but the repo has no LICENSE file (the human decides).

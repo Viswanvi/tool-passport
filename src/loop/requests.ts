@@ -430,9 +430,9 @@ export const RAISE_MESSAGES: Record<RaiseError, string> = {
   not_signed_in: 'Sign in to request a fix.',
   bad_request: 'That request could not be read. Ask the question again.',
   not_found: 'That answer is no longer available. Ask the question again.',
-  not_set_up: "Requests aren't set up yet. A Jira administrator picks the service desk under Apps → Manage apps → Tool Passport setup.",
+  not_set_up: "Requests aren't set up yet. A Jira administrator picks the service desk under Jira settings → Marketplace apps → Tool Passport setup.",
   approvals_not_set_up:
-    "Approvals aren't set up yet. A Jira administrator chooses what means Approved under Apps → Manage apps → Tool Passport setup.",
+    "Approvals aren't set up yet. A Jira administrator chooses what means Approved under Jira settings → Marketplace apps → Tool Passport setup.",
   // D23: raiseOnBehalfOf needs the org-level Jira Service Management Customer role (E5).
   customer_role:
     'Tool Passport can only raise requests for people with the Jira Service Management Customer role. Ask your organization admin to give you that role in Atlassian Administration, then try again.',

@@ -59,17 +59,17 @@ Every requirement on the [Codegeist 2026 rules page](https://codegeist2026.devpo
 | 3 | Runs consistently and works as shown in the video and text | Demo data is created through real APIs; no hard-coded screens; the video follows the judge path | Judge path timed twice in week 5 | Planned |
 | 4 | New project, unpublished before the submission period | Code starts Nov 17, after the Oct 27 start; nothing published earlier | Repository history | Planned |
 | 5 | Choose one category | Apps for Software Teams | Devpost form | Planned |
-| 6 | Authorized to use any third-party SDKs, APIs and data | Atlassian APIs, Forge LLM, and permissively licensed libraries only (React, zod); fictional company and tool | Licence list in the README | Planned |
+| 6 | Authorized to use any third-party SDKs, APIs and data | Atlassian APIs, Forge LLM, and permissively licensed libraries only (React, zod); fictional company and tool | Licence list in the README | Done: README lists every dependency and its licence (Forge SDK: Atlassian Developer Terms; others MIT or Apache-2.0) |
 | 7 | Video under five minutes, showing the project working, public on YouTube | 4:50 script recorded on a real site (section 17) | Upload checklist | Planned |
 | 8 | Video has no third-party trademarks and no copyrighted music without permission | Fictional names (Acorn Bio, Kestrel Studio); no competitor names or logos; no music | Upload checklist | Planned |
 | 9 | Access to a working project for judging, through an installation link made per Atlassian's sharing instructions | Distribution link from the developer console; app stays deployed until results on Feb 15, 2027 | Daily check during judging | Planned |
-| 10 | Detailed setup steps for all configuration and integrations | Judge test path and setup wizard (section 16), with the with-Assets and without-Assets paths | Devpost text | Planned |
+| 10 | Detailed setup steps for all configuration and integrations | Judge test path and setup wizard (section 16), with the with-Assets and without-Assets paths | Devpost text | Written: `docs/JUDGE_GUIDE.md` and the Setup checklist; the timed fresh-site run (E9) is still to do |
 | 11 | Text description of features and functionality | Problem, three moments, feature list | Devpost text, draft by Dec 17 | Planned |
 | 12 | Explanation of how the project meets the technology requirement | Forge modules, Forge SQL, Forge LLM, JSM REST and issue events, Assets REST, Jira groups; Rovo action (P1) | Devpost text | Planned |
 | 13 | Category and bonus selections, with any write-up a bonus needs | Best Agents write-up: `rovo:agent` plus reusable actions | Devpost form | Agent and reusable check built and kept (D42, D43); write-up in Phase 4 |
 | 14 | All materials in English | Video, description and instructions in English | Review | Planned |
 | 15 | Multiple submissions must be substantially different | One submission only | Devpost form | Planned |
-| 16 | Original work; open-source licences followed; adds meaningful features | Own code; permissive licences listed | README | Planned |
+| 16 | Original work; open-source licences followed; adds meaningful features | Own code; permissive licences listed | README | Licences listed in the README; no LICENSE file yet |
 | 17 | No financial or preferential support from Atlassian or Devpost | None taken | Declaration | Planned |
 | 18 | Stage one: viable, fits the theme, uses the required APIs | Fits "Build with context. Ship with confidence.": readiness verdicts built from Atlassian context, with every piece of evidence labelled by its source | Devpost text | Planned |
 | 19 | Submission can't change after the deadline | Submit Dec 20; final checks Dec 18–19 | Section 18 | Planned |

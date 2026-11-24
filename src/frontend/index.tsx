@@ -306,7 +306,7 @@ const AskPage = () => {
   if (tools.length === 0) {
     return (
       <SectionMessage appearance="information" title="No tools yet">
-        <Text>A Jira administrator can load the demo data under Apps → Manage apps → Tool Passport setup.</Text>
+        <Text>A Jira administrator can load the demo data under Jira settings → Marketplace apps → Tool Passport setup.</Text>
       </SectionMessage>
     );
   }
@@ -510,7 +510,7 @@ const ApprovalSetupSection = ({ onSaved }: { onSaved?: () => void }) => {
       {by === 'status' ? (
         <Text>
           {names?.length
-            ? "This site has no Jira resolutions, so the service desk's done statuses decide instead."
+            ? "This site has no Jira resolutions, so the service desk's done statuses decide instead. Jira won't let an agent resolve a request until resolutions exist: add Done and Declined under Jira settings → Work items → Resolutions, then reload this page."
             : 'This site has no Jira resolutions. Choose the service desk under Requests first; its done statuses will decide instead.'}
         </Text>
       ) : null}
@@ -735,9 +735,17 @@ const Checklist = ({ status }: { status: SetupStatus }) => {
 
 const BeforeYouStart = () => (
   <SectionMessage appearance="information" title="Before you start">
-    <Text>Everyone who asks needs the Jira Service Management Customer role, given in Atlassian Administration.</Text>
-    <Text>A service desk you have just created can take about 10 minutes before Jira counts you as one of its agents. Until then requests to it can fail: wait and try again.</Text>
-    <Text>If this site has no Jira resolutions, step 2 uses the service desk&apos;s done statuses instead. Nothing else is needed.</Text>
+    <Text>
+      You need no extra role to try the demo yourself. Other people who ask need the Jira Service Management Customer role, given in Atlassian Administration.
+    </Text>
+    <Text>
+      A service desk you have just created can take about 10 minutes before Jira counts you as one of its agents. Until then its requests open in the customer portal
+      and you can&apos;t resolve them: wait, then reload.
+    </Text>
+    <Text>
+      If Jira settings → Work items → Resolutions is empty on this site, add Done and Declined there before step 2. With no resolutions, Jira won&apos;t let an
+      agent resolve a request.
+    </Text>
     <Text>The Rovo agent needs Rovo turned on for this site. Everything else works without it.</Text>
   </SectionMessage>
 );
