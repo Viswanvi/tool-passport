@@ -936,3 +936,26 @@ timed fresh-site runs, with the human.
     Kestrel Studio.`, `No version changes yet.` LLM calls: 1 (the cache was cleared).
   - Demo site state now: the clean demo of spec section 16 (plus that one question), ready for the video. The
     Jira requests TPD-1…TPD-8 are still in the desk, unlinked. The draft Rovo Studio agent is still there.
+- Step 5, the Setup page as a guided wizard (spec F7, section 13): `src/resolvers/setup-handlers.ts`
+  (`handleSetupStatus`: each step done or to do, read with no writes; `handleChooseModel`: only an active Claude
+  model from the site's live `list()`, saved with `by: 'setup'`), the `setupStatus` and `chooseModel` resolvers
+  (Jira administrators only), and `claudeChoices`, `storedModel`, `chosenInSetup` in `llm/model-choice.ts`. The
+  Setup page now has: a checklist at the top (1 Requests, 2 Approvals, 3 Demo data and its mode, 4 Model and
+  whether it was picked automatically or chosen here, 5 Tests and the last run), a "Before you start" note
+  (Customer role; a new desk takes about 10 minutes; no resolutions → done statuses; Rovo needed only for the
+  agent), the sections numbered in that order, the model step, and "Tools" last. Saving a step, loading the demo
+  or running the tests refreshes the checklist. One request type serves all three kinds (approval and question
+  already fall back to the fix type), and the page says so (D46). The old "arrives in Phase 4" line is gone, and the
+  app no longer repeats the page title Jira already shows.
+  - Tests: `setup-wizard.test.ts` (9). The model-marker tests were red first (`2 failed | 7 passed`); the rest
+    were checked by mutation: admin check removed, any model accepted, a decline-only map counted as done,
+    `automatic` always false, the stored choice ignored, the `by` marker ignored, and not saved: every one `failed`;
+    restored, green. `npx vitest run`: `Test Files 30 passed (30)`, `Tests 424 passed (424)`; safety `Tests 47
+    passed (47)`; tsc, eslint exit 0; `forge lint`: `No issues found.` Deployed 5.3.0, 5.4.0, 5.5.0 (no scope
+    change; each eligible for Runs on Atlassian).
+  - **Live on the demo site, 5.5.0:** Setup shows `Done` for all five: `1. Requests Service desk and request type
+    chosen.`, `2. Approvals Approved when set to "Done".`, `3. Demo data Kestrel Studio loaded with Assets.`,
+    `4. Model claude-haiku-5-5, picked automatically.`, `5. Tests Last run Nov 23, 05:09 PM.` (5.3.0 said "chosen
+    here" for a model the app had stored by itself on first use; fixed in 5.4.0 with the `by` marker). Model step:
+    Save with `claude-haiku-5-5` → `Saved. New questions are read by claude-haiku-5-5.`, the checklist changed to
+    `chosen here` without a reload, and Save greyed out. Both pages show their title once. LLM calls: 0.

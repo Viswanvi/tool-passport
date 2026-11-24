@@ -12,6 +12,8 @@ export const PREFERRED_MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5'] as con
 export interface ModelSetting {
   model: string;
   chosenAt: string;
+  /** 'setup': an administrator chose it. Absent: the app stored it by itself (first use, or a retirement switch). */
+  by?: 'setup';
 }
 
 export interface ModelDeps {
@@ -46,8 +48,17 @@ export function chooseModel(models: unknown, preferred: readonly string[] = PREF
   );
 }
 
-function storedModel(v: unknown): string | null {
+/** The models setup may offer: active Claude models, in the list's order (the manifest declares the family). */
+export function claudeChoices(models: unknown): string[] {
+  return activeModels(models).filter((id) => id.startsWith('claude'));
+}
+
+export function storedModel(v: unknown): string | null {
   return v && typeof v === 'object' && typeof (v as { model?: unknown }).model === 'string' ? (v as ModelSetting).model : null;
+}
+
+export function chosenInSetup(v: unknown): boolean {
+  return storedModel(v) !== null && (v as ModelSetting).by === 'setup';
 }
 
 async function chooseAndStore(deps: ModelDeps): Promise<string | null> {

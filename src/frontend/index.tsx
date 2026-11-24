@@ -34,6 +34,8 @@ import type { RaiseReply, RecheckReply, RequestSetup } from '../loop/requests';
 import type { AskReply } from '../resolvers/handlers';
 import type { Option as DeskOption } from '../resolvers/request-handlers';
 import type { SeedResult } from '../seed/demo';
+import { PREFERRED_MODELS } from '../llm/model-choice';
+import type { SetupStatus } from '../resolvers/setup-handlers';
 
 /**
  * UI Kit screens (spec section 15). The page shows what the resolvers return and decides nothing: verdicts,
@@ -369,7 +371,7 @@ type SaveReply = { ok: true; setup: RequestSetup } | { ok: false; reason: string
 const asOption = (o: DeskOption): Option => ({ label: o.name, value: o.id });
 
 /** Where Request the fix goes. Jira administrators only; the server checks that again on save. */
-const RequestSetupSection = () => {
+const RequestSetupSection = ({ onSaved }: { onSaved?: () => void }) => {
   const [setup, setSetup] = useState<{ current: RequestSetup | null; desks: Option[] } | null>(null);
   const [desk, setDesk] = useState<Option | null>(null);
   const [types, setTypes] = useState<Option[] | null>(null);
@@ -407,6 +409,7 @@ const RequestSetupSection = () => {
     try {
       const r = await call<SaveReply>('saveRequestSetup', { serviceDeskId: desk.value, requestTypeId: type.value });
       setMessage(r.ok ? { ok: true, text: `Fix requests go to ${desk.label} as "${type.label}".` } : { ok: false, text: r.reason });
+      if (r.ok) onSaved?.();
     } catch (e) {
       setMessage({ ok: false, text: String(e) });
     } finally {
@@ -416,10 +419,10 @@ const RequestSetupSection = () => {
 
   return (
     <Stack space="space.150">
-      <Heading as="h2">Requests</Heading>
+      <Heading as="h2">1. Requests</Heading>
       <Text>
-        Request the fix raises a private request in this service desk for the person asking, assigned to the owner. Pick a request type that needs only a summary
-        and a description. Everyone who asks needs the Jira Service Management Customer role, given in Atlassian Administration.
+        Request the fix, Request approval and Ask the owner each raise a private request in this service desk for the person asking. All three use the request type
+        you pick here. Pick one that needs only a summary and a description.
       </Text>
       {setup ? (
         <Inline space="space.200" alignBlock="center" shouldWrap>
@@ -459,7 +462,7 @@ const DECISIONS: Option[] = [
  * Which outcomes decide an approval request: Jira's resolutions, or the desk's done statuses on a site with no
  * resolutions (D41). Unmapped ones never approve (spec section 14).
  */
-const ApprovalSetupSection = () => {
+const ApprovalSetupSection = ({ onSaved }: { onSaved?: () => void }) => {
   const [names, setNames] = useState<string[] | null>(null);
   const [by, setBy] = useState<'resolution' | 'status'>('resolution');
   const [map, setMap] = useState<Record<string, Decision>>({});
@@ -488,6 +491,7 @@ const ApprovalSetupSection = () => {
           ? { ok: true, text: approve.length ? `Saved. Setting an approval request to ${approve.map((n) => `"${n}"`).join(' or ')} approves it.` : 'Saved. Nothing approves yet, so approvals stay off.' }
           : { ok: false, text: r.reason },
       );
+      if (r.ok) onSaved?.();
     } catch (e) {
       setMessage({ ok: false, text: String(e) });
     } finally {
@@ -497,7 +501,7 @@ const ApprovalSetupSection = () => {
 
   return (
     <Stack space="space.150">
-      <Heading as="h2">Approvals</Heading>
+      <Heading as="h2">2. Approvals</Heading>
       <Text>
         Request approval raises a private request for the approver. Choose which outcomes decide it. Anything else leaves the approval pending, and a decision only counts
         when the approver (or the person the request is assigned to) sets it.
@@ -548,7 +552,7 @@ const ApprovalSetupSection = () => {
 const keysText = (keys: Array<{ key: string; value?: unknown }> | null) =>
   keys === null ? 'not covered (unsupported)' : keys.map((k) => (k.value === undefined ? k.key : `${k.key} = ${String(k.value)}`)).join(', ') || 'nothing';
 
-const TestsSection = () => {
+const TestsSection = ({ onRan }: { onRan?: () => void }) => {
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<EvalResult[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -573,13 +577,14 @@ const TestsSection = () => {
       setError(String(e));
     } finally {
       setRunning(false);
+      if (all.length) onRan?.();
     }
   };
 
   const s = results.length ? summarise(EVAL_QUESTIONS, results) : null;
   return (
     <Stack space="space.150">
-      <Heading as="h2">Tests</Heading>
+      <Heading as="h2">5. Tests</Heading>
       <Text>
         Run the 40-question set against the model this app uses. It makes about 40 model calls, which cost money, so a new run can start only 10 minutes after the last.
         Answers are not cached during the run.
@@ -612,15 +617,134 @@ const TestsSection = () => {
   );
 };
 
+// ---- the setup wizard (spec F7): each step shown as done or to do, read from the server --------------------
+
+type StatusReply = SetupStatus | { ok: false; reason: string };
+
+const dayAndTime = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+const StepRow = ({ n, title, done, detail }: { n: number; title: string; done: boolean; detail: string }) => (
+  <Inline space="space.150" alignBlock="center" shouldWrap>
+    <Box xcss={xcss({ width: '64px' })}>
+      <Lozenge appearance={done ? 'success' : 'default'}>{done ? 'Done' : 'To do'}</Lozenge>
+    </Box>
+    <Text weight="bold">{`${n}. ${title}`}</Text>
+    <Text>{detail}</Text>
+  </Inline>
+);
+
+const Checklist = ({ status }: { status: SetupStatus }) => {
+  const { requests, approvals, demo, model, tests } = status;
+  return (
+    <Stack space="space.100">
+      <StepRow n={1} title="Requests" done={requests.done} detail={requests.done ? 'Service desk and request type chosen.' : 'Choose the service desk and request type.'} />
+      <StepRow
+        n={2}
+        title="Approvals"
+        done={approvals.done}
+        detail={approvals.done ? `Approved when set to ${approvals.approve.map((n) => `"${n}"`).join(' or ')}.` : 'Choose which outcome approves a request. Until then approvals stay off.'}
+      />
+      <StepRow
+        n={3}
+        title="Demo data"
+        done={demo.done}
+        detail={demo.done ? (demo.mode === 'registry' ? 'Kestrel Studio loaded in registry mode.' : 'Kestrel Studio loaded with Assets.') : 'Load Kestrel Studio, or add your own tool at the bottom.'}
+      />
+      <StepRow
+        n={4}
+        title="Model"
+        done={model.current !== null}
+        detail={model.current ? `${model.current}, ${model.automatic ? 'picked automatically' : 'chosen here'}.` : 'No Claude model could be read from this site. Reload to try again.'}
+      />
+      <StepRow n={5} title="Tests" done={tests.lastRun !== null} detail={tests.lastRun ? `Last run ${dayAndTime(tests.lastRun)}.` : 'Not run yet.'} />
+    </Stack>
+  );
+};
+
+const BeforeYouStart = () => (
+  <SectionMessage appearance="information" title="Before you start">
+    <Text>Everyone who asks needs the Jira Service Management Customer role, given in Atlassian Administration.</Text>
+    <Text>A service desk you have just created can take about 10 minutes before Jira counts you as one of its agents. Until then requests to it can fail: wait and try again.</Text>
+    <Text>If this site has no Jira resolutions, step 2 uses the service desk&apos;s done statuses instead. Nothing else is needed.</Text>
+    <Text>The Rovo agent needs Rovo turned on for this site. Everything else works without it.</Text>
+  </SectionMessage>
+);
+
+type ChooseReply = { ok: true; model: string } | { ok: false; reason: string };
+
+/** The model step: only active Claude models from this site's live list (spec section 13). */
+const ModelSection = ({ model, onSaved }: { model: SetupStatus['model']; onSaved: () => void }) => {
+  const options: Option[] = model.choices.map((m) => ({ label: m, value: m }));
+  const [picked, setPicked] = useState<Option | null>(null);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const value = picked ?? options.find((o) => o.value === model.current) ?? null;
+
+  const save = async () => {
+    if (!value) return;
+    setBusy(true);
+    try {
+      const r = await call<ChooseReply>('chooseModel', { model: value.value });
+      setMessage(r.ok ? { ok: true, text: `Saved. New questions are read by ${r.model}.` } : { ok: false, text: r.reason });
+      if (r.ok) onSaved();
+    } catch (e) {
+      setMessage({ ok: false, text: String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Stack space="space.150">
+      <Heading as="h2">4. Model</Heading>
+      <Text>
+        {`The model only reads each question into catalog keys and values. Fixed rules decide the answer, and the model never sees facts, rules or groups. Without a choice here, the app uses the first of ${PREFERRED_MODELS.join(', ')} that is active on this site, and moves to the next one by itself if that model is retired.`}
+      </Text>
+      <Text>A new choice applies to questions the app has not read before. Questions it has already read keep their saved reading.</Text>
+      {options.length ? (
+        <Inline space="space.200" alignBlock="center" shouldWrap>
+          <Box xcss={xcss({ width: '280px' })}>
+            <Select options={options} value={value} onChange={(o: Option) => setPicked(o)} placeholder="Model" />
+          </Box>
+          <Button appearance="primary" onClick={() => void save()} isDisabled={busy || !value || (value.value === model.current && !model.automatic)}>
+            Save
+          </Button>
+        </Inline>
+      ) : (
+        <Text>No active Claude model is listed on this site right now.</Text>
+      )}
+      {message ? (
+        <SectionMessage appearance={message.ok ? 'success' : 'warning'}>
+          <Text>{message.text}</Text>
+        </SectionMessage>
+      ) : null}
+    </Stack>
+  );
+};
+
 const SetupPage = () => {
+  const [status, setStatus] = useState<StatusReply | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<SeedResult | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+
+  const reload = () => {
+    void call<StatusReply>('setupStatus')
+      .then(setStatus)
+      .catch((e: unknown) => setStatus({ ok: false, reason: String(e) }));
+  };
+  useEffect(reload, []);
+
   const run = async (resolver: 'loadDemo' | 'resetDemo', payload?: { mode: 'assets' | 'registry' }) => {
     setBusy(true);
     setConfirmReset(false);
     try {
-      setResult(await call<SeedResult>(resolver, payload));
+      const r = await call<SeedResult>(resolver, payload);
+      setResult(r);
+      if (r.ok) reload();
     } catch (e) {
       setResult({ ok: false, reason: String(e) });
     } finally {
@@ -629,72 +753,84 @@ const SetupPage = () => {
   };
   const load = (mode: 'assets' | 'registry') => run('loadDemo', { mode });
   return (
-    <Stack space="space.200">
-      <Text>
-        Load demo data creates the fictional tool Kestrel Studio with KS-DEV and KS-PROD, its catalog, verified facts, policy rules and access
-        mappings. You become its owner. In Assets it creates the Tool Passport Environments schema with the KS-DEV and KS-PROD records, or uses
-        them if they are already there. It is safe to run again.
-      </Text>
-      <Text>
-        No Assets on this site? Load it in registry mode: the environment values are recorded by the owner in Tool Passport instead, and answers
-        label them Recorded by owner, which is weaker evidence than an Assets record.
-      </Text>
-      <Inline space="space.100">
-        <Button appearance="primary" onClick={() => void load('assets')} isDisabled={busy}>
-          Load demo data
-        </Button>
-        <Button onClick={() => void load('registry')} isDisabled={busy}>
-          Load without Assets (registry mode)
-        </Button>
-        <Button appearance="subtle" onClick={() => setConfirmReset(true)} isDisabled={busy}>
-          Reset demo
-        </Button>
-      </Inline>
-      {confirmReset ? (
-        <SectionMessage appearance="warning" title="Reset the demo?">
-          <Text>
-            This deletes everything Tool Passport holds about Kestrel Studio: questions, request records, approvals, version changes, release-note labels,
-            facts, rules and mappings. Then it loads the demo again from the start, and in Assets it puts KS-DEV and KS-PROD back to version 13.2 and
-            their first values. Jira requests already raised stay in the service desk. Other tools are not touched. This can't be undone.
-          </Text>
-          <Inline space="space.100">
-            <Button appearance="danger" onClick={() => void run('resetDemo')}>
-              Yes, reset the demo
-            </Button>
-            <Button appearance="subtle" onClick={() => setConfirmReset(false)}>
-              Cancel
-            </Button>
-          </Inline>
+    <Stack space="space.300">
+      <Text>Work through the steps in order. Each one shows Done once it is set; you can come back and change any of them.</Text>
+      {status === null ? <Spinner /> : null}
+      {status?.ok ? <Checklist status={status} /> : null}
+      {status && !status.ok ? (
+        <SectionMessage appearance="warning">
+          <Text>{status.reason}</Text>
         </SectionMessage>
       ) : null}
-      {busy ? <Spinner /> : null}
-      {result?.ok ? (
-        <SectionMessage appearance="success" title="Demo data loaded">
-          <Text>
-            {Object.entries(result.counts)
-              .map(([k, v]) => `${k}: ${v}`)
-              .join(' · ')}
-          </Text>
-          <Text>{result.environments.map((e) => `${e.name} → ${e.providerRef}`).join(' · ')}</Text>
-        </SectionMessage>
-      ) : null}
-      {result?.ok && result.warnings?.length ? (
-        <SectionMessage appearance="warning" title="One more step">
-          {result.warnings.map((w) => (
-            <Text key={w}>{w}</Text>
-          ))}
-        </SectionMessage>
-      ) : null}
-      {result && !result.ok ? (
-        <SectionMessage appearance="error" title="Demo data not loaded">
-          <Text>{result.reason}</Text>
-        </SectionMessage>
-      ) : null}
+      <BeforeYouStart />
+      <RequestSetupSection onSaved={reload} />
+      <ApprovalSetupSection onSaved={reload} />
+      <Stack space="space.150">
+        <Heading as="h2">3. Demo data</Heading>
+        <Text>
+          Load demo data creates the fictional tool Kestrel Studio with KS-DEV and KS-PROD, its catalog, verified facts, policy rules and access
+          mappings. You become its owner. In Assets it creates the Tool Passport Environments schema with the KS-DEV and KS-PROD records, or uses
+          them if they are already there. It is safe to run again.
+        </Text>
+        <Text>
+          No Assets on this site? Load it in registry mode: the environment values are recorded by the owner in Tool Passport instead, and answers
+          label them Recorded by owner, which is weaker evidence than an Assets record.
+        </Text>
+        <Inline space="space.100">
+          <Button appearance="primary" onClick={() => void load('assets')} isDisabled={busy}>
+            Load demo data
+          </Button>
+          <Button onClick={() => void load('registry')} isDisabled={busy}>
+            Load without Assets (registry mode)
+          </Button>
+          <Button appearance="subtle" onClick={() => setConfirmReset(true)} isDisabled={busy}>
+            Reset demo
+          </Button>
+        </Inline>
+        {confirmReset ? (
+          <SectionMessage appearance="warning" title="Reset the demo?">
+            <Text>
+              This deletes everything Tool Passport holds about Kestrel Studio: questions, request records, approvals, version changes, release-note labels,
+              facts, rules and mappings. Then it loads the demo again from the start, and in Assets it puts KS-DEV and KS-PROD back to version 13.2 and
+              their first values. Jira requests already raised stay in the service desk. Other tools are not touched. This can't be undone.
+            </Text>
+            <Inline space="space.100">
+              <Button appearance="danger" onClick={() => void run('resetDemo')}>
+                Yes, reset the demo
+              </Button>
+              <Button appearance="subtle" onClick={() => setConfirmReset(false)}>
+                Cancel
+              </Button>
+            </Inline>
+          </SectionMessage>
+        ) : null}
+        {busy ? <Spinner /> : null}
+        {result?.ok ? (
+          <SectionMessage appearance="success" title="Demo data loaded">
+            <Text>
+              {Object.entries(result.counts)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(' · ')}
+            </Text>
+            <Text>{result.environments.map((e) => `${e.name} → ${e.providerRef}`).join(' · ')}</Text>
+          </SectionMessage>
+        ) : null}
+        {result?.ok && result.warnings?.length ? (
+          <SectionMessage appearance="warning" title="One more step">
+            {result.warnings.map((w) => (
+              <Text key={w}>{w}</Text>
+            ))}
+          </SectionMessage>
+        ) : null}
+        {result && !result.ok ? (
+          <SectionMessage appearance="error" title="Demo data not loaded">
+            <Text>{result.reason}</Text>
+          </SectionMessage>
+        ) : null}
+      </Stack>
+      {status?.ok ? <ModelSection model={status.model} onSaved={reload} /> : null}
+      <TestsSection onRan={reload} />
       <AddToolSection />
-      <RequestSetupSection />
-      <ApprovalSetupSection />
-      <TestsSection />
-      <Text>The rest of the setup wizard (a request type per kind, model choice) arrives in Phase 4.</Text>
     </Stack>
   );
 };
@@ -898,13 +1034,8 @@ const HomePage = () => {
 const App = () => {
   const context = useProductContext();
   if (!context) return <Spinner />;
-  const isSetup = context.moduleKey === 'passport-setup';
-  return (
-    <Stack space="space.300">
-      <Heading as="h1">{isSetup ? 'Tool Passport setup' : 'Tool Passport'}</Heading>
-      {isSetup ? <SetupPage /> : <HomePage />}
-    </Stack>
-  );
+  // Jira already shows the module title above the page, so the page adds no heading of its own.
+  return context.moduleKey === 'passport-setup' ? <SetupPage /> : <HomePage />;
 };
 
 ForgeReconciler.render(

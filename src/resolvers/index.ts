@@ -8,7 +8,8 @@ import { sqlRequestRepo } from '../db/requests';
 import { getSetting, setSetting } from '../db/store';
 import { EVAL_QUESTIONS } from '../eval/questions';
 import { sqlTranslationStore } from '../db/translations-sql';
-import { labelChat, translationChat } from '../llm/client';
+import { forgeModelDeps, labelChat, translationChat } from '../llm/client';
+import { handleChooseModel, handleSetupStatus, type SetupStatusDeps } from './setup-handlers';
 import { sqlLabelStore } from '../db/labels';
 import { loopDeps, noteEnvironmentVersion, readRequestSetup, readResolutionMap, saveRequestSetup, saveResolutionMap } from '../loop/forge';
 import { listDecisionNames, listDesks, usableRequestTypes } from '../loop/jsm-forge';
@@ -237,5 +238,22 @@ const evalDeps: EvalDeps = {
 };
 
 resolver.define('runEval', ({ payload, context }) => handleRunEval(payload, ctxOf(context), evalDeps));
+
+// ---- Setup wizard status and the model step (spec F7), Jira administrators only ----
+
+const setupStatusDeps: SetupStatusDeps = {
+  check: writeCheck,
+  requestSetup: readRequestSetup,
+  resolutionMap: readResolutionMap,
+  demoTool: () => sqlResetStore.demoTool(),
+  modelSetting: forgeModelDeps.getSetting,
+  listModels: forgeModelDeps.listModels,
+  lastTestRun: evalDeps.lastStart,
+  saveModel: forgeModelDeps.setSetting,
+};
+
+resolver.define('setupStatus', ({ context }) => handleSetupStatus(ctxOf(context), setupStatusDeps));
+
+resolver.define('chooseModel', ({ payload, context }) => handleChooseModel(payload, ctxOf(context), setupStatusDeps));
 
 export const uiResolver = resolver.getDefinitions();
