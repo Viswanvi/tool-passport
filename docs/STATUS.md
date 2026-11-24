@@ -924,4 +924,15 @@ timed fresh-site runs, with the human.
     passed (415)`; safety 47/47; tsc, eslint exit 0; `forge lint`: `No issues found.` Mutation checks: asks
     cleared for every tool → `1 failed`; registry mode touching Assets → `1 failed`; restored, green. Deployed
     5.2.0 (no scope change).
-  - Live: approved ("Yes, reset it") but not run yet: the demo site asked for a new sign-in.
+  - **Live on the demo site, 5.2.0** (human: "Yes, reset it", after signing in again): Setup → Reset demo showed
+    the confirmation ("Reset the demo? … This can't be undone." with "Yes, reset the demo" / Cancel); on Yes:
+    `Demo data loaded` · `tools: 1 · environments: 2 · catalogKeys: 25 · links: 7 · facts: 6 · rules: 8 ·
+    readinessKeys: 2 · accessMappings: 4 · cleared: 119` · `KS-DEV → TPENV-4679 · KS-PROD → TPENV-4680`, no
+    warning. Read back in Assets: TPENV-4679 `Version 13.2`, `Build environments standard`, `Features enabled
+    uploads, scheduling`; TPENV-4680 `13.2`, `standard, frontend`, `uploads, scheduling, single sign-on`. Ask
+    page: no recent questions; "Can I build a custom web front end or dashboard?" in KS-DEV → **Not ready**,
+    `KS-DEV · 13.2`, chips `Assets record`, `Owner-verified · 13.2`, `Mapped access · kestrel-de…`, Request the
+    fix, `next: Needs design review` (the old `Approved · TPD-5` grant is gone). My tools: `No open questions for
+    Kestrel Studio.`, `No version changes yet.` LLM calls: 1 (the cache was cleared).
+  - Demo site state now: the clean demo of spec section 16 (plus that one question), ready for the video. The
+    Jira requests TPD-1…TPD-8 are still in the desk, unlinked. The draft Rovo Studio agent is still there.
