@@ -586,13 +586,108 @@ Started early, right after Phase 2, at the human's request ("Phase 3 next").
     change found by the sweep appearing on Refresh without a tab switch (no new version change was made for
     this; the call it depends on was seen).
 
+### Fresh-site check of P0-1 to P0-4 (spec section 6: the gate before any P1 work), 2026-11-24
+
+The human chose this before F9 ("Fresh-site check first"), because spec section 6 allows P1 features (Rovo, then
+release-note labels) "only after P0-1 to P0-4 pass on a fresh site". Site: `toolpassport` (free developer site from
+the sign-up page, made 2026-11-21 for E2). The app there was already on the latest code (`forge install list`:
+version 4, `Up-to-date`), so no upgrade. The human signed in; everything ran in the browser pane as the admin.
+E9 (Phase 4) now needs another fresh site.
+
+Set up as a customer would (human: "Yes, create all three"):
+- Service desk: Create space → Service management → Basic IT service management, name Tool Passport Desk, key
+  TPD, team type IT, channel access Open (the default). `GET /rest/servicedeskapi/servicedesk`: `{id 1, TPD}`;
+  request types include `1:Get IT help`.
+- Groups `kestrel-dev-builders` (the admin as the only member) and `kestrel-prod-deployers` (empty):
+  `POST /rest/api/3/group` 201, 201; member add 201.
+- Assets: the E2 schema `Tool Passport Environments` (TPENV) with type `Tool Environment` and KS-DEV (TPENV-1,
+  13.2, `standard`) and KS-PROD (TPENV-2, 13.2, `standard, frontend`) was already there and matched.
+- Setup → Load demo data: `Demo data loaded` · `tools: 1 · environments: 2 · catalogKeys: 25 · links: 7 ·
+  facts: 6 · rules: 8 · readinessKeys: 2 · accessMappings: 4` · `KS-DEV → TPENV-1 · KS-PROD → TPENV-2`.
+- Setup → Requests: `Fix requests go to Tool Passport Desk (TPD) as "Get IT help".`
+
+Results:
+- **P0-3 passes here.** Ask → "Can I build a custom web front end or dashboard?" in KS-DEV: **Not ready**,
+  `KS-DEV · 13.2`, "Frontend build isn't set up in KS-DEV.", chips `Assets record · read 08:03 …`,
+  `Owner-verified · 13.2`, `Mapped access · kestrel-de…`, Request the fix, `next: Needs design review`. Log
+  `[ask] state=checked verdict=not_ready cached=false model=claude-haiku-5-5` (02:33:23 UTC). 1 model call.
+- **P0-2 passes here.** KS-DEV Build environments set to `standard, frontend` in Assets (as the admin, PUT 200).
+  Asking again: **Yes, with approval**, "Allowed in KS-DEV with approval: Needs design review." Log
+  `cached=true model=-` (02:38:24). A failed read was not forced here (unit-tested).
+- **P0-1 passes in part.** My tools → Records re-saved KS-DEV unchanged: `Saved.`, log `[edit] environment
+  saved` (02:39:13). A refusal for someone who is not the owner was not tried: there is no second person on this
+  site (unit-tested, `owner-edit.test.ts`).
+- **P0-4 failed here on 4.23.0; fixed in 4.24.0 (D41), see below.**
+  - Request the fix raised **TPD-1** (`[request] fix raised=1`, 02:33:40). Its portal text is right: missing
+    Frontend build, evidence TPENV-1, "When it's in place, resolve this request."
+  - **This site has no Jira resolutions.** `GET /rest/api/3/resolution` → `[]`; Jira's View Resolutions page is
+    empty. The desk's "Resolve this issue" transitions have no post-function that sets one. The loop waits for a
+    resolution (`src/loop/events.ts`: the event needs a `resolution` change; the read-back needs a resolution
+    name), so a resolved request is never noticed. TPD-1, resolved from the portal (the asker may resolve a
+    fix request; any resolver counts for a fix), read back as an agent: `status: Resolved`, category `done`,
+    `resolution: null`, `resolutiondate: null`; changelog `status: Waiting for support -> Resolved` (02:36:45
+    UTC) and `assignee: -> <admin>` (02:33:40: the app's assignment to the owner worked). No app comment
+    followed; the sweeps at 02:36:29 and 02:41:39 both logged `[sweep] requests looked=1 rechecked=0
+    failed=0`.
+  - Approvals can't be set up: Setup → Approvals lists no resolutions to map. Request approval answered
+    "Approvals aren't set up yet. …" (`[request] approval error=approvals_not_set_up`); it fails safe (no request,
+    no Yes), but moment 2 can't finish on a site like this.
+  - For about 10 minutes after creating the desk, the admin was not an agent on it (`SERVICEDESK_AGENT` false
+    although in the roles the scheme grants it to; `/browse/TPD-1` opened the customer portal). At 02:41:28 it
+    was true. A judge who creates a desk and resolves the first request at once may hit this; the guide should
+    say to wait.
+- Small: the "Assets object key" box in Records showed the demo site's key `TPENV-4679` as its example; now
+  "Like TPENV-1" (and the refusal text says "like TPENV-1").
+
+Fix (D41; human: "Done status counts"): a request in a done status with no resolution counts as resolved,
+decided by whoever moved it there; a status change alone triggers the read-back; Setup → Approvals offers the
+desk's done statuses on a site with no resolutions.
+- Tests first, red as expected (15: `TypeError: readOutcome is not a function`, status events `ignored`). Then
+  `npx vitest run`: `Test Files 23 passed (23)`, `Tests 357 passed (357)`; `npx vitest run test/safety`:
+  `Tests 47 passed (47)`. Mutation checks: no done-status outcome → `Tests 3 failed | 354 passed`; status
+  change ignored → `7 failed | 350 passed`; the assignee counted as the decider → `2 failed | 355 passed`
+  (one in the safety suite); restored, green. tsc exit 0, eslint exit 0, `forge lint`: `No issues found.`
+  No manifest change. `forge deploy`: `The version of your app [4.24.0] that was just deployed to
+  [development] is eligible for the Runs on Atlassian program.`
+- **Live on toolpassport, 4.24.0:**
+  - Setup → Approvals: `This site has no Jira resolutions, so the service desk's done statuses decide
+    instead.`, listing Closed, Canceled, Resolved, Completed, Done and more. Resolved → Approved, Canceled →
+    Declined, Save: `Saved. Setting an approval request to "Resolved" approves it.`
+  - Ask (cached, no model call): **Yes, with approval** → Request approval → **TPD-2**, `Approval requested
+    (TPD-2) from <owner>`. Its text: `Set this request to "Resolved" to approve or "Canceled" to decline. Any
+    other outcome leaves the approval pending. …`
+  - As the approver in Jira's agent view, "Resolve this issue" **would not save**: `Resolution is required.`,
+    and the Resolution list said `No matches found`. Jira itself blocks agents on a site with no resolutions.
+  - The same transition through `POST /rest/api/3/issue/TPD-2/transitions` as the approver (the field reported
+    `required: true` with 0 allowed values): **204**, TPD-2 `Resolved`, category `done`, `resolution: null`.
+    Within seconds, TPD-2 got `Tool Passport checked again after this request was resolved. Answer now: Yes.
+    Everything this needs is in place in KS-DEV.`, and the open card turned by itself to **Yes**,
+    `KS-DEV · 13.2`, chips `Owner-verified · 13.2`, `Approved · TPD-2`, `Mapped access · kestrel-de…`. Logs:
+    `[request] approval raised=1` (02:53:52), `[issue-event] TPD-2 rechecked` (02:55:57).
+  - TPD-1 (resolved from the portal under 4.23.0, its event already spent): the first 4.24.0 sweep picked it
+    up (`[sweep] requests looked=1 rechecked=1 failed=0`, 02:56:32). Comment at 02:56:32 UTC: `Tool Passport checked again after this request was resolved. Answer now:
+    Yes. Everything this needs is in place in KS-DEV.` (Yes, since TPD-2 had just been approved.) Not run: a
+    fix request resolved under 4.24.0 through its event; that is the same handler TPD-2 went through.
+  - **P0-4 now passes here, with one condition:** an approver can only resolve in Jira's own screen once the
+    site has resolutions. The judge guide (Phase 4) must say: if Jira settings → Work items → Resolutions is
+    empty, add Done and Declined. The app's done-status path covers portal resolves and the app's own resolving.
+  - LLM calls in the fresh-site check: 1.
+
 ### Not done / untested
 
 - Step 2 (spec section 19 change-detection test): written and green as `changes.test.ts` "the change-detection
   test" (two stale detections at once and a repeat after a crash make one row; the rollback restores No with no
   edits and is its own row), plus `detect.test.ts` from Phase 1. Those use in-memory fakes; against the real
   database only the rollback was run (live, above), not two detections at the same moment.
-- Step 3: release-note labels (F9), only if steps 1-2 are done by Dec 10.
+- Step 3: release-note labels (F9). Its P1 gate (P0-1 to P0-4 on a fresh site) now passes, above; spec
+  section 6 puts Rovo (F8) before it.
+- toolpassport is no longer fresh: Tool Passport Desk (TPD, TPD-1 and TPD-2 resolved), the two kestrel groups,
+  the demo data, KS-DEV Build environments `standard, frontend`, an approved custom UI grant (TPD-2), approvals
+  mapped by status. E9 needs another fresh site.
+- For the judge guide (Phase 4): on a site with no resolutions, Jira's agent view can't resolve anything; tell
+  the admin to add Done and Declined under Jira settings → Work items → Resolutions. A new desk took about 10
+  minutes before its creator counted as an agent.
+- Untested live: a refusal for someone who isn't the owner (no second person on toolpassport).
 - Demo site state now: KS-DEV back on 13.2 (as the seed). New 14.0 verifications: max upload 5 GB, custom web
   front end Yes (copied from 13.2). Four change rows for KS-DEV (13.2 → 14.0 twice, each with 2 items still
   open; 14.0 → 13.2 twice, listed). Several recent questions carry "May have changed". Phase 4's Reset demo must
@@ -600,7 +695,7 @@ Started early, right after Phase 2, at the human's request ("Phase 3 next").
 
 ### Next
 
-- Step 3 (F9 release-note labels): steps 1-2 are done well before Dec 10, so it is in scope. Re-read spec F9
-  first.
+- The P1 gate passed on a fresh site (above, with D41). Spec section 6 order: Rovo (F8, keep-or-drop by
+  Dec 7) first, then F9 release-note labels. Re-read the spec section before either.
 - Still open from Phase 2: Rovo keep-or-drop by Dec 7; the privacy test with Sam signed in; the root commit
   `6693b75` decision before any push.

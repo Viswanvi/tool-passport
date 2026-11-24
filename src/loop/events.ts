@@ -25,14 +25,19 @@ export type EventOutcome = 'ignored' | 'not_ours' | 'unresolved' | 'already' | '
 /** Own properties only: `toString` must not find Object.prototype.toString. */
 const own = (o: unknown, k: string): unknown => (o !== null && typeof o === 'object' && Object.hasOwn(o, k) ? (o as Record<string, unknown>)[k] : undefined);
 
-/** The issue key, and whether a resolution was set (true) or cleared (false); null if no resolution changed. */
+/**
+ * The issue key, and whether the change may have resolved it (true) or only cleared a resolution (false); null
+ * if neither the resolution nor the status changed. A status change alone counts: on a site with no Jira
+ * resolutions, resolving a request changes nothing else (D41, found live). The read-back decides either way.
+ */
 export function resolutionChange(event: unknown): { key: string; resolved: boolean } | null {
   const key = own(own(event, 'issue'), 'key');
   if (typeof key !== 'string' || !key) return null;
   const items = own(own(event, 'changelog'), 'items');
   if (!Array.isArray(items)) return null;
-  const item = items.find((i) => own(i, 'field') === 'resolution' || own(i, 'fieldId') === 'resolution');
-  if (!item) return null;
+  const is = (i: unknown, f: string) => own(i, 'field') === f || own(i, 'fieldId') === f;
+  const item = items.find((i) => is(i, 'resolution'));
+  if (!item) return items.some((i) => is(i, 'status')) ? { key, resolved: true } : null;
   const to = own(item, 'toString') ?? own(item, 'to');
   return { key, resolved: typeof to === 'string' ? to.trim() !== '' : to !== null && to !== undefined };
 }

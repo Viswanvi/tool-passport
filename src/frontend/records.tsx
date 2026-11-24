@@ -93,7 +93,7 @@ const EnvironmentForm = ({ d, save }: { d: Details; save: Save }) => {
         </Field>
         {provider === 'assets' ? (
           <Field label="Assets object key" width={160}>
-            <Input value={ref} onChange={setRef} placeholder="TPENV-4679" />
+            <Input value={ref} onChange={setRef} placeholder="Like TPENV-1" />
           </Field>
         ) : null}
         <Field label="Only for group (optional)" width={200}>

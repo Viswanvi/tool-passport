@@ -4,7 +4,7 @@ import { handleIssueEvent, resolutionChange, sweepRequests } from '../../src/loo
 import { attachOpenRequests, raiseFix, recheckForAsker, routeOwner, type RequestRow } from '../../src/loop/requests';
 import { handleRecheck, handleRequestFix, handleRequestSetup, handleSaveRequestSetup, type SetupDeps } from '../../src/resolvers/request-handlers';
 import { DEV, MARCO, PRIYA, SAM } from '../support/demo-world';
-import { customerRoleError, loopWorld, resolvedEvent } from '../support/fix-world';
+import { customerRoleError, loopWorld, resolvedEvent, statusEvent } from '../support/fix-world';
 
 /**
  * The guided fix (spec F4 and section 11 "Request loop"): Request the fix raises a private request for the
@@ -202,12 +202,34 @@ describe('resolution events (D22)', () => {
     }
   });
 
+  it('a status change alone is worth a read-back: a site with no resolutions sends nothing else (D41, found live)', () => {
+    expect(resolutionChange(statusEvent('TPD-1'))).toEqual({ key: 'TPD-1', resolved: true });
+  });
+
   it('ignores issues the app did not raise, without reading them', async () => {
     const { x } = await raised();
     expect(await handleIssueEvent(resolvedEvent('HR-7'), x.deps)).toBe('not_ours');
-    expect(await handleIssueEvent({ issue: { key: 'TPD-1' }, changelog: { items: [{ field: 'status', toString: 'Waiting' }] } }, x.deps)).toBe('ignored');
+    expect(await handleIssueEvent(statusEvent('HR-7'), x.deps)).toBe('not_ours');
+    expect(await handleIssueEvent({ issue: { key: 'TPD-1' }, changelog: { items: [{ field: 'assignee', toString: 'Marco' }] } }, x.deps)).toBe('ignored');
     expect(x.jsm.resolutionReads).toEqual([]);
     expect(x.jsm.comments).toEqual([]);
+  });
+
+  it('a status change on its own request is read back; one that is not done changes nothing', async () => {
+    const { x } = await raised();
+    expect(await handleIssueEvent(statusEvent('TPD-1', 'In progress'), x.deps)).toBe('unresolved');
+    expect(x.jsm.resolutionReads).toEqual(['TPD-1']);
+    expect(x.jsm.comments).toEqual([]);
+    expect(x.requests.rows[0]!.status).toBe('open');
+  });
+
+  it('on a site with no resolutions, a request moved to a done status is checked again (TPD-1, found live)', async () => {
+    const { x, askId } = await raised();
+    fixFrontend(x);
+    x.jsm.resolutions.set('TPD-1', 'Resolved'); // the read-back's name: no resolution, so the done status
+    expect(await handleIssueEvent(statusEvent('TPD-1'), x.deps)).toBe('rechecked');
+    expect(x.jsm.comments[0]!.body).toContain('Answer now: Yes, with approval.');
+    expect(x.saved).toContainEqual({ askId, verdict: 'yes_with_approval' });
   });
 
   it('trusts the read-back of the issue over the event', async () => {

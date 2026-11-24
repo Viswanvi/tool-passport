@@ -326,11 +326,14 @@ export function decisionNames(map: ResolutionMap | null | undefined): { approved
 
 const quoted = (names: string[]) => names.map((n) => `"${n}"`).join(' or ');
 
-/** How to decide, in the mapped resolution names. Anything else leaves the approval pending. */
+/**
+ * How to decide, in the mapped names. Anything else leaves the approval pending. "Set" fits a resolution and a
+ * done status alike (D41: on a site with no resolutions, setup maps statuses).
+ */
 export function howToDecide(map: ResolutionMap | null | undefined): string {
   const { approved, declined } = decisionNames(map);
   const decline = declined.length ? ` or ${quoted(declined)} to decline` : '';
-  return `Resolve this request as ${quoted(approved)} to approve${decline}.`;
+  return `Set this request to ${quoted(approved)} to approve${decline}.`;
 }
 
 /** An approval request's text, built by code from the stored answer, the policy rule and setup's mapping. */
@@ -351,7 +354,7 @@ export function approvalRequestText(
     `Policy: ${actionName} in ${env} needs approval${reason ? `: ${reason}` : ''}.`,
     `What they want to do: ${x.restated}.`,
     '',
-    `${howToDecide(x.map)} Any other resolution leaves the approval pending. Tool Passport records the decision and adds the new answer here as a comment.`,
+    `${howToDecide(x.map)} Any other outcome leaves the approval pending. Tool Passport records the decision and adds the new answer here as a comment.`,
   ].join('\n');
   return { summary: summary.slice(0, 250), description: description.slice(0, 4000) };
 }
@@ -429,7 +432,7 @@ export const RAISE_MESSAGES: Record<RaiseError, string> = {
   not_found: 'That answer is no longer available. Ask the question again.',
   not_set_up: "Requests aren't set up yet. A Jira administrator picks the service desk under Apps → Manage apps → Tool Passport setup.",
   approvals_not_set_up:
-    "Approvals aren't set up yet. A Jira administrator chooses which resolution means Approved under Apps → Manage apps → Tool Passport setup.",
+    "Approvals aren't set up yet. A Jira administrator chooses what means Approved under Apps → Manage apps → Tool Passport setup.",
   // D23: raiseOnBehalfOf needs the org-level Jira Service Management Customer role (E5).
   customer_role:
     'Tool Passport can only raise requests for people with the Jira Service Management Customer role. Ask your organization admin to give you that role in Atlassian Administration, then try again.',

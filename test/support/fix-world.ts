@@ -327,3 +327,15 @@ export function resolvedEvent(key: string, resolution: string | null = 'Done') {
     jiraEventTypeName: 'issue_generic',
   };
 }
+
+/**
+ * A status change and nothing else, as a site with no Jira resolutions sends it when a request is resolved (D41;
+ * found live on a fresh developer site: TPD-1 went to Resolved with `resolution: null`).
+ */
+export function statusEvent(key: string, to = 'Resolved') {
+  return {
+    issue: { key, fields: { summary: 'x', status: { name: to } } },
+    changelog: { items: [{ field: 'status', fieldId: 'status', from: '10001', fromString: 'Waiting for support', to: '5', toString: to }] },
+    jiraEventTypeName: 'issue_generic',
+  };
+}

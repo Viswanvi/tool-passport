@@ -446,7 +446,7 @@ const RequestSetupSection = () => {
   );
 };
 
-type ResolutionReply = { ok: true; resolutions: DeskOption[]; map: Record<string, unknown> | null } | { ok: false; reason: string };
+type ResolutionReply = { ok: true; by: 'resolution' | 'status'; outcomes: DeskOption[]; map: Record<string, unknown> | null } | { ok: false; reason: string };
 type Decision = 'none' | 'approved' | 'declined';
 
 const DECISIONS: Option[] = [
@@ -455,9 +455,13 @@ const DECISIONS: Option[] = [
   { label: 'Declined', value: 'declined' },
 ];
 
-/** Which resolutions decide an approval request. Unmapped ones never approve (spec section 14). */
+/**
+ * Which outcomes decide an approval request: Jira's resolutions, or the desk's done statuses on a site with no
+ * resolutions (D41). Unmapped ones never approve (spec section 14).
+ */
 const ApprovalSetupSection = () => {
   const [names, setNames] = useState<string[] | null>(null);
+  const [by, setBy] = useState<'resolution' | 'status'>('resolution');
   const [map, setMap] = useState<Record<string, Decision>>({});
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -465,7 +469,8 @@ const ApprovalSetupSection = () => {
   useEffect(() => {
     void call<ResolutionReply>('resolutionSetup').then((r) => {
       if (!r.ok) return setMessage({ ok: false, text: r.reason });
-      setNames(r.resolutions.map((x) => x.name));
+      setBy(r.by);
+      setNames(r.outcomes.map((x) => x.name));
       const current: Record<string, Decision> = {};
       for (const [name, v] of Object.entries(r.map ?? {})) if (v === 'approved' || v === 'declined') current[name] = v;
       setMap(current);
@@ -480,7 +485,7 @@ const ApprovalSetupSection = () => {
       const approve = Object.keys(chosen).filter((n) => chosen[n] === 'approved');
       setMessage(
         r.ok
-          ? { ok: true, text: approve.length ? `Saved. Resolving an approval request as ${approve.map((n) => `"${n}"`).join(' or ')} approves it.` : 'Saved. No resolution approves yet, so approvals stay off.' }
+          ? { ok: true, text: approve.length ? `Saved. Setting an approval request to ${approve.map((n) => `"${n}"`).join(' or ')} approves it.` : 'Saved. Nothing approves yet, so approvals stay off.' }
           : { ok: false, text: r.reason },
       );
     } catch (e) {
@@ -494,9 +499,16 @@ const ApprovalSetupSection = () => {
     <Stack space="space.150">
       <Heading as="h2">Approvals</Heading>
       <Text>
-        Request approval raises a private request for the approver. Choose which resolutions decide it. Any other resolution leaves the approval pending, and a decision
-        only counts when the approver (or the person the request is assigned to) resolves it.
+        Request approval raises a private request for the approver. Choose which outcomes decide it. Anything else leaves the approval pending, and a decision only counts
+        when the approver (or the person the request is assigned to) sets it.
       </Text>
+      {by === 'status' ? (
+        <Text>
+          {names?.length
+            ? "This site has no Jira resolutions, so the service desk's done statuses decide instead."
+            : 'This site has no Jira resolutions. Choose the service desk under Requests first; its done statuses will decide instead.'}
+        </Text>
+      ) : null}
       {names ? (
         <Stack space="space.100">
           {names.map((name) => (

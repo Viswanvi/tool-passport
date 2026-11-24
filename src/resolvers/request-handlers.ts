@@ -109,8 +109,8 @@ export async function handleSaveRequestSetup(payload: unknown, ctx: ResolverCont
 
 export interface ResolutionSetupDeps {
   check: WriteCheck;
-  /** The resolutions Jira has. */
-  resolutions(): Promise<Option[]>;
+  /** The resolutions Jira has, or the desk's done statuses on a site with none (D41). */
+  decisionNames(): Promise<{ by: 'resolution' | 'status'; names: Option[] }>;
   getMap(): Promise<ResolutionMap | null>;
   saveMap(map: Record<string, 'approved' | 'declined'>): Promise<void>;
 }
@@ -120,11 +120,11 @@ const SaveMap = z.object({ map: z.record(z.string().min(1).max(255), z.enum(['ap
 export async function handleResolutionSetup(
   ctx: ResolverContext,
   deps: ResolutionSetupDeps,
-): Promise<{ ok: true; resolutions: Option[]; map: ResolutionMap | null } | Refusal> {
+): Promise<{ ok: true; by: 'resolution' | 'status'; outcomes: Option[]; map: ResolutionMap | null } | Refusal> {
   const refused = await admin(ctx, deps.check);
   if (refused) return refused;
-  const [resolutions, map] = await Promise.all([deps.resolutions(), deps.getMap()]);
-  return { ok: true, resolutions, map };
+  const [{ by, names }, map] = await Promise.all([deps.decisionNames(), deps.getMap()]);
+  return { ok: true, by, outcomes: names, map };
 }
 
 /** Names not mapped are left out of the map, and so never decide anything. */
@@ -132,10 +132,11 @@ export async function handleSaveResolutionMap(payload: unknown, ctx: ResolverCon
   const refused = await admin(ctx, deps.check);
   if (refused) return refused;
   const p = SaveMap.safeParse(payload);
-  if (!p.success) return { ok: false, reason: 'Map each resolution to Approved, Declined or nothing' };
-  const known = new Set((await deps.resolutions()).map((r) => r.name));
+  if (!p.success) return { ok: false, reason: 'Map each outcome to Approved, Declined or nothing' };
+  const { by, names } = await deps.decisionNames();
+  const known = new Set(names.map((r) => r.name));
   const unknown = Object.keys(p.data.map).filter((n) => !known.has(n));
-  if (unknown.length) return { ok: false, reason: `Jira has no resolution named ${unknown.map((n) => `"${n}"`).join(', ')}` };
+  if (unknown.length) return { ok: false, reason: `There is no ${by === 'resolution' ? 'resolution' : 'done status'} named ${unknown.map((n) => `"${n}"`).join(', ')}` };
   await deps.saveMap(p.data.map);
   return { ok: true };
 }

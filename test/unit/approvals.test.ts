@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { handleIssueEvent, sweepRequests } from '../../src/loop/events';
 import { raiseApproval, recheckForAsker } from '../../src/loop/requests';
-import { resolvedBy } from '../../src/loop/resolution';
+import { doneStatusNames, readOutcome, resolvedBy } from '../../src/loop/resolution';
 import { handleRequestApproval, handleResolutionSetup, handleSaveResolutionMap, type ResolutionSetupDeps } from '../../src/resolvers/request-handlers';
 import { DEV, MARCO, PRIYA, PROD, SAM } from '../support/demo-world';
-import { loopWorld, resolvedEvent } from '../support/fix-world';
+import { loopWorld, resolvedEvent, statusEvent } from '../support/fix-world';
 
 /**
  * Approvals through the request loop (spec F4, sections 11 and 14). Request approval raises a private request
@@ -45,8 +45,9 @@ describe('Request approval', () => {
     expect(c).toMatchObject({ serviceDeskId: '14', requestTypeId: '320', raiseOnBehalfOf: PRIYA });
     expect(c.summary).toBe('Approval needed in KS-DEV: custom ui (Needs design review)');
     expect(c.description).toContain('Needs design review');
-    expect(c.description).toContain('Resolve this request as "Done" to approve or "Declined" to decline.');
-    expect(c.description).toContain('Any other resolution leaves the approval pending.');
+    // Worded for a resolution or a status (D41).
+    expect(c.description).toContain('Set this request to "Done" to approve or "Declined" to decline.');
+    expect(c.description).toContain('Any other outcome leaves the approval pending.');
     // The rule's route is one this code doesn't know: the tool owner gets it.
     expect(x.jsm.assigned).toEqual([{ issueKey: 'TPD-1', accountId: MARCO }]);
     expect(x.requests.rows[0]).toMatchObject({ kind: 'approval', target: 'approval:custom_ui', status: 'open', askerAccountId: PRIYA });
@@ -204,6 +205,85 @@ describe('approval decisions', () => {
     expect(await sweepRequests(x.deps, 25)).toMatchObject({ looked: 1, rechecked: 1 });
     expect(x.w.grants[0]).toMatchObject({ status: 'approved' });
   });
+
+  // D41: a site with no Jira resolutions (found live on a fresh developer site). Setup maps done statuses, and a
+  // status change alone brings the request back to the app.
+  it('on a site with no resolutions, the approver moving it to a mapped done status decides it', async () => {
+    const { x, askId } = await requested();
+    x.setResolutionMap({ Resolved: 'approved', Canceled: 'declined' });
+    x.jsm.resolutions.set('TPD-1', 'Resolved'); // the read-back: no resolution, status Resolved (done)
+    x.jsm.resolvedBy.set('TPD-1', MARCO);
+    expect(await handleIssueEvent(statusEvent('TPD-1'), x.deps)).toBe('rechecked');
+    expect(x.w.grants[0]).toMatchObject({ requestKey: 'TPD-1', status: 'approved' });
+    expect(await recheckForAsker(askId, PRIYA, x.deps)).toMatchObject({ ok: true, card: { verdict: 'yes' } });
+  });
+
+  it('on a site with no resolutions, Canceled by the approver declines, and the asker moving it decides nothing', async () => {
+    const declined = await requested();
+    declined.x.setResolutionMap({ Resolved: 'approved', Canceled: 'declined' });
+    declined.x.jsm.resolutions.set('TPD-1', 'Canceled');
+    declined.x.jsm.resolvedBy.set('TPD-1', MARCO);
+    expect(await handleIssueEvent(statusEvent('TPD-1', 'Canceled'), declined.x.deps)).toBe('rechecked');
+    expect(declined.x.w.grants[0]).toMatchObject({ status: 'declined' });
+
+    const own = await requested();
+    own.x.setResolutionMap({ Resolved: 'approved', Canceled: 'declined' });
+    own.x.jsm.resolutions.set('TPD-1', 'Resolved');
+    own.x.jsm.resolvedBy.set('TPD-1', PRIYA); // the asker, from the portal's "Resolve this issue"
+    expect(await handleIssueEvent(statusEvent('TPD-1'), own.x.deps)).toBe('undecided');
+    expect(own.x.w.grants[0]).toMatchObject({ status: 'pending' });
+  });
+});
+
+describe('reading a request back (D41)', () => {
+  const at = (created: string, accountId: string | null, items: unknown[]) => ({ created, author: accountId ? { accountId } : {}, items });
+  const status = (id: string, name: string, key: string) => ({ id, name, statusCategory: { key } });
+  const moved = (to: string, toString: string, fromString = 'Waiting for support') => ({ field: 'status', fieldtype: 'jira', from: '10001', fromString, to, toString });
+
+  it('a resolution wins, with whoever set it', () => {
+    const body = {
+      fields: { resolution: { id: '1', name: 'Done' }, status: status('5', 'Resolved', 'done'), assignee: { accountId: MARCO } },
+      changelog: { histories: [at('2026-11-23T03:59:00.000-0500', ANA, [{ field: 'resolution', to: '1', toString: 'Done' }, moved('5', 'Resolved')])] },
+    };
+    expect(readOutcome(body)).toEqual({ name: 'Done', resolvedBy: ANA, assignee: MARCO });
+  });
+
+  it('with no resolution, a done status counts, decided by whoever last moved it there (TPD-1, found live)', () => {
+    const body = {
+      fields: { resolution: null, status: status('5', 'Resolved', 'done'), assignee: { accountId: MARCO } },
+      changelog: {
+        histories: [
+          at('2026-11-24T08:03:40.513+0530', null, [{ field: 'assignee', toString: 'x' }]),
+          at('2026-11-24T08:04:00.000+0530', MARCO, [moved('5', 'Resolved')]),
+          at('2026-11-24T08:05:00.000+0530', SAM, [moved('3', 'In progress', 'Resolved')]),
+          at('2026-11-24T08:06:45.527+0530', PRIYA, [moved('5', 'Resolved', 'In progress')]),
+        ],
+      },
+    };
+    expect(readOutcome(body)).toEqual({ name: 'Resolved', resolvedBy: PRIYA, assignee: MARCO });
+  });
+
+  it('a status that is not done, or a body that does not read, is no outcome', () => {
+    const open = { fields: { resolution: null, status: status('10001', 'Waiting for support', 'indeterminate') }, changelog: { histories: [at('2026-11-24T08:04:00.000+0530', MARCO, [moved('10001', 'Waiting for support')])] } };
+    expect(readOutcome(open)).toEqual({ name: null, resolvedBy: null, assignee: null });
+    for (const junk of [null, undefined, 'x', {}, { fields: { status: { name: 'Resolved' } } }, { fields: { status: status('5', '', 'done') } }]) {
+      expect(readOutcome(junk)).toMatchObject({ name: null, resolvedBy: null });
+    }
+  });
+
+  it('a done status nobody can be named for has no author, so it decides no approval', () => {
+    const body = { fields: { resolution: null, status: status('5', 'Resolved', 'done') }, changelog: { histories: [at('2026-11-24T08:04:00.000+0530', null, [moved('5', 'Resolved')])] } };
+    expect(readOutcome(body)).toEqual({ name: 'Resolved', resolvedBy: null, assignee: null });
+  });
+
+  it("a desk's done statuses, once each, from the project's statuses", () => {
+    const body = [
+      { id: '10', name: 'Service Request', statuses: [status('10001', 'Waiting for support', 'indeterminate'), status('5', 'Resolved', 'done'), status('10006', 'Canceled', 'done')] },
+      { id: '11', name: 'Incident', statuses: [status('5', 'Resolved', 'done'), status('6', 'Closed', 'done'), status('3', 'In progress', 'indeterminate')] },
+    ];
+    expect(doneStatusNames(body)).toEqual(['Resolved', 'Canceled', 'Closed']);
+    for (const junk of [null, 'x', {}, [{ statuses: 'x' }]]) expect(doneStatusNames(junk)).toEqual([]);
+  });
 });
 
 describe('who resolved it, from the changelog', () => {
@@ -241,15 +321,23 @@ describe('approval resolvers', () => {
 });
 
 describe('resolution mapping (Jira administrators only)', () => {
-  function deps(admin: boolean) {
+  function deps(admin: boolean, by: 'resolution' | 'status' = 'resolution') {
     const saved: unknown[] = [];
+    const names =
+      by === 'resolution'
+        ? [
+            { id: '1', name: 'Done' },
+            { id: '2', name: "Won't Do" },
+            { id: '3', name: 'Declined' },
+          ]
+        : [
+            { id: '5', name: 'Resolved' },
+            { id: '10006', name: 'Canceled' },
+            { id: '6', name: 'Closed' },
+          ];
     const d: ResolutionSetupDeps = {
       check: { isJiraAdmin: async () => admin },
-      resolutions: async () => [
-        { id: '1', name: 'Done' },
-        { id: '2', name: "Won't Do" },
-        { id: '3', name: 'Declined' },
-      ],
+      decisionNames: async () => ({ by, names }),
       getMap: async () => null,
       saveMap: async (m) => {
         saved.push(m);
@@ -257,6 +345,14 @@ describe('resolution mapping (Jira administrators only)', () => {
     };
     return { d, saved };
   }
+
+  it("on a site with no resolutions, offers the desk's done statuses and saves only those (D41)", async () => {
+    const { d, saved } = deps(true, 'status');
+    expect(await handleResolutionSetup({ accountId: MARCO }, d)).toMatchObject({ ok: true, by: 'status', outcomes: [{ name: 'Resolved' }, { name: 'Canceled' }, { name: 'Closed' }] });
+    expect(await handleSaveResolutionMap({ map: { Done: 'approved' } }, { accountId: MARCO }, d)).toMatchObject({ ok: false });
+    expect(await handleSaveResolutionMap({ map: { Resolved: 'approved', Canceled: 'declined' } }, { accountId: MARCO }, d)).toMatchObject({ ok: true });
+    expect(saved).toEqual([{ Resolved: 'approved', Canceled: 'declined' }]);
+  });
 
   it('refuses anyone who is not a Jira administrator', async () => {
     const { d, saved } = deps(false);
@@ -273,6 +369,6 @@ describe('resolution mapping (Jira administrators only)', () => {
     expect(saved).toEqual([]);
     expect(await handleSaveResolutionMap({ map: { Done: 'approved', Declined: 'declined' } }, { accountId: MARCO }, d)).toMatchObject({ ok: true });
     expect(saved).toEqual([{ Done: 'approved', Declined: 'declined' }]);
-    expect(await handleResolutionSetup({ accountId: MARCO }, d)).toMatchObject({ ok: true, resolutions: [{ name: 'Done' }, { name: "Won't Do" }, { name: 'Declined' }] });
+    expect(await handleResolutionSetup({ accountId: MARCO }, d)).toMatchObject({ ok: true, by: 'resolution', outcomes: [{ name: 'Done' }, { name: "Won't Do" }, { name: 'Declined' }] });
   });
 });

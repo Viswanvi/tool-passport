@@ -1,7 +1,7 @@
 import { route } from '@forge/api';
 import { call, field, list, requester, text } from '../providers/assets-api';
 import { JsmError, type JsmClient } from './requests';
-import { resolvedBy } from './resolution';
+import { doneStatusNames, readOutcome } from './resolution';
 
 /**
  * Jira Service Management calls, all as the app. Raising on behalf of the asker, assigning, and reading the
@@ -48,14 +48,9 @@ export const forgeJsm: JsmClient = {
   },
 
   async resolution(issueKey) {
-    const res = await call(app, 'read resolution', route`/rest/api/3/issue/${checkKey(issueKey)}?fields=resolution,assignee&expand=changelog`);
+    const res = await call(app, 'read resolution', route`/rest/api/3/issue/${checkKey(issueKey)}?fields=resolution,status,assignee&expand=changelog`);
     if (!res.step.ok) throw new Error(`read ${issueKey}: ${res.step.status ?? 'no reply'} ${res.step.note ?? ''}`);
-    const fields = field(res.body, 'fields');
-    return {
-      name: text(field(field(fields, 'resolution'), 'name')) ?? null,
-      resolvedBy: resolvedBy(field(field(res.body, 'changelog'), 'histories')),
-      assignee: text(field(field(fields, 'assignee'), 'accountId')) ?? null,
-    };
+    return readOutcome(res.body);
   },
 
   async resolve(issueKey) {
@@ -95,6 +90,23 @@ export async function listResolutions(): Promise<DeskOption[]> {
     const name = text(field(r, 'name'));
     return id && name ? [{ id, name }] : [];
   });
+}
+
+/**
+ * The names that can decide an approval: Jira's resolutions, or, on a site with none, the chosen desk's done
+ * statuses (D41: a fresh developer site has no resolutions, found live). No desk chosen yet: none.
+ */
+export async function listDecisionNames(serviceDeskId: string | null): Promise<{ by: 'resolution' | 'status'; names: DeskOption[] }> {
+  const resolutions = await listResolutions();
+  if (resolutions.length) return { by: 'resolution', names: resolutions };
+  if (!serviceDeskId) return { by: 'status', names: [] };
+  const desk = await call(app, 'read service desk', route`/rest/servicedeskapi/servicedesk/${serviceDeskId}`);
+  if (!desk.step.ok) throw new Error(`service desk: ${desk.step.status ?? 'no reply'}`);
+  const projectId = text(field(desk.body, 'projectId'));
+  if (!projectId) throw new Error('The service desk reply had no project');
+  const statuses = await call(app, 'list desk statuses', route`/rest/api/3/project/${projectId}/statuses`);
+  if (!statuses.step.ok) throw new Error(`statuses: ${statuses.step.status ?? 'no reply'}`);
+  return { by: 'status', names: doneStatusNames(statuses.body).map((name) => ({ id: name, name })) };
 }
 
 // ---- setup lists ----

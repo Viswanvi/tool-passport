@@ -10,7 +10,7 @@ import { EVAL_QUESTIONS } from '../eval/questions';
 import { sqlTranslationStore } from '../db/translations-sql';
 import { translationChat } from '../llm/client';
 import { loopDeps, noteEnvironmentVersion, readRequestSetup, readResolutionMap, saveRequestSetup, saveResolutionMap } from '../loop/forge';
-import { listDesks, listResolutions, usableRequestTypes } from '../loop/jsm-forge';
+import { listDecisionNames, listDesks, usableRequestTypes } from '../loop/jsm-forge';
 import { findPassportObjectKey, readGroups } from '../providers/forge';
 import type { WriteCheck } from '../registry/authorise';
 import { sqlRegistryWriter } from '../registry/write';
@@ -167,7 +167,8 @@ resolver.define('saveRequestSetup', ({ payload, context }) => handleSaveRequestS
 
 const resolutionDeps: ResolutionSetupDeps = {
   check: writeCheck,
-  resolutions: listResolutions,
+  // On a site with no resolutions, the done statuses of the desk chosen under Requests (D41).
+  decisionNames: async () => listDecisionNames((await readRequestSetup())?.serviceDeskId ?? null),
   getMap: readResolutionMap,
   saveMap: saveResolutionMap,
 };

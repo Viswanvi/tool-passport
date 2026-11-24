@@ -4,14 +4,15 @@ import type { CheckResult, Groups } from '../../src/engine/model';
 import { combine } from '../../src/engine/verdict';
 import { handleIssueEvent } from '../../src/loop/events';
 import { raiseApproval, recheckForAsker } from '../../src/loop/requests';
-import { approvalOutcome } from '../../src/loop/resolution';
-import { loopWorld, resolvedEvent } from '../support/fix-world';
+import { approvalOutcome, readOutcome } from '../../src/loop/resolution';
+import { loopWorld, resolvedEvent, statusEvent } from '../support/fix-world';
 import {
   askInput,
   DASHBOARD,
   demoWorld,
   depsFor,
   DEV,
+  MARCO,
   modelReplying,
   modelThrowing,
   picks,
@@ -428,6 +429,30 @@ describe('false-Yes suite', () => {
         expect(card).toMatchObject({ ok: true, card: { verdict: 'yes_with_approval' } });
         if (card.ok) expect(card.card.verdict).not.toBe('yes');
       }
+    });
+
+    // D41: a site with no resolutions maps done statuses. The portal lets the asker "Resolve this issue", so the
+    // asker moving their own approval request to a mapped status (or nobody nameable) must decide nothing.
+    it('on a site with no resolutions, the asker moving their own request to a mapped status never makes Yes', async () => {
+      for (const by of [PRIYA, null]) {
+        const x = loopWorld();
+        x.setResolutionMap({ Resolved: 'approved', Canceled: 'declined' });
+        x.w.records.get(DEV)!['Build environments'] = ['standard', 'frontend'];
+        const askId = x.addAsk(DEV);
+        expect(await raiseApproval(askId, PRIYA, x.deps)).toMatchObject({ ok: true, raised: ['TPD-1'] });
+        x.jsm.resolutions.set('TPD-1', 'Resolved');
+        x.jsm.resolvedBy.set('TPD-1', by);
+        expect(await handleIssueEvent(statusEvent('TPD-1'), x.deps)).toBe('undecided');
+        const card = await recheckForAsker(askId, PRIYA, x.deps);
+        expect(card).toMatchObject({ ok: true, card: { verdict: 'yes_with_approval' } });
+        if (card.ok) expect(card.card.verdict).not.toBe('yes');
+      }
+      // And the read-back names the person who moved it, never the assignee or the reporter.
+      const body = {
+        fields: { resolution: null, status: { id: '5', name: 'Resolved', statusCategory: { key: 'done' } }, assignee: { accountId: MARCO }, reporter: { accountId: MARCO } },
+        changelog: { histories: [{ created: '2026-11-24T08:06:45.527+0530', author: { accountId: PRIYA }, items: [{ field: 'status', to: '5', toString: 'Resolved' }] }] },
+      };
+      expect(readOutcome(body)).toMatchObject({ name: 'Resolved', resolvedBy: PRIYA });
     });
   });
 

@@ -134,7 +134,7 @@ export async function applyEdit(edit: Edit, tool: Tool, actor: string, deps: App
     case 'environment': {
       const existing = environments.find((e) => e.name === edit.name);
       if (edit.provider === 'assets') {
-        if (!edit.providerRef || !OBJECT_KEY.test(edit.providerRef)) return refuse('An Assets environment needs the object key of its record, like TPENV-4679');
+        if (!edit.providerRef || !OBJECT_KEY.test(edit.providerRef)) return refuse('An Assets environment needs the object key of its record, like TPENV-1');
         if (edit.recordedValues) return refuse('An Assets environment reads its values from the record, not from recorded values');
       } else if (!edit.recordedValues || Object.keys(edit.recordedValues).length === 0) {
         return refuse('A registry environment needs its recorded values');
