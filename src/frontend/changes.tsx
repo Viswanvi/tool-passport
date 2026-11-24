@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Button, Heading, Inline, Lozenge, SectionMessage, Select, Spinner, Stack, Text, Textfield, xcss } from '@forge/react';
+import { Box, Button, Heading, Inline, Lozenge, SectionMessage, Select, Spinner, Stack, Text, TextArea, Textfield, xcss } from '@forge/react';
+import type { LabelKind } from '../change/release-notes';
 import type { ChangeView, RecentAsk } from '../resolvers/change-handlers';
 import { call, cardStyle, type Option } from './common';
 
@@ -21,6 +22,19 @@ const YES_NO: Option[] = [
   { label: 'Yes', value: 'yes' },
   { label: 'No', value: 'no' },
 ];
+
+/** Release-note labels (F9): suggestions only, worded so they never read as a verification. */
+const SUGGESTION: Record<LabelKind, { text: string; appearance: 'success' | 'moved' | 'removed' | 'default' }> = {
+  still_true: { text: 'Notes: still true', appearance: 'success' },
+  changed: { text: 'Notes: changed', appearance: 'moved' },
+  removed: { text: 'Notes: removed', appearance: 'removed' },
+  cant_tell: { text: "Notes don't say", appearance: 'default' },
+};
+
+/** The labeller's limit (MAX_NOTES_CHARS in change/release-notes.ts; not imported, it pulls server code in). */
+const MAX_NOTES = 20000;
+
+type LabelReply = { ok: true; labelled: number; grounded: number } | { ok: false; reason: string };
 
 /** "Changed": the new value for the new version, saved through the same fact write as My tools → Records. */
 const ChangedForm = ({ toolId, to, fact, onDone }: { toolId: number; to: string; fact: ChangeView['toRecheck'][number]; onDone: (text: string, ok: boolean) => void }) => {
@@ -61,8 +75,27 @@ export const ChangesSection = ({ toolId, refreshKey }: { toolId: number; refresh
   const [data, setData] = useState<ChangesReply | null>(null);
   const [changing, setChanging] = useState<string | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [notes, setNotes] = useState<Record<number, string>>({});
+  const [labelling, setLabelling] = useState<number | null>(null);
   const load = () => void call<ChangesReply>('changes', { toolId }).then(setData);
   useEffect(load, [toolId, refreshKey]);
+
+  const suggest = async (changeId: number) => {
+    setLabelling(changeId);
+    try {
+      const r = await call<LabelReply>('releaseNotes', { changeId, notes: notes[changeId] ?? '' });
+      setMessage(
+        r.ok
+          ? { ok: true, text: `Suggested a label for ${r.labelled} ${r.labelled === 1 ? 'fact' : 'facts'} (${r.grounded} with a quote from the notes). Check each one, then choose Still true or Changed.` }
+          : { ok: false, text: r.reason },
+      );
+      if (r.ok) load();
+    } catch (e) {
+      setMessage({ ok: false, text: String(e) });
+    } finally {
+      setLabelling(null);
+    }
+  };
 
   const done = (text: string, ok: boolean) => {
     setMessage({ ok, text });
@@ -108,9 +141,33 @@ export const ChangesSection = ({ toolId, refreshKey }: { toolId: number; refresh
                     Changed
                   </Button>
                 </Inline>
+                {f.suggestion ? (
+                  <Inline space="space.100" alignBlock="center" shouldWrap>
+                    <Lozenge appearance={SUGGESTION[f.suggestion.label].appearance}>{SUGGESTION[f.suggestion.label].text}</Lozenge>
+                    {f.suggestion.quote ? <Text size="small">{`“${f.suggestion.quote}”`}</Text> : null}
+                  </Inline>
+                ) : null}
                 {changing === `${c.id}:${f.factId}` ? <ChangedForm toolId={toolId} to={c.to} fact={f} onDone={done} /> : null}
               </Stack>
             ))}
+            {c.status === 'listed' && c.toRecheck.length ? (
+              <Stack space="space.050">
+                <Text size="small">{`Release notes for ${c.to} (optional): paste them to get a suggested label for each fact, with the line that shows it. Nothing is fetched, and nothing is verified until you choose Still true or Changed.`}</Text>
+                <TextArea
+                  value={notes[c.id] ?? ''}
+                  placeholder={`Paste the ${c.to} release notes`}
+                  minimumRows={3}
+                  maxLength={MAX_NOTES}
+                  onChange={(e) => setNotes({ ...notes, [c.id]: String(e.target.value ?? '') })}
+                />
+                <Inline space="space.100" alignBlock="center">
+                  <Button onClick={() => void suggest(c.id)} isDisabled={labelling !== null || !(notes[c.id] ?? '').trim()}>
+                    Suggest labels
+                  </Button>
+                  {labelling === c.id ? <Spinner /> : null}
+                </Inline>
+              </Stack>
+            ) : null}
             <Text size="small">
               {`Not listed: ${c.notListed} ${c.notListed === 1 ? 'fact that doesn’t' : 'facts that don’t'} depend on the version. Policy rules untouched: ${c.rulesUntouched}. Other environments untouched: ${c.otherEnvironments.join(', ') || 'none'}.`}
             </Text>

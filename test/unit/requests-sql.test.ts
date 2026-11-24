@@ -32,6 +32,7 @@ vi.mock('@forge/sql', () => ({
 const { sqlRequestRepo, isDuplicateKey } = await import('../../src/db/requests');
 const { loadAsk, purgeOldQuestions, recentAsksFor, saveAskResult } = await import('../../src/db/asks');
 const { sqlChangeRepo, utcIso } = await import('../../src/db/changes');
+const { sqlLabelStore } = await import('../../src/db/labels');
 const { sqlApprovalStore } = await import('../../src/db/approvals');
 
 beforeEach(() => {
@@ -189,6 +190,30 @@ describe('version changes', () => {
     expect(asks).toMatch(/ORDER BY created_at DESC, id DESC LIMIT 500$/);
     expect(mine).toMatch(/ORDER BY created_at DESC, id DESC LIMIT 10$/);
     expect(questions).toMatch(/ORDER BY created_at ASC, id ASC LIMIT 50$/);
+  });
+
+  it('release-note labels: saved in one statement that is safe to repeat (a new paste replaces them), read back strictly', async () => {
+    await sqlLabelStore.saveLabels([]);
+    expect(statements).toHaveLength(0);
+    replies.push({ affectedRows: 2 });
+    await sqlLabelStore.saveLabels([
+      { changeId: 3, factId: 11, label: 'changed', quote: 'now 5 GB', modelId: 'm' },
+      { changeId: 3, factId: 12, label: 'cant_tell', quote: null, modelId: 'm' },
+    ]);
+    expect(statements[0]!.query).toMatch(/INSERT INTO release_labels \(change_id, fact_id, label, quote, model_id\) VALUES \(\?, \?, \?, \?, \?\), \(\?, \?, \?, \?, \?\) ON DUPLICATE KEY UPDATE label = VALUES\(label\), quote = VALUES\(quote\), model_id = VALUES\(model_id\)/);
+    expect(statements[0]!.params).toEqual([3, 11, 'changed', 'now 5 GB', 'm', 3, 12, 'cant_tell', null, 'm']);
+    expect(await sqlLabelStore.labelsFor([])).toEqual([]);
+    replies.push([
+      { change_id: 3, fact_id: 11, label: 'changed', quote: 'now 5 GB', model_id: 'm' },
+      { change_id: '3', fact_id: '12', label: 'cant_tell', quote: null, model_id: null },
+    ]);
+    expect(await sqlLabelStore.labelsFor([3, 4])).toEqual([
+      { changeId: 3, factId: 11, label: 'changed', quote: 'now 5 GB', modelId: 'm' },
+      { changeId: 3, factId: 12, label: 'cant_tell', quote: null, modelId: null },
+    ]);
+    expect(statements[1]!.query).toContain('WHERE change_id IN (?, ?)');
+    replies.push([{ change_id: 3, fact_id: 11, label: 'approved', quote: null, model_id: null }]);
+    await expect(sqlLabelStore.labelsFor([3])).rejects.toThrow();
   });
 
   it('a change time without a zone is read as UTC (found live)', () => {

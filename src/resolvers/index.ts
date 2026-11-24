@@ -8,7 +8,8 @@ import { sqlRequestRepo } from '../db/requests';
 import { getSetting, setSetting } from '../db/store';
 import { EVAL_QUESTIONS } from '../eval/questions';
 import { sqlTranslationStore } from '../db/translations-sql';
-import { translationChat } from '../llm/client';
+import { labelChat, translationChat } from '../llm/client';
+import { sqlLabelStore } from '../db/labels';
 import { loopDeps, noteEnvironmentVersion, readRequestSetup, readResolutionMap, saveRequestSetup, saveResolutionMap } from '../loop/forge';
 import { listDecisionNames, listDesks, usableRequestTypes } from '../loop/jsm-forge';
 import { findPassportObjectKey, readGroups } from '../providers/forge';
@@ -16,7 +17,7 @@ import type { WriteCheck } from '../registry/authorise';
 import { sqlRegistryWriter } from '../registry/write';
 import { seedDemo } from '../seed/demo';
 import { handleAsk, handleEnvironments, handleLoadDemo, handleTools, type AskHandlerDeps, type ResolverContext } from './handlers';
-import { handleChanges, handleRecentAsks, handleStillTrue, type ChangeDeps } from './change-handlers';
+import { handleChanges, handleRecentAsks, handleReleaseNotes, handleStillTrue, type ChangeDeps } from './change-handlers';
 import { handleCreateTool, handleEdit, handleToolDetails, type EditDeps } from './edit-handlers';
 import { handleRunEval, type EvalDeps } from './eval-handlers';
 import { handleMyTools, handleOpenQuestions, handlePublishAnswer, type OwnerDeps } from './owner-handlers';
@@ -136,11 +137,16 @@ const changeDeps: ChangeDeps = {
   check: writeCheck,
   listEnvironments,
   loadRegistry,
+  labels: sqlLabelStore,
+  labelChat,
 };
 
 resolver.define('changes', ({ payload, context }) => handleChanges(payload, ctxOf(context), changeDeps));
 
 resolver.define('stillTrue', ({ payload, context }) => handleStillTrue(payload, ctxOf(context), changeDeps));
+
+// Release-note labels (spec F9): one model call per paste, owner or Jira administrator only.
+resolver.define('releaseNotes', ({ payload, context }) => handleReleaseNotes(payload, ctxOf(context), changeDeps));
 
 resolver.define('recentAsks', ({ context }) => handleRecentAsks(ctxOf(context), { recentAsksFor, loadTool, loadEnvironment }));
 

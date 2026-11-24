@@ -738,6 +738,22 @@ desk's done statuses on a site with no resolutions.
 - Left on the demo site: the draft Studio agent "Untitled Agent" (not published) and TPD-8 (open). The Phase 4
   Reset demo should clear TPD-8; the draft can be deleted in Rovo Studio.
 
+### Release-note labels (spec F9, P1, Phase 3 step 3), started 2026-11-24 (human: "Yes, start F9")
+
+- Code (D44): `src/change/release-notes.ts` (`labelReleaseNotes`, `groundedQuote`, `buildLabelMessages`; no
+  Forge imports), `src/db/labels.ts` (`release_labels`, from migration v015), `labelChat` in
+  `src/llm/client.ts` (up to 2,000 output tokens), `handleReleaseNotes` and a `suggestion` per fact in
+  `handleChanges`, the `releaseNotes` resolver, and on My tools → Changes a paste box with **Suggest labels**
+  on each listed change, and a lozenge ("Notes: still true / changed / removed", "Notes don't say") with the
+  quote under each fact, next to Still true and Changed.
+- Tests first (red: `Cannot find module '../../src/change/release-notes'`, `handleReleaseNotes is not a
+  function`). `npx vitest run`: `Test Files 25 passed (25)`, `Tests 382 passed (382)`; safety `Tests 47 passed
+  (47)`. Mutation checks: quote not checked against the notes → `3 failed`; no owner check on Suggest labels →
+  `1 failed`; facts not on the change's list sent to the model → `1 failed`; restored, green. tsc exit 0,
+  eslint exit 0, `forge lint`: `No issues found.` `forge deploy`: 4.29.0, "eligible for the Runs on Atlassian
+  program" (no manifest change).
+- Live: not yet; the demo site asked for a new sign-in.
+
 ### Not done / untested
 
 - Step 2 (spec section 19 change-detection test): written and green as `changes.test.ts` "the change-detection

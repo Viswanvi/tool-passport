@@ -3,7 +3,8 @@ import { buildRecheckList, detectVersions, sweepChanges, type ChangeRecord, type
 import { noteVersion, type ChangeRow, type DetectRepo } from '../../src/change/detect';
 import { answerQuestion } from '../../src/engine/answer';
 import type { Environment } from '../../src/engine/model';
-import { handleChanges, handleRecentAsks, handleStillTrue, type ChangeDeps, type RecentAsk } from '../../src/resolvers/change-handlers';
+import type { SavedLabel } from '../../src/change/release-notes';
+import { handleChanges, handleRecentAsks, handleReleaseNotes, handleStillTrue, type ChangeDeps, type RecentAsk } from '../../src/resolvers/change-handlers';
 import { handleEdit, type EditDeps } from '../../src/resolvers/edit-handlers';
 import { askInput, demoWorld, depsFor, DEV, MARCO, modelReplying, picks, PRIYA, PROD, SAM, type World } from '../support/demo-world';
 import { loopWorld, memoryWriter } from '../support/fix-world';
@@ -322,6 +323,93 @@ describe('the Changes screen and "Still true"', () => {
     const { x, deps } = await owner();
     expect(await handleStillTrue({ changeId: 1, factId: factId(x.w, 'single_sign_on') }, { accountId: MARCO }, deps)).toMatchObject({ ok: false });
     expect(await handleStillTrue({ changeId: 99, factId: factId(x.w, 'runtime_3_9') }, { accountId: MARCO }, deps)).toMatchObject({ ok: false });
+  });
+});
+
+describe('release-note labels on the Changes screen (spec F9)', () => {
+  const NOTES = 'Kestrel Studio 14.0\n* The maximum upload size is now 5 GB (was 2 GB).\n* Editor speed-ups.';
+
+  async function withLabels(reply: unknown) {
+    const x = loopWorld();
+    const m = memoryChanges(x.w);
+    x.w.records.get(DEV)!.Version = ['14.0'];
+    await noteVersion(snapshot(x.w, DEV), '14.0', m.detect);
+    await buildRecheckList(m.changes[0]!, m.repo);
+    const sent: string[] = [];
+    const saved: SavedLabel[] = [];
+    const deps: ChangeDeps = {
+      loop: x.deps,
+      changes: m.repo,
+      writer: memoryWriter(x.w),
+      check: { isJiraAdmin: async () => false },
+      listEnvironments: async () => x.w.environments,
+      loadRegistry: async () => ({
+        facts: x.w.facts.map((f) => ({ ...f, versions: x.w.factVersions.filter((v) => v.factId === f.id) })),
+        rules: x.w.rules,
+        readinessKeys: x.w.readiness,
+        accessMappings: x.w.access,
+      }),
+      labels: {
+        saveLabels: async (rows) => {
+          for (const r of rows) {
+            const i = saved.findIndex((s) => s.changeId === r.changeId && s.factId === r.factId);
+            if (i >= 0) saved[i] = r;
+            else saved.push(r);
+          }
+        },
+        labelsFor: async (ids) => saved.filter((s) => ids.includes(s.changeId)),
+      },
+      labelChat: () => async (messages) => {
+        sent.push(messages.map((msg) => msg.content).join('\n'));
+        return { content: JSON.stringify(reply), model: 'claude-haiku-5-5' };
+      },
+    };
+    return { x, m, deps, sent, saved };
+  }
+
+  it('the owner pastes notes; one call labels only the facts on that change; the screen shows each suggestion with its quote', async () => {
+    const w = demoWorld();
+    const upload = factId(w, 'max_upload_gb');
+    const { deps, sent } = await withLabels({ labels: [{ factId: upload, label: 'changed', quote: 'The maximum upload size is now 5 GB' }] });
+    expect(await handleReleaseNotes({ changeId: 1, notes: NOTES }, { accountId: MARCO }, deps)).toMatchObject({ ok: true, labelled: 4, grounded: 1 });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toContain('Upload a file of a given size');
+    expect(sent[0]).not.toContain('single_sign_on');
+    const view = await handleChanges({ toolId: 1 }, { accountId: MARCO }, deps);
+    if (!view.ok) throw new Error(view.reason);
+    const items = view.changes[0]!.toRecheck;
+    expect(items.find((i) => i.factId === upload)!.suggestion).toEqual({ label: 'changed', quote: 'The maximum upload size is now 5 GB' });
+    expect(items.filter((i) => i.factId !== upload).map((i) => i.suggestion)).toEqual([
+      { label: 'cant_tell', quote: null },
+      { label: 'cant_tell', quote: null },
+      { label: 'cant_tell', quote: null },
+    ]);
+  });
+
+  it('a label is only a suggestion: no verification is added, and the answer in KS-DEV stays the same', async () => {
+    const w = demoWorld();
+    const { x, deps } = await withLabels({ labels: [{ factId: factId(w, 'max_upload_gb'), label: 'still_true', quote: 'The maximum upload size is now 5 GB' }] });
+    const before = x.w.factVersions.length;
+    expect(await verdict(x.w, DEV)).toBe('dont_know');
+    await handleReleaseNotes({ changeId: 1, notes: NOTES }, { accountId: MARCO }, deps);
+    expect(x.w.factVersions).toHaveLength(before);
+    expect(await verdict(x.w, DEV)).toBe('dont_know');
+  });
+
+  it('someone who is not the owner, or a bad request, is refused with no model call', async () => {
+    const { deps, sent } = await withLabels({ labels: [] });
+    expect(await handleReleaseNotes({ changeId: 1, notes: NOTES }, { accountId: SAM }, deps)).toMatchObject({ ok: false });
+    expect(await handleReleaseNotes({ changeId: 1, notes: NOTES }, {}, deps)).toMatchObject({ ok: false });
+    for (const p of [null, {}, { changeId: 'x', notes: NOTES }, { changeId: 99, notes: NOTES }, { changeId: 1 }]) {
+      expect(await handleReleaseNotes(p, { accountId: MARCO }, deps)).toMatchObject({ ok: false });
+    }
+    expect(sent).toEqual([]);
+  });
+
+  it('a model failure is Try again, and saves nothing', async () => {
+    const { deps, saved } = await withLabels('not json at all');
+    expect(await handleReleaseNotes({ changeId: 1, notes: NOTES }, { accountId: MARCO }, deps)).toMatchObject({ ok: false, reason: expect.stringContaining('Try again') });
+    expect(saved).toEqual([]);
   });
 });
 

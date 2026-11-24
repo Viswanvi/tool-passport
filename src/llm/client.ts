@@ -28,3 +28,13 @@ export function translationChat(): ChatFn {
     return { content: res.choices?.[0]?.message?.content, usage: res.usage };
   });
 }
+
+/** Release-note labels (F9): one call per paste, a label and a short quote per fact, so more room. */
+const LABEL_COMPLETION_TOKENS = 2000;
+
+export function labelChat(): ChatFn {
+  return modelChat(forgeModelDeps, async (model, messages) => {
+    const res = await chat({ model, messages, max_completion_tokens: LABEL_COMPLETION_TOKENS });
+    return { content: res.choices?.[0]?.message?.content, usage: res.usage };
+  });
+}
