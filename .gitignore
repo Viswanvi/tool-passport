@@ -56,3 +56,7 @@ Thumbs.db
 
 # Forge skill eval fixtures: deliberately insecure sample code with fake tokens. Keep local, never push.
 .claude/skills/**/evals/
+
+# Kept local, not published: Atlassian's Forge skills for Claude Code (not this app's code) and the original starter kit.
+.claude/
+Claude outputs/

@@ -110,3 +110,7 @@ Tool Passport's own code is released under the MIT licence, as declared in `pack
 | Development only: `typescript` | Apache-2.0 |
 
 All names in the demo (Acorn Bio, Kestrel Studio, Kestrel Labs, KS-DEV, KS-PROD, Marco, Priya, Sam) are fictional.
+
+## Privacy
+
+What the app stores, what it reads, and what reaches the model: [PRIVACY.md](PRIVACY.md).
