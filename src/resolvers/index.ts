@@ -10,6 +10,8 @@ import { EVAL_QUESTIONS } from '../eval/questions';
 import { sqlTranslationStore } from '../db/translations-sql';
 import { forgeModelDeps, labelChat, translationChat } from '../llm/client';
 import { handleChooseModel, handleSetupStatus, type SetupStatusDeps } from './setup-handlers';
+import { handleRunSafety } from './safety-handlers';
+import { runSafetySuite } from '../safety/run';
 import { sqlLabelStore } from '../db/labels';
 import { loopDeps, noteEnvironmentVersion, readRequestSetup, readResolutionMap, saveRequestSetup, saveResolutionMap } from '../loop/forge';
 import { listDecisionNames, listDesks, usableRequestTypes } from '../loop/jsm-forge';
@@ -238,6 +240,9 @@ const evalDeps: EvalDeps = {
 };
 
 resolver.define('runEval', ({ payload, context }) => handleRunEval(payload, ctxOf(context), evalDeps));
+
+// The false-Yes suite: the build's own case list on fixed data in memory, no site reads, no model calls.
+resolver.define('runSafety', ({ context }) => handleRunSafety(ctxOf(context), { check: writeCheck, run: () => runSafetySuite() }));
 
 // ---- Setup wizard status and the model step (spec F7), Jira administrators only ----
 

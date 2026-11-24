@@ -959,3 +959,26 @@ timed fresh-site runs, with the human.
     here" for a model the app had stored by itself on first use; fixed in 5.4.0 with the `by` marker). Model step:
     Save with `claude-haiku-5-5` → `Saved. New questions are read by claude-haiku-5-5.`, the checklist changed to
     `chosen here` without a reload, and Save greyed out. Both pages show their title once. LLM calls: 0.
+- Step 6, the false-Yes suite runnable in the app (spec section 19 "also runnable from the Setup screen", P0-7,
+  section 18 checklist): the 47 cases now live in `src/safety/cases.ts` as one list, with plain checks in
+  `src/safety/assert.ts` (`same`, `like` = toMatchObject, `ok`, `throws`, `includes`) instead of vitest's
+  `expect`. `test/safety/false-yes.test.ts` runs that list, and so does Setup → 5. Tests → "Run the false-Yes
+  suite" (`runSafety` resolver, Jira administrators only; `src/safety/run.ts` reports every case and carries on
+  past a failure). The in-memory worlds moved from `test/support/` to `src/safety/` (the old paths re-export
+  them, so no other test changed). Nothing is read from the site and no model is called (D47).
+  - Tests first (red: `Cannot find module '../../src/safety/assert'`): `safety-run.test.ts` (9: the helpers
+    fail where `expect` would, the list has 47 unique cases covering spec cases 1-13, the runner reports a
+    failure with its reason and carries on, the resolver is for administrators only and logs the count).
+  - **The conversion lost nothing:** the old suite (from HEAD) and the new one were run side by side under 8
+    engine breaks. Failed cases, old / new: combine accepts an empty list 1/1; missing access mapping passes
+    1/1; missing policy rule passes 1/1; pending approval passes 4/4; unread groups pass access 1/1; badly typed
+    stored fact passes 1/1; the asker's own approval counts 2/2; a group failure on policy says ask owner 2/2.
+    Mutations of the new code: the runner hiding a failure, no admin check, `like` ignoring a missing key: each
+    `failed`. Restored, green.
+  - `npx vitest run`: `Test Files 31 passed (31)`, `Tests 433 passed (433)`; safety `Tests 47 passed (47)`; tsc,
+    eslint exit 0; `forge lint`: `No issues found.` Deployed 5.6.0 and 5.7.0 (wording only), no scope change,
+    eligible for Runs on Atlassian.
+  - **Live on the demo site, 5.7.0:** Setup → 5. Tests → Run the false-Yes suite: `All 47 cases passed` · `No
+    case gave a Yes it should not have.`, then 16 rows, each `Passed`, from `combine() refuses an empty check
+    list · 1 of 1` through `13. Injection and pressure · 4 of 4` to `Every result that is not a pass says why ·
+    1 of 1`. Forge log: `[runSafety] passed=47/47`. LLM calls: 0.

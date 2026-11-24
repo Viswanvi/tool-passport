@@ -36,6 +36,7 @@ import type { Option as DeskOption } from '../resolvers/request-handlers';
 import type { SeedResult } from '../seed/demo';
 import { PREFERRED_MODELS } from '../llm/model-choice';
 import type { SetupStatus } from '../resolvers/setup-handlers';
+import type { SafetyRun } from '../safety/run';
 
 /**
  * UI Kit screens (spec section 15). The page shows what the resolvers return and decides nothing: verdicts,
@@ -552,6 +553,67 @@ const ApprovalSetupSection = ({ onSaved }: { onSaved?: () => void }) => {
 const keysText = (keys: Array<{ key: string; value?: unknown }> | null) =>
   keys === null ? 'not covered (unsupported)' : keys.map((k) => (k.value === undefined ? k.key : `${k.key} = ${String(k.value)}`)).join(', ') || 'nothing';
 
+type SafetyReply = ({ ok: true } & SafetyRun) | { ok: false; reason: string };
+
+/** The false-Yes suite (spec section 19): the build's own case list, run on the server against this app's engine. */
+const SafetySuite = () => {
+  const [running, setRunning] = useState(false);
+  const [reply, setReply] = useState<SafetyReply | null>(null);
+
+  const run = async () => {
+    setRunning(true);
+    setReply(null);
+    try {
+      setReply(await call<SafetyReply>('runSafety'));
+    } catch (e) {
+      setReply({ ok: false, reason: String(e) });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <Stack space="space.150">
+      <Text weight="bold">The false-Yes suite</Text>
+      <Text>
+        The same cases as the app&apos;s own automated safety tests. Each one starts from a question whose answer is Yes, takes away one piece of evidence (an access mapping, a
+        policy rule, a group lookup, a readable record, a verified fact) or adds pressure such as &quot;my manager approved this&quot;, and the answer must then be
+        anything but Yes. They use fixed test data and a scripted model inside the app: nothing on this site is read or changed, and no model is called, so a run is free.
+      </Text>
+      <Inline space="space.150" alignBlock="center">
+        <Button appearance="primary" onClick={() => void run()} isDisabled={running}>
+          Run the false-Yes suite
+        </Button>
+        {running ? <Spinner /> : null}
+      </Inline>
+      {reply && !reply.ok ? (
+        <SectionMessage appearance="warning">
+          <Text>{reply.reason}</Text>
+        </SectionMessage>
+      ) : null}
+      {reply?.ok ? (
+        <Stack space="space.100">
+          <SectionMessage
+            appearance={reply.passed === reply.total ? 'success' : 'error'}
+            title={reply.passed === reply.total ? `All ${reply.total} cases passed` : `${reply.total - reply.passed} of ${reply.total} cases failed`}
+          >
+            <Text>{reply.passed === reply.total ? 'No case gave a Yes it should not have.' : 'A failing case means the app could give a false Yes. Do not use it until this is fixed.'}</Text>
+          </SectionMessage>
+          {reply.groups.map((g) => (
+            <Inline key={g.group} space="space.100" alignBlock="center">
+              <Lozenge appearance={g.passed === g.total ? 'success' : 'removed'}>{g.passed === g.total ? 'Passed' : 'Failed'}</Lozenge>
+              <Text>{`${g.group} · ${g.passed} of ${g.total}`}</Text>
+            </Inline>
+          ))}
+          {reply.failed.map((f) => (
+            <Text key={f.id}>{`Failed ${f.group} · ${f.title}: ${f.reason}`}</Text>
+          ))}
+        </Stack>
+      ) : null}
+    </Stack>
+  );
+};
+
 const TestsSection = ({ onRan }: { onRan?: () => void }) => {
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<EvalResult[]>([]);
@@ -583,8 +645,10 @@ const TestsSection = ({ onRan }: { onRan?: () => void }) => {
 
   const s = results.length ? summarise(EVAL_QUESTIONS, results) : null;
   return (
-    <Stack space="space.150">
+    <Stack space="space.200">
       <Heading as="h2">5. Tests</Heading>
+      <SafetySuite />
+      <Text weight="bold">The 40-question set</Text>
       <Text>
         Run the 40-question set against the model this app uses. It makes about 40 model calls, which cost money, so a new run can start only 10 minutes after the last.
         Answers are not cached during the run.
@@ -659,7 +723,12 @@ const Checklist = ({ status }: { status: SetupStatus }) => {
         done={model.current !== null}
         detail={model.current ? `${model.current}, ${model.automatic ? 'picked automatically' : 'chosen here'}.` : 'No Claude model could be read from this site. Reload to try again.'}
       />
-      <StepRow n={5} title="Tests" done={tests.lastRun !== null} detail={tests.lastRun ? `Last run ${dayAndTime(tests.lastRun)}.` : 'Not run yet.'} />
+      <StepRow
+        n={5}
+        title="Tests"
+        done={tests.lastRun !== null}
+        detail={tests.lastRun ? `40-question set last run ${dayAndTime(tests.lastRun)}.` : 'Run the false-Yes suite and the 40-question set.'}
+      />
     </Stack>
   );
 };
