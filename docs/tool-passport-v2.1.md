@@ -54,7 +54,7 @@ Every requirement on the [Codegeist 2026 rules page](https://codegeist2026.devpo
 
 | # | Rule requirement | How Tool Passport meets it | Proof | Status |
 | --- | --- | --- | --- | --- |
-| 1 | A Forge app that integrates with at least one of Jira, Confluence, JSM, Bitbucket, Teamwork Graph or Rovo | Forge app on Jira and JSM, reading JSM Assets; Rovo action (P1) | Manifest, section 9 | Planned |
+| 1 | A Forge app that integrates with at least one of Jira, Confluence, JSM, Bitbucket, Teamwork Graph or Rovo | Forge app on Jira and JSM, reading JSM Assets; Rovo action (P1) | Manifest, section 9 | Built: Jira, JSM, Assets and a Rovo agent (DECISIONS D42) |
 | 2 | Installs in a judge's test environment through an installation link | Production deploy and distribution link; setup wizard; Assets read as the app, so judges and employees need no Assets role (E1, E2; DECISIONS D25); registry mode when the judge's site has no Assets | E9 fresh-site test on two sites | Planned |
 | 3 | Runs consistently and works as shown in the video and text | Demo data is created through real APIs; no hard-coded screens; the video follows the judge path | Judge path timed twice in week 5 | Planned |
 | 4 | New project, unpublished before the submission period | Code starts Nov 17, after the Oct 27 start; nothing published earlier | Repository history | Planned |
@@ -66,7 +66,7 @@ Every requirement on the [Codegeist 2026 rules page](https://codegeist2026.devpo
 | 10 | Detailed setup steps for all configuration and integrations | Judge test path and setup wizard (section 16), with the with-Assets and without-Assets paths | Devpost text | Planned |
 | 11 | Text description of features and functionality | Problem, three moments, feature list | Devpost text, draft by Dec 17 | Planned |
 | 12 | Explanation of how the project meets the technology requirement | Forge modules, Forge SQL, Forge LLM, JSM REST and issue events, Assets REST, Jira groups; Rovo action (P1) | Devpost text | Planned |
-| 13 | Category and bonus selections, with any write-up a bonus needs | Best Agents write-up: `rovo:agent` plus reusable actions | Devpost form | Planned |
+| 13 | Category and bonus selections, with any write-up a bonus needs | Best Agents write-up: `rovo:agent` plus reusable actions | Devpost form | Agent and reusable check built and kept (D42, D43); write-up in Phase 4 |
 | 14 | All materials in English | Video, description and instructions in English | Review | Planned |
 | 15 | Multiple submissions must be substantially different | One submission only | Devpost form | Planned |
 | 16 | Original work; open-source licences followed; adds meaningful features | Own code; permissive licences listed | README | Planned |

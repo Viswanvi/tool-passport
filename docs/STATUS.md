@@ -760,9 +760,11 @@ desk's done statuses on a site with no resolutions.
 
 ### Next
 
-- Rovo (F8): built and working on the demo site (D42). E8's second site is blocked: toolpassport has no Rovo,
-  and the only offer is a Teamwork Collection free trial (the human's call). Then the keep-or-drop call (due
-  Dec 7) can be made. After that, F9 release-note
+- Rovo (F8): built, working on the demo site, and **kept** (D43, following the rules page). Still to do, in
+  Phase 4: judge instructions with the Rovo prerequisite; the fresh-site run (E9) on a site with Rovo, from
+  the production installation link (the human starts the Teamwork Collection trial there), which also
+  finishes E8; the video's Rovo clip on the demo site; the Best Agents write-up; delete the draft Studio agent.
+- Next build step: F9 release-note labels (re-read spec F9 first). After that, F9 release-note
   labels (re-read spec F9 first).
 - Still open from Phase 2: Rovo keep-or-drop by Dec 7; the privacy test with Sam signed in; the root commit
   `6693b75` decision before any push.
