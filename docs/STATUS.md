@@ -567,10 +567,27 @@ Started early, right after Phase 2, at the human's request ("Phase 3 next").
     verification, so it is not marked although asking again would now answer it; questions marked by an earlier
     change keep their badge until asked again.
 
+- Polish (2026-11-24; human: "Yes, polish"), both found in the live runs above:
+  - **Order.** Shown lists sort by `created_at`, then id: the Changes list (newest first), the asker's recent
+    questions (newest first) and the owner's open questions (oldest first). The sweep's open changes and the
+    recent asks it checks use the same order, so a `LIMIT` keeps the right rows. Forge SQL (TiDB) ids are not in
+    time order. Test first, red as expected: `expected 'SELECT id, tool_id, environment_id, f…' to match
+    /ORDER BY created_at DESC, id DESC LIM…/`.
+  - **Refresh.** One Refresh button at the top of My tools (next to the tool picker) now reloads open questions,
+    Changes and Records; before, it reloaded open questions only.
+  - Checks: tsc exit 0, eslint exit 0; `npx vitest run`: `Test Files 23 passed (23)`, `Tests 345 passed (345)`;
+    `npx vitest run test/safety`: `Tests 46 passed (46)`; `forge lint`: `No issues found.` `forge deploy`:
+    `The version of your app [4.23.0] that was just deployed to [development] is eligible for the Runs on
+    Atlassian program.`
+  - **Live, 4.23.0 (as the admin):** the Changes list read Nov 24 12:46 AM, Nov 24 12:41 AM, Nov 23 06:28 PM,
+    Nov 23 06:19 PM (browser time, UTC+5:30); before, 06:19 was above 06:28. The reply carried ids 90001, 30006,
+    2, 30005 with `createdAt` 19:16:29Z, 19:11:29Z, 12:58:16Z, 12:49:59Z: id 2 was made after id 30005. Clicking
+    Refresh sent three app calls (it used to send one), and one reply was that Changes list. Not checked live: a
+    change found by the sweep appearing on Refresh without a tab switch (no new version change was made for
+    this; the call it depends on was seen).
+
 ### Not done / untested
 
-- The Refresh button in My tools reloads open questions only; the Changes list reloads when the tab is opened.
-  While a list is being built it says so until then. Polish item.
 - Step 2 (spec section 19 change-detection test): written and green as `changes.test.ts` "the change-detection
   test" (two stale detections at once and a repeat after a crash make one row; the rollback restores No with no
   edits and is its own row), plus `detect.test.ts` from Phase 1. Those use in-memory fakes; against the real
@@ -583,8 +600,7 @@ Started early, right after Phase 2, at the human's request ("Phase 3 next").
 
 ### Next
 
-- Step 3 (F9 release-note labels) if there is time before Dec 10, then polish: the Changes list refresh above,
-  and its order. The screen sorts by id, but Forge SQL (TiDB) doesn't hand out ids in time order. Seen live: the
-  Nov 23 06:19 change listed above the 06:28 one. Sort shown lists by `created_at`, then id.
+- Step 3 (F9 release-note labels): steps 1-2 are done well before Dec 10, so it is in scope. Re-read spec F9
+  first.
 - Still open from Phase 2: Rovo keep-or-drop by Dec 7; the privacy test with Sam signed in; the root commit
   `6693b75` decision before any push.

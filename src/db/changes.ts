@@ -7,7 +7,8 @@ import { fromJsonColumn, limitClause } from './store';
  * The `changes` and `recheck_items` tables (spec section 10) and the asks' "may have changed" flag. Every
  * statement is safe to repeat: items are unique per (change, kind, ref) and inserted ignoring duplicates;
  * status changes are single updates. A change listed for the owner sets `owner_notified_at` (the owner is told
- * on the Changes screen, D39).
+ * on the Changes screen, D39). Lists sort by time, then id: Forge SQL hands out ids that are not in time order
+ * (found live: id 2 was made after id 30005).
  */
 
 type Row = Record<string, unknown>;
@@ -52,11 +53,11 @@ const placeholders = (n: number) => Array.from({ length: n }, () => '?').join(',
 
 export const sqlChangeRepo: ChangeRepo = {
   async openChanges(limit) {
-    return (await select(`SELECT ${COLS} FROM changes WHERE status = 'open' ORDER BY id ASC ${limitClause(limit)}`)).map(changeRow);
+    return (await select(`SELECT ${COLS} FROM changes WHERE status = 'open' ORDER BY created_at ASC, id ASC ${limitClause(limit)}`)).map(changeRow);
   },
 
   async changesFor(toolId, limit) {
-    return (await select(`SELECT ${COLS} FROM changes WHERE tool_id = ? ORDER BY id DESC ${limitClause(limit)}`, toolId)).map(changeRow);
+    return (await select(`SELECT ${COLS} FROM changes WHERE tool_id = ? ORDER BY created_at DESC, id DESC ${limitClause(limit)}`, toolId)).map(changeRow);
   },
 
   async changeById(changeId) {
@@ -89,7 +90,7 @@ export const sqlChangeRepo: ChangeRepo = {
 
   async recentAsks(environmentId, days) {
     const rows = await select(
-      `SELECT id, evidence_json FROM asks WHERE environment_id = ? AND created_at > DATE_SUB(CURRENT_TIMESTAMP, INTERVAL ${Math.max(1, Math.trunc(days))} DAY) ORDER BY id DESC ${limitClause(500)}`,
+      `SELECT id, evidence_json FROM asks WHERE environment_id = ? AND created_at > DATE_SUB(CURRENT_TIMESTAMP, INTERVAL ${Math.max(1, Math.trunc(days))} DAY) ORDER BY created_at DESC, id DESC ${limitClause(500)}`,
       environmentId,
     );
     return rows.map((r) => {

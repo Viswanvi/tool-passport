@@ -86,7 +86,7 @@ export async function recentAsksFor(
 ): Promise<Array<{ askId: number; toolId: number; environmentId: number | null; question: string | null; verdict: string | null; mayHaveChanged: boolean; createdAt: string }>> {
   const res = await sql
     .prepare<Record<string, unknown>>(
-      `SELECT id, tool_id, environment_id, question_text, verdict, may_have_changed, created_at FROM asks WHERE asker_account_id = ? ORDER BY id DESC ${limitClause(limit)}`,
+      `SELECT id, tool_id, environment_id, question_text, verdict, may_have_changed, created_at FROM asks WHERE asker_account_id = ? ORDER BY created_at DESC, id DESC ${limitClause(limit)}`,
     )
     .bindParams(asker)
     .execute();

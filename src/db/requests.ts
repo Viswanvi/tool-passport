@@ -106,7 +106,7 @@ export const sqlRequestRepo: RequestRepo = {
 
   async openByKind(toolId, kind, limit) {
     return rows(
-      `SELECT ${COLS} FROM requests WHERE tool_id = ? AND kind = ? AND status = 'open' AND request_key IS NOT NULL ORDER BY id ASC ${limitClause(limit)}`,
+      `SELECT ${COLS} FROM requests WHERE tool_id = ? AND kind = ? AND status = 'open' AND request_key IS NOT NULL ORDER BY created_at ASC, id ASC ${limitClause(limit)}`,
       toolId,
       kind,
     );

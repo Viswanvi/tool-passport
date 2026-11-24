@@ -30,7 +30,7 @@ vi.mock('@forge/sql', () => ({
 }));
 
 const { sqlRequestRepo, isDuplicateKey } = await import('../../src/db/requests');
-const { loadAsk, purgeOldQuestions, saveAskResult } = await import('../../src/db/asks');
+const { loadAsk, purgeOldQuestions, recentAsksFor, saveAskResult } = await import('../../src/db/asks');
 const { sqlChangeRepo, utcIso } = await import('../../src/db/changes');
 const { sqlApprovalStore } = await import('../../src/db/approvals');
 
@@ -175,6 +175,20 @@ describe('version changes', () => {
       { id: 8, factVersionIds: [] },
     ]);
     expect(statements[1]!.query).toContain('INTERVAL 30 DAY');
+  });
+
+  it('lists sort by time, then id: Forge SQL ids are not in time order (found live: 06:19 showed above 06:28)', async () => {
+    await sqlChangeRepo.changesFor(1, 20);
+    await sqlChangeRepo.openChanges(10);
+    await sqlChangeRepo.recentAsks(11, 30);
+    await recentAsksFor('acct-priya', 10);
+    await sqlRequestRepo.openByKind(1, 'question', 50);
+    const [changes, open, asks, mine, questions] = statements.map((s) => s.query.replace(/\s+/g, ' '));
+    expect(changes).toMatch(/ORDER BY created_at DESC, id DESC LIMIT 20$/);
+    expect(open).toMatch(/ORDER BY created_at ASC, id ASC LIMIT 10$/);
+    expect(asks).toMatch(/ORDER BY created_at DESC, id DESC LIMIT 500$/);
+    expect(mine).toMatch(/ORDER BY created_at DESC, id DESC LIMIT 10$/);
+    expect(questions).toMatch(/ORDER BY created_at ASC, id ASC LIMIT 50$/);
   });
 
   it('a change time without a zone is read as UTC (found live)', () => {

@@ -751,11 +751,6 @@ const QuestionsForTool = ({ toolId, refreshKey }: { toolId: number; refreshKey: 
           <Text>{message}</Text>
         </SectionMessage>
       ) : null}
-      <Inline>
-        <Button appearance="subtle" onClick={load}>
-          Refresh
-        </Button>
-      </Inline>
       {data.groups.length === 0 ? <Text>No open questions for {data.tool.name}.</Text> : null}
       {data.groups.map((g) => (
         <Box key={g.target} xcss={cardStyle}>
@@ -797,18 +792,27 @@ const QuestionsForTool = ({ toolId, refreshKey }: { toolId: number; refreshKey: 
 
 const MyToolsPage = ({ tools, refreshKey }: { tools: Option[]; refreshKey: number }) => {
   const [tool, setTool] = useState<Option>(tools[0]!);
+  // One Refresh for the whole tab: it used to reload the open questions only, so a version change found by the
+  // sweep showed only after switching tabs (found live). Both counters only grow, so their sum changes with either.
+  const [refreshed, setRefreshed] = useState(0);
+  const key = refreshKey + refreshed;
   return (
     <Stack space="space.200">
+      <Inline space="space.150" alignBlock="center">
+        {tools.length > 1 ? (
+          <Box xcss={xcss({ width: '240px' })}>
+            <Select options={tools} value={tool} onChange={(o: Option) => setTool(o)} />
+          </Box>
+        ) : null}
+        <Button appearance="subtle" onClick={() => setRefreshed((n) => n + 1)}>
+          Refresh
+        </Button>
+      </Inline>
       <Heading as="h2">Open questions</Heading>
       <Text>Answer each question once. Publishing adds a verified fact and answers every open question it settles, each on the asker's own request.</Text>
-      {tools.length > 1 ? (
-        <Box xcss={xcss({ width: '240px' })}>
-          <Select options={tools} value={tool} onChange={(o: Option) => setTool(o)} />
-        </Box>
-      ) : null}
-      <QuestionsForTool key={tool.value} toolId={Number(tool.value)} refreshKey={refreshKey} />
-      <ChangesSection key={`changes-${tool.value}`} toolId={Number(tool.value)} refreshKey={refreshKey} />
-      <ToolRecords key={`records-${tool.value}`} toolId={Number(tool.value)} refreshKey={refreshKey} />
+      <QuestionsForTool key={tool.value} toolId={Number(tool.value)} refreshKey={key} />
+      <ChangesSection key={`changes-${tool.value}`} toolId={Number(tool.value)} refreshKey={key} />
+      <ToolRecords key={`records-${tool.value}`} toolId={Number(tool.value)} refreshKey={key} />
     </Stack>
   );
 };
