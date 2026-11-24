@@ -12,7 +12,10 @@ import { labelChat, translationChat } from '../llm/client';
 import { sqlLabelStore } from '../db/labels';
 import { loopDeps, noteEnvironmentVersion, readRequestSetup, readResolutionMap, saveRequestSetup, saveResolutionMap } from '../loop/forge';
 import { listDecisionNames, listDesks, usableRequestTypes } from '../loop/jsm-forge';
-import { findPassportObjectKey, readGroups } from '../providers/forge';
+import { readGroups } from '../providers/forge';
+import { ensureDemoRecords } from '../setup/assets-records';
+import { forgeSetupClient } from '../setup/forge';
+import { loadDemoData } from '../setup/load-demo';
 import type { WriteCheck } from '../registry/authorise';
 import { sqlRegistryWriter } from '../registry/write';
 import { seedDemo } from '../seed/demo';
@@ -84,9 +87,13 @@ resolver.define('loadDemo', ({ context }) =>
     check: writeCheck,
     // A minor-version upgrade fires no lifecycle event and the sweep may not have run yet (D27): bring the
     // tables up to date first. The runner applies only what this installation lacks.
+    // The Assets records first (made if missing: as the app, else as this admin), then the app's own records.
     seed: async (actor) => {
       await runMigrations();
-      return seedDemo({ writer: sqlRegistryWriter, findObjectKey: findPassportObjectKey, actor });
+      return loadDemoData({
+        ensureRecords: () => ensureDemoRecords(forgeSetupClient('app'), forgeSetupClient('user')),
+        seed: ({ findObjectKey }) => seedDemo({ writer: sqlRegistryWriter, findObjectKey, actor }),
+      });
     },
   }),
 );

@@ -2,7 +2,7 @@ import { route } from '@forge/api';
 import { mappedAttributes } from '../db/repo';
 import { getSetting, setSetting } from '../db/store';
 import type { EnvironmentReader, Groups } from '../engine/model';
-import { aqlString, readAssets, type AssetsClient, type HttpReply } from './assets';
+import { readAssets, type AssetsClient, type HttpReply } from './assets';
 import { assets, call, field, list, requester, text } from './assets-api';
 import { parseGroups } from './groups';
 import { environmentReader } from './index';
@@ -60,21 +60,6 @@ export function forgeEnvironmentReader(): EnvironmentReader {
     assets: async (e) => readAssets(e, { client: forgeAssetsClient, mappedAttributes, ...(await schemaNames()), now }),
     registry: (e) => readRegistry(e, { mappedAttributes, now }),
   });
-}
-
-/**
- * The key of the passport object with this name (label), or null if there isn't exactly one. Read-only:
- * the demo loader uses it to link environments to objects that already exist.
- */
-export async function findPassportObjectKey(name: string): Promise<string | null> {
-  const workspace = await forgeAssetsClient.workspace();
-  if (!workspace) return null;
-  const { schemaName, typeName } = await schemaNames();
-  const res = await forgeAssetsClient.aql(workspace, `objectSchema = ${aqlString(schemaName)} AND objectType = ${aqlString(typeName)} AND Name = ${aqlString(name)}`);
-  if (res.status !== 200) return null;
-  const values = list(res.body, 'values');
-  if (values.length !== 1) return null;
-  return text(field(values[0], 'objectKey')) ?? null;
 }
 
 /** The account id comes from the Forge context or a stored ask, never from a request payload (CLAUDE.md rule 3). */

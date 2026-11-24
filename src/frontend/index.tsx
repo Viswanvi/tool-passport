@@ -629,7 +629,8 @@ const SetupPage = () => {
     <Stack space="space.200">
       <Text>
         Load demo data creates the fictional tool Kestrel Studio with KS-DEV and KS-PROD, its catalog, verified facts, policy rules and access
-        mappings. You become its owner. It links to the KS-DEV and KS-PROD objects already in the Tool Passport Environments schema in Assets.
+        mappings. You become its owner. In Assets it creates the Tool Passport Environments schema with the KS-DEV and KS-PROD records, or uses
+        them if they are already there. It is safe to run again.
       </Text>
       <Inline>
         <Button appearance="primary" onClick={() => void load()} isDisabled={busy}>

@@ -841,3 +841,29 @@ Section 14 self-review, what Phase 3 changed (the Phase 1 and Phase 2 tables sti
   timed fresh-site runs with and without Assets (E9, on a site with Rovo).
 - Still open: the privacy test with Sam signed in; the root commit `6693b75` decision before any push;
   repairing Git Bash on this machine is optional (PowerShell covers everything).
+
+## Phase 4 (judge readiness), started 2026-11-24 on branch `phase-4` (from `phase-3`; human: "Yes, start Phase 4")
+
+Plan, from spec F7 and sections 15-16 compared with what exists: (1) Load demo data makes the Assets records
+itself; (2) registry mode for sites without Assets; (3) the demo groups (needs the right scopes, so an install
+upgrade, asked first); (4) Reset demo; (5) the Setup page as a guided wizard with model choice; (6) the false-Yes
+suite runnable on the Tests screen; (7) README and JUDGE_GUIDE; (8) production deploy, installation link and the
+timed fresh-site runs, with the human.
+
+### Works (verified)
+
+- Step 1, Load demo data makes the Assets records: `src/setup/assets-records.ts` (`ensureDemoRecords`, no
+  Forge imports; the E1/E2 calls and bodies, which got 201 for every step on the fresh site), `src/setup/forge.ts`
+  (as the app or as the signed-in admin; a consent request is thrown so Forge can show its consent screen),
+  `src/setup/load-demo.ts` (records first, then `seedDemo` linked to their keys; nothing written if the records
+  can't be made). The old read-only `findPassportObjectKey` is gone.
+  - Tests first (red: `Cannot find module '../../src/setup/assets-records'`): `setup-assets.test.ts` (7: fresh
+    site creates everything with the section 16 values; a repeat creates nothing; a half set-up adds only what is
+    missing; app refused → the admin writes; both refused → stops at the first write and names it; no Assets →
+    `no_assets`; consent passed up) and `load-demo.test.ts` (4). `npx vitest run`: `Test Files 27 passed (27)`,
+    `Tests 393 passed (393)`. tsc exit 0, eslint exit 0, `forge lint`: `No issues found.` Deployed 4.30.0
+    (eligible for Runs on Atlassian).
+  - Live on the demo site (schema already there): Setup → Load demo data: `Demo data loaded` · `tools: 1 ·
+    environments: 2 · catalogKeys: 25 · links: 7 · facts: 6 · rules: 8 · readinessKeys: 2 · accessMappings: 4` ·
+    `KS-DEV → TPENV-4679 · KS-PROD → TPENV-4680`, with no "assetsRecordsCreated" count: nothing was created.
+    The creating path is proven live only by E2's calls so far; the fresh-site run (step 8) will show it.
