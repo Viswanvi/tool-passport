@@ -673,6 +673,64 @@ desk's done statuses on a site with no resolutions.
     empty, add Done and Declined. The app's done-status path covers portal resolves and the app's own resolving.
   - LLM calls in the fresh-site check: 1.
 
+### Rovo agent and actions (spec F8, P1), started 2026-11-24 (human: "Start Rovo first")
+
+- Docs read first (CLAUDE.md lists these as unconfirmed), as of 2026-11-24: the rovo-agent module page (key,
+  name ≤ 30 characters, prompt, description, conversationStarters, actions), the rovo-action page (module
+  `action`: key, name, function, actionVerb GET/CREATE/UPDATE/DELETE/TRIGGER, description, inputs with title,
+  type, required, description; "never rely on values passed as inputs … read [the accountId] from the
+  context"), and Function arguments (`handler(payload, context)`, `context.principal.accountId`). Not stated
+  in the docs: whether Rovo fills `principal` for actions, and whether CREATE asks the person to confirm.
+  Reuse by other people's agents goes through a separate `rovo:mcp` module (not added).
+- Code: `src/rovo/actions.ts` (`rovoCheck`, `rovoAskOwner`, `accountIdOf`; no Forge imports) and
+  `src/rovo/forge.ts`. `check-tool-readiness` (GET) takes tool, environment (optional) and question by name,
+  runs the page's own `handleAsk` for `context.principal.accountId`, and returns the card's fixed words: verdict,
+  reason, where, evidence lines with their labels, checked, next, a next step and the askId. Environments the
+  person may not pick count as unknown and aren't listed. `ask-tool-owner` (CREATE) takes only that askId and
+  raises the question through `raiseQuestion`, which checks the ask is the caller's. Fixes and approvals stay
+  on the page. The agent's prompt (inline in the manifest) says to answer only through the action, keep its
+  verdict words and labels, and call ask-tool-owner only after the person agrees.
+- Tests first (red: `Cannot find module '../../src/rovo/actions'`), `test/unit/rovo.test.ts` 10 tests.
+  `npx vitest run`: `Test Files 24 passed (24)`, `Tests 367 passed (367)`; safety `Tests 47 passed (47)`.
+  Mutation checks: identity also read from `context.accountId` → `2 failed`; audience filter dropped →
+  `1 failed`; restored, green. tsc exit 0, eslint exit 0, `forge lint`: `No issues found.` (it validates the
+  new `rovo:agent` and `action` modules).
+- `forge deploy`: 4.26.0 (agent and actions), 4.27.0 (`rovo:mcp`), each "eligible for the Runs on Atlassian
+  program". `forge install list` after each: both installations version 4, `Up-to-date`, so no install
+  upgrade was needed. (One deploy first failed on `getaddrinfo ENOTFOUND` for the CLI's error-report host; the
+  network was back a minute later and the retry worked.)
+- **Live on the demo site (as the admin, in Rovo chat):**
+  - The agent picker found **Tool Passport**, showing its description and the three conversation starters.
+  - "Can I build a custom web dashboard with Kestrel Studio in KS-DEV?": Rovo showed `Invoking tool: Check tool
+    readiness`, then **Verdict: Not ready**, "Frontend build isn't set up in KS-DEV.", evidence `Assets record:
+    Build environments`, `Owner-verified: 13.2`, `Approved: TPD-5`, and the next step on the page. The same
+    answer as the page. So Rovo does fill `context.principal.accountId` for an action (without it the action
+    refuses). Logs: `[ask] … verdict=not_ready cached=false`, `[rovo] check verdict=not_ready`.
+  - "Can my dashboard keep a two-way connection open to the server with Kestrel Studio in KS-DEV?": **Don't
+    know yet**, "Keep two-way connections open (websockets): No verified answer yet.", evidence `Not verified`,
+    and the agent asked "Would you like me to do that?" before anything. After "Yes, please ask the owner."
+    Rovo itself showed **Please review · Ask the tool owner · askId: 30007 · Confirm selected / Cancel**: E8's
+    "the create action asks for confirmation" is met. On Confirm (human: "Yes, on the demo site"): **TPD-8**
+    raised for the admin, assigned to the owner, text built from the requirement only ("Question about Kestrel
+    Studio: Keep two-way connections open (websockets)"). Logs: `[rovo] ask-owner raised=1`.
+  - **Reuse (`rovo:mcp`, human: "Add rovo:mcp"):** Rovo Studio → Create agent → Start from blank made a draft
+    "Untitled Agent"; Add tools listed **Check tool readiness (development)** with our description. Added to
+    the draft (not published) and asked the same dashboard question in Test: `Invoking tool: Check tool
+    readiness (development)`, then the facts (Not ready, the reason, Assets record, TPD-5, next step). Log
+    `cached=true`. **Found:** that agent, which has no instructions, opened with "No, you cannot currently
+    build…" for Not ready. Fixed: the check's reply now leads with `answer` ("Not ready. Frontend build isn't
+    set up in KS-DEV.") and a fixed `howToReport` (keep the verdict word; Not ready is not a No; Don't know yet
+    means nothing is recorded), and the action's description says so too (`forge lint` limits it to 255
+    characters). Test first (red: `expected undefined to be 'Not ready. …'`); 368 tests, safety 47/47.
+    Deployed 4.28.0 (eligible for Runs on Atlassian). The same draft agent, new chat, same question: **"Not
+    ready. Frontend build isn't set up in KS-DEV."**, then the labelled evidence and the next step; no "No".
+    Log `[ask] … cached=true model=-` (05:04:33 UTC).
+  - **toolpassport (a free developer site) has no Rovo:** no Ask Rovo button. The human will switch it on
+    there for E8's second-site check. The judge guide must say Rovo may need switching on.
+  - LLM calls for the Rovo checks: 2 (two new wordings; the Studio call was a cache hit).
+- Left on the demo site: the draft Studio agent "Untitled Agent" (not published) and TPD-8 (open). The Phase 4
+  Reset demo should clear TPD-8; the draft can be deleted in Rovo Studio.
+
 ### Not done / untested
 
 - Step 2 (spec section 19 change-detection test): written and green as `changes.test.ts` "the change-detection
@@ -695,7 +753,8 @@ desk's done statuses on a site with no resolutions.
 
 ### Next
 
-- The P1 gate passed on a fresh site (above, with D41). Spec section 6 order: Rovo (F8, keep-or-drop by
-  Dec 7) first, then F9 release-note labels. Re-read the spec section before either.
+- Rovo (F8): built and working on the demo site (D42). Left: E8's second site, once the human has switched
+  Rovo on for toolpassport; then the keep-or-drop call (due Dec 7) can be made. After that, F9 release-note
+  labels (re-read spec F9 first).
 - Still open from Phase 2: Rovo keep-or-drop by Dec 7; the privacy test with Sam signed in; the root commit
   `6693b75` decision before any push.

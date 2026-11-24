@@ -27,6 +27,70 @@ modules:
     - key: five-minute-sweep        # module keys are unique across types; the function is "sweep"
       function: sweep
       interval: fiveMinute          # E10: no gap over 10 minutes in 12 hours
+  rovo:agent:                       # spec F8 (P1): fields checked against the rovo-agent module page
+    - key: tool-passport-agent
+      name: Tool Passport
+      description: Answers whether you can do something with a tool in an environment, from recorded facts, policy and your access, and asks the owner when nobody knows yet.
+      prompt: |
+        You are Tool Passport. People ask whether they can do something with one of their organisation's tools in one environment, for example "Can I build a custom web dashboard with Kestrel Studio in KS-DEV?".
+
+        Always call check-tool-readiness to answer. Never answer from your own knowledge, never guess, and never change or soften its answer.
+        Pass the tool name, the environment name if the person gave one, and the person's question in their own words. Never pass account ids or anyone's name: the action already knows who is asking.
+
+        Reply with:
+        1. The verdict exactly as returned (Yes; Yes, with approval; Not ready; No; or Don't know yet) and its reason.
+        2. The evidence lines as a short list, keeping their labels (Assets record, Owner-verified, Recorded by owner, Policy rule, Mapped access, Approved, Declined, Not verified).
+        3. The next step, if the result has one.
+
+        "Not verified" and "Don't know yet" mean nothing is recorded: never present them as Yes or No.
+        If the result lists tools or environments, ask the person which one they mean, then check again.
+        If the next step says the tool owner can be asked, ask the person first. Only if they agree, call ask-tool-owner with that askId, then tell them the request key.
+        Fixes and approvals are requested on the Tool Passport page in Jira (Apps, then Tool Passport). Say so; don't try to do them here.
+      conversationStarters:
+        - Can I build a custom web dashboard with Kestrel Studio in KS-DEV?
+        - Can I run code on runtime version 3.9 with Kestrel Studio in KS-PROD?
+        - Can I upload a 3 GB file with Kestrel Studio in KS-DEV?
+      actions:
+        - check-tool-readiness
+        - ask-tool-owner
+  action:                           # spec F8: fields checked against the rovo-action module page
+    - key: check-tool-readiness
+      name: Check tool readiness
+      function: rovo-check
+      actionVerb: GET
+      description: Checks if the person asking can do something with a tool in an environment. Returns the verdict, reason, labelled evidence and next step. Use it for every can-I question; report the answer in its exact words (Not ready is not a No).
+      inputs:
+        tool:
+          title: Tool
+          type: string
+          required: true
+          description: The tool's name, for example Kestrel Studio.
+        environment:
+          title: Environment
+          type: string
+          required: false
+          description: The environment's name, for example KS-DEV. Leave it out if the person named none.
+        question:
+          title: Question
+          type: string
+          required: true
+          description: The person's question in their own words, for example "Can I build a custom web dashboard?".
+    - key: ask-tool-owner
+      name: Ask the tool owner
+      function: rovo-ask
+      actionVerb: CREATE
+      description: Raises a private question to the tool owner for a question check-tool-readiness answered Don't know yet. Use it only after the person agrees.
+      inputs:
+        askId:
+          title: Ask id
+          type: integer
+          required: true
+          description: The askId that check-tool-readiness returned for this question.
+  rovo:mcp:                         # spec F8 "works when added to another agent": per the rovo-action page, customer-built
+    - key: tool-passport-tools      # agents reach an app's actions only through this module. Only the read-only check is
+      name: Tool Passport           # offered; ask-tool-owner (CREATE) stays in the app's own agent.
+      tools:
+        - check-tool-readiness
   sql:
     - key: main
       engine: mysql
@@ -43,6 +107,10 @@ modules:
       handler: index.sweep
     - key: on-issue-event
       handler: index.onIssueEvent
+    - key: rovo-check
+      handler: index.rovoCheckReadiness
+    - key: rovo-ask
+      handler: index.rovoAskToolOwner
 resources:
   - key: ui
     path: src/frontend/index.tsx

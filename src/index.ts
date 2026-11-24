@@ -3,3 +3,4 @@ export { uiResolver } from './resolvers';
 export { onLifecycle } from './lifecycle';
 export { sweep } from './change/sweep';
 export { onIssueEvent } from './loop/forge';
+export { rovoAskToolOwner, rovoCheckReadiness } from './rovo/forge';

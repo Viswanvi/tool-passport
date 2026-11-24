@@ -41,7 +41,8 @@ import {
 
 const ctxOf = (context: { accountId?: string } | undefined): ResolverContext => ({ accountId: context?.accountId });
 
-const askDeps: AskHandlerDeps = {
+/** Shared with the Rovo action, which runs the same ask (src/rovo/forge.ts). */
+export const askDeps: AskHandlerDeps = {
   loadTool,
   loadEnvironment,
   loadCatalog,
