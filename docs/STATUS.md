@@ -1014,3 +1014,36 @@ timed fresh-site runs, with the human.
     goes in at step 8. The guide leaves out the two-asker privacy check until that test is done.
   - Demo site state: four new recent questions from these checks; run Reset demo before recording the video.
   - Open: `package.json` declares MIT but the repo has no LICENSE file (the human decides).
+- Step 8, production and distribution (human: "Yes, step 8"), started 2026-11-24.
+  - Docs read first (2026-11-24): *Distribute your apps* (deploy to production, then Distribution → Edit →
+    "Sharing" for installers outside the owner's organization, choose the Atlassian app, copy the link); *Forge LLMs
+    API* (no preview restriction; admins are told at install that the app uses it); *Forge LLMs pricing* ("Forge
+    LLMs usage is charged to the developer of the Forge app"; "No free usage allowance"; claude-haiku-5-5 is $0.50
+    per million input tokens and $2.50 per million output); *Forge LLM limits* (per installation: 100 requests a
+    minute); *User privacy guide* (apps that store personal data must report account IDs every 7 days).
+  - `forge eligibility -e development`: `[5.8.0] … is eligible for the Runs on Atlassian program.` `forge deploy -e
+    production`: `Deployed tool-passport to the production environment.` · `The version of your app [2.0.0] that was
+    just deployed to [production] is eligible for the Runs on Atlassian program.`
+  - Distribution (developer console, in the browser): "Sharing with anyone" needs Company/Department, Customer
+    support contact and Privacy policy (Terms optional); the first save with them blank was refused, nothing saved.
+    The human chose: personal data **No** (D48), Company `Independent developer`, support
+    `https://github.com/Viswanvi/tool-passport/issues`, privacy policy `…/blob/main/PRIVACY.md`, no terms. Saved:
+    `Distribution status: Sharing with anyone`; Install onto **Jira**; the installation link appeared (in the judge
+    guide, step 1). Opened, not installed: the install screen shows `tool-passport · By <owner> (Independent
+    developer)`, support and privacy links, the vendor-logs note and the permission list (19 lines, matching the
+    manifest scopes). PRIVACY.md now says what the app logs, because the screen tells admins the vendor reads logs.
+  - **Public repository** `github.com/Viswanvi/tool-passport` (made by the human, public, empty). Before pushing, a
+    scan of all tracked files and all history found: the admin's display name in `docs/ENVIRONMENT.md` (every commit
+    since the first), the fake token in the first commit's `.claude/skills/**/evals/` fixtures, a fake `sk-…` key in
+    the bundled Forge skill rules, and every commit authored as the machine's git identity (a company address). No
+    personal emails, account IDs or real tokens. Fixed locally (e999301: PRIVACY.md, name removed, `.claude/` and the
+    starter-kit zip untracked and ignored), then a cleaned copy was built in the scratchpad (never touching this
+    repository): every phase-4 commit replayed without `.claude/` and `Claude outputs/`, with the name line replaced,
+    authored as the human's GitHub noreply address, dates and messages kept. Checks: final tree identical to phase-4
+    (`git diff --stat` empty), 55 commits, 134 files, no matches for the name, the company, the tokens or personal
+    email domains in any version of any file, one identity, `dates-equal=True`, `messages-equal=True`. Pushed with
+    the human's OK (the first try from this shell could not show GitHub's sign-in; the human signed in through Git
+    Credential Manager): `* [new branch] main -> main`. GitHub: head `10dface`, linked to the account; PRIVACY.md and
+    Issues load. The spec's byline "@QiBR" was left as the human wrote it.
+  - Still to do in step 8: the fresh site with Rovo (the human creates it and starts the trial), installing from the
+    link, the timed judge-guide run (E9) with and without Assets, and E8's second site.

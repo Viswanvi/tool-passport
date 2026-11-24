@@ -4,7 +4,14 @@ Last updated: 25 November 2026
 
 Tool Passport is an Atlassian Forge app for Jira and Jira Service Management. It runs entirely on Atlassian's
 platform (the Runs on Atlassian program): it makes no calls outside Atlassian, and its data stays in Atlassian's
-hosted storage for the site where it is installed. The developer has no copy of it and no access to it.
+hosted storage for the site where it is installed. The developer has no copy of it.
+
+## App logs
+
+Atlassian lets the developer read the app's logs to troubleshoot problems. The app writes only short event lines
+there, such as a verdict word, a request key like `TPD-4`, a count or a model name, and short error messages. It
+never logs question text, names or account IDs. Site administrators can turn off the developer's access to the logs,
+or view and download them, in Atlassian Administration.
 
 ## What the app stores
 

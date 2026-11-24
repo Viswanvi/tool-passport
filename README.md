@@ -14,8 +14,8 @@ Kestrel Studio in KS-DEV?"* Tool Passport answers from recorded evidence and nam
 Facts are verified per tool version. When an environment moves to a new version, Tool Passport stops vouching for
 the facts that depend on the version in that environment only, and the owner re-verifies them on one screen.
 
-**Judges:** start with [docs/JUDGE_GUIDE.md](docs/JUDGE_GUIDE.md). It covers installing, setup, the demo with and
-without Assets, and the optional Rovo agent.
+**Judges:** start with [docs/JUDGE_GUIDE.md](docs/JUDGE_GUIDE.md). It has the installation link and covers setup,
+the demo with and without Assets, and the optional Rovo agent.
 
 ## How an answer is made
 
