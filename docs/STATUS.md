@@ -766,14 +766,57 @@ desk's done statuses on a site with no resolutions.
 - Demo site state: change 30006 now carries the two suggestions; Reset demo (Phase 4) should clear
   `release_labels` with the changes.
 
+### Phase 3 sign-off checks (2026-11-24; human: "Yes, sign off")
+
+All three Phase 3 steps are done: version validity (F6, with D39-D41), the change-detection test, and
+release-note labels (F9, D44). Also in this phase: Changes polish, the fresh-site check of P0-1 to P0-4 (D41),
+and Rovo (F8, D42, kept by D43). Branch `phase-3`, HEAD `a006c54`.
+
+Results, verbatim:
+- `npx tsc --noEmit -p tsconfig.json`: exit 0. `npx eslint "src/**/*.{ts,tsx}" "test/**/*.ts"`: exit 0.
+- `npx vitest run`: `Test Files 25 passed (25)`, `Tests 382 passed (382)`. `npx vitest run test/safety`:
+  `Tests 47 passed (47)`.
+- `forge lint`: `No issues found.`
+- `forge eligibility -e development`: `The version of your app [4.29.0] that's deployed to [development] is
+  eligible for the Runs on Atlassian program.` `forge install list`: both installations (toolpassport,
+  one-atlas-oibs) development, version 4, `Up-to-date`.
+- Deployed = committed: `git diff --stat a789b45 HEAD -- src manifest.yml package.json package-lock.json` is
+  empty (4.29.0 was deployed from a789b45's code; only docs changed since), and the working tree is clean.
+- Searches: `external`/`remotes` in manifest.yml: 0. `participant`/`emailAddress`/`displayName` in src: 0.
+  Token or password patterns (`ATATT`, `api_token =`, `password =`) in src and test: 0. Write calls to Assets
+  outside `seed/` and `setup/`: one match, `src/providers/forge.ts:44`, the AQL search, which is a POST but only
+  reads.
+- `scripts/check-prereqs.sh`: the only bash on PATH is `C:\Windows\system32\bash.exe` (Linux, WSL), which gave
+  `Result: 16 passed, 0 warnings, 2 failed`: `Node.js not found` and `Not logged in to Forge`, because it can't
+  see the Windows tools. Git Bash is broken on this machine (`'C:\Program Files\Git\bin\..\usr\bin\bash.exe'
+  not found`; the same reason the agent's Bash tool fails). The two checks run directly: `node --version`
+  `v24.22.1` (the script accepts 22.x or 24.x); `forge whoami` exit 0 (logged in; output not recorded because it
+  holds the account's name and email). So all 18 checks hold.
+
+Section 14 self-review, what Phase 3 changed (the Phase 1 and Phase 2 tables still hold):
+
+| Risk | Added in Phase 3 | Proven by |
+| --- | --- | --- |
+| A false Yes from missing data | Answers compare versions at read time: a verification for another version is never used, so an upgrade or a rollback can't make an old fact count (F6). A done status with no resolution can approve only when the approver set it (D41). Release-note labels and "May have changed" badges never change an answer; only Still true or Changed adds a verification | Safety suite 47/47 (case 12 extended for statuses); `changes.test.ts`; `release-notes.test.ts` "a label is only a suggestion"; mutation checks in D40, D41, D44 |
+| Someone other than the owner changes a fact | `stillTrue`, `changes` and `releaseNotes` check owner or Jira administrator on the server | `changes.test.ts` (refusals, no model call); mutation check: owner check removed from Suggest labels → 1 red |
+| A request pretends to be someone else | The Rovo actions take the caller from `context.principal.accountId` only; no input is an account id; ask-tool-owner checks the ask is the caller's | `rovo.test.ts`; mutation check: identity also read elsewhere → 2 red; live: Rovo filled the principal |
+| Environment data shown to the wrong people | The Rovo check treats an environment the person may not pick as unknown and never lists it | `rovo.test.ts`; mutation check: audience filter dropped → 1 red |
+| The model infers permission from wording | F9's model sees only the listed facts' labels and old values and the pasted notes (D44, a scoped deviation from section 13); its output is a label and a quote that code checks is in the notes; it can't write | `release-notes.test.ts` (ungrounded quotes become can't tell; orders in the notes change nothing); mutation check: quote not checked → 3 red |
+| An approval is recorded that nobody gave | Status-mapped approvals keep D34's rule: the asker moving their own request to a mapped status decides nothing | Safety case 12 (status variant); `approvals.test.ts` |
+| One asker's question leaks to another | Rovo's ask-tool-owner raises through the same `raiseQuestion` (requirement only, never question text) | `rovo.test.ts`; live TPD-8 text |
+| The app changes environments | No new Assets write path; the only match is a read (AQL search) | Search above |
+| Rovo acts without the user meaning it | ask-tool-owner is CREATE; live, Rovo showed "Please review … Confirm selected" before it ran, and the agent's prompt asks first | E8 (part pass), STATUS Rovo section |
+| Data kept longer than needed | Release notes are not stored, only labels and short quotes | `release-notes.ts`, `db/labels.ts` |
+| Data leaves Atlassian | No `permissions.external`; Forge LLM and Rovo only | `forge eligibility` above |
+
 ### Not done / untested
 
 - Step 2 (spec section 19 change-detection test): written and green as `changes.test.ts` "the change-detection
   test" (two stale detections at once and a repeat after a crash make one row; the rollback restores No with no
   edits and is its own row), plus `detect.test.ts` from Phase 1. Those use in-memory fakes; against the real
   database only the rollback was run (live, above), not two detections at the same moment.
-- Step 3: release-note labels (F9). Its P1 gate (P0-1 to P0-4 on a fresh site) now passes, above; spec
-  section 6 puts Rovo (F8) before it.
+- Untested live, unit-tested: F9 with a quote that isn't in the notes; any refusal for someone who isn't the
+  owner (no second person on either site); the privacy test with Sam signed in.
 - toolpassport is no longer fresh: Tool Passport Desk (TPD, TPD-1 and TPD-2 resolved), the two kestrel groups,
   the demo data, KS-DEV Build environments `standard, frontend`, an approved custom UI grant (TPD-2), approvals
   mapped by status. E9 needs another fresh site.
@@ -792,9 +835,9 @@ desk's done statuses on a site with no resolutions.
   Phase 4: judge instructions with the Rovo prerequisite; the fresh-site run (E9) on a site with Rovo, from
   the production installation link (the human starts the Teamwork Collection trial there), which also
   finishes E8; the video's Rovo clip on the demo site; the Best Agents write-up; delete the draft Studio agent.
-- F9 release-note labels: built and working live (D44, section above). Phase 3's three steps are done.
-- Next: the Phase 3 sign-off checks (CLAUDE.md: unit tests, safety suite, `forge lint`, `forge eligibility`,
-  and the section 14 security self-review, results verbatim), then Phase 4. After that, F9 release-note
-  labels (re-read spec F9 first).
-- Still open from Phase 2: Rovo keep-or-drop by Dec 7; the privacy test with Sam signed in; the root commit
-  `6693b75` decision before any push.
+- F9 release-note labels: built and working live (D44). Phase 3 is signed off (section above).
+- Next: Phase 4 (judge readiness): setup wizard, `seed/demo.ts` and Reset demo, the test screen, README and
+  JUDGE_GUIDE (with the Rovo and resolutions notes above), production deploy and installation link, and the
+  timed fresh-site runs with and without Assets (E9, on a site with Rovo).
+- Still open: the privacy test with Sam signed in; the root commit `6693b75` decision before any push;
+  repairing Git Bash on this machine is optional (PowerShell covers everything).
