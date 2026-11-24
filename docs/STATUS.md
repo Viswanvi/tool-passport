@@ -752,7 +752,19 @@ desk's done statuses on a site with no resolutions.
   `1 failed`; facts not on the change's list sent to the model → `1 failed`; restored, green. tsc exit 0,
   eslint exit 0, `forge lint`: `No issues found.` `forge deploy`: 4.29.0, "eligible for the Runs on Atlassian
   program" (no manifest change).
-- Live: not yet; the demo site asked for a new sign-in.
+- **Live on the demo site, 4.29.0 (as the admin, after the human signed in again):** My tools → Changes, the
+  KS-DEV 13.2 → 14.0 change of Nov 24 12:41 AM (2 facts still open) showed the paste box and its help text.
+  Pasted fictional notes (5 lines: uploads now 5 GB; "The community app framework is fully supported in 14.0,
+  with no changes needed."; "Removed: runtime 3.9 is no longer supported. Apps must move to runtime 4."; a
+  fix). Suggest labels: `Suggested a label for 2 facts (2 with a quote from the notes). Check each one, then
+  choose Still true or Changed.` Under "Use the community app framework": **Notes: still true** and
+  “The community app framework is fully supported in 14.0, with no changes needed.” Under "Run code on runtime
+  version 3.9": **Notes: removed** and “runtime 3.9 is no longer supported”. Both facts stayed open with
+  Still true on 14.0 / Changed: nothing was verified. Log: `[labels] change=30006 facts=2 grounded=2
+  model=claude-haiku-5-5` (08:28:02 UTC). **LLM calls for F9: 1.**
+- Not tried live: a paste where a quote isn't in the notes (unit-tested), and a non-owner (no second person).
+- Demo site state: change 30006 now carries the two suggestions; Reset demo (Phase 4) should clear
+  `release_labels` with the changes.
 
 ### Not done / untested
 
@@ -780,7 +792,9 @@ desk's done statuses on a site with no resolutions.
   Phase 4: judge instructions with the Rovo prerequisite; the fresh-site run (E9) on a site with Rovo, from
   the production installation link (the human starts the Teamwork Collection trial there), which also
   finishes E8; the video's Rovo clip on the demo site; the Best Agents write-up; delete the draft Studio agent.
-- Next build step: F9 release-note labels (re-read spec F9 first). After that, F9 release-note
+- F9 release-note labels: built and working live (D44, section above). Phase 3's three steps are done.
+- Next: the Phase 3 sign-off checks (CLAUDE.md: unit tests, safety suite, `forge lint`, `forge eligibility`,
+  and the section 14 security self-review, results verbatim), then Phase 4. After that, F9 release-note
   labels (re-read spec F9 first).
 - Still open from Phase 2: Rovo keep-or-drop by Dec 7; the privacy test with Sam signed in; the root commit
   `6693b75` decision before any push.
