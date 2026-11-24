@@ -43,6 +43,8 @@ export function forgeSetupClient(mode: Mode): AssetsSetupClient {
     createAttribute: (w, typeId, body) => send(mode, assets.attributeCreate(w, typeId), 'POST', body),
     findObjects: (w, qlQuery) => send(mode, assets.aql(w), 'POST', { qlQuery }),
     createObject: (w, body) => send(mode, assets.objectCreate(w), 'POST', body),
+    // PUT /object/{id}, the Assets "update object" call (run by the admin in the browser on toolpassport: 200).
+    updateObject: (w, id, body) => send(mode, assets.object(w, id), 'PUT', body),
   };
 }
 

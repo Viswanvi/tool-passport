@@ -27,6 +27,8 @@ export interface AssetsSetupClient {
   createAttribute(w: string, typeId: string, body: unknown): Promise<Reply>;
   findObjects(w: string, qlQuery: string): Promise<Reply>;
   createObject(w: string, body: unknown): Promise<Reply>;
+  /** PUT /object/{id}: Reset demo puts the section 16 values back. */
+  updateObject(w: string, id: string, body: unknown): Promise<Reply>;
 }
 
 export type EnvName = 'KS-DEV' | 'KS-PROD';
@@ -72,6 +74,43 @@ const refused = (r: Reply) => r.status === 401 || r.status === 403;
 class SetupStop extends Error {}
 
 export async function ensureDemoRecords(app: AssetsSetupClient, user?: AssetsSetupClient): Promise<RecordsResult> {
+  const r = await withRecords(app, user, async () => undefined);
+  return r.ok ? { ok: true, keys: r.keys, created: r.created, as: r.as } : r;
+}
+
+/**
+ * Reset demo: make sure the records exist, then put the section 16 values back on both (one update each, safe
+ * to repeat), so a demo that moved KS-DEV to 14.0 starts from 13.2 again.
+ */
+export async function resetDemoRecords(app: AssetsSetupClient, user?: AssetsSetupClient): Promise<RecordsResult> {
+  const r = await withRecords(app, user, async ({ w, typeId, attrs, objectIds, write }) => {
+    for (const record of DEMO_RECORDS) {
+      const name = record.Name[0];
+      await write(`update ${name}`, `values of ${name}`, (c) =>
+        c.updateObject(w, objectIds[name], {
+          objectTypeId: typeId,
+          attributes: Object.entries(record).map(([attr, values]) => ({ objectTypeAttributeId: attrs.get(attr), objectAttributeValues: values.map((value) => ({ value })) })),
+        }),
+      );
+    }
+  });
+  return r.ok ? { ok: true, keys: r.keys, created: r.created.filter((c) => !c.startsWith('values of ')), as: r.as } : r;
+}
+
+type Write = (step: string, label: string, f: (c: AssetsSetupClient) => Promise<Reply>) => Promise<Reply>;
+interface Found {
+  w: string;
+  typeId: string;
+  attrs: Map<string, string>;
+  objectIds: Record<EnvName, string>;
+  write: Write;
+}
+
+async function withRecords(
+  app: AssetsSetupClient,
+  user: AssetsSetupClient | undefined,
+  then: (found: Found) => Promise<void>,
+): Promise<{ ok: true; keys: Record<EnvName, string>; created: string[]; as: 'app' | 'user' } | { ok: false; reason: string }> {
   const created: string[] = [];
   let as: 'app' | 'user' = 'app';
   const stop = (step: string, r: Reply): never => {
@@ -82,7 +121,7 @@ export async function ensureDemoRecords(app: AssetsSetupClient, user?: AssetsSet
     return ok(r) ? r : stop(step, r);
   };
   // As the app; once the app has been refused, the admin does the rest of the writes.
-  const write = async (step: string, label: string, f: (c: AssetsSetupClient) => Promise<Reply>) => {
+  const write: Write = async (step, label, f) => {
     let r = as === 'app' ? await f(app) : await f(user!);
     if (as === 'app' && refused(r) && user) {
       r = await f(user);
@@ -152,13 +191,16 @@ export async function ensureDemoRecords(app: AssetsSetupClient, user?: AssetsSet
     // The keys as Assets has them now: exactly one object per name, or the demo can't link to it.
     const now = await objects();
     const keys = {} as Record<EnvName, string>;
+    const objectIds = {} as Record<EnvName, string>;
     for (const record of DEMO_RECORDS) {
       const name = record.Name[0];
       const found = now.filter((o) => text(field(o, 'label')) === name);
       const key = found.length === 1 ? text(field(found[0], 'objectKey')) : undefined;
       if (!key) return { ok: false, reason: `Assets has ${found.length} objects named ${name} in ${SCHEMA_NAME}; it needs exactly one` };
       keys[name] = key;
+      objectIds[name] = text(field(found[0], 'id')) ?? key;
     }
+    await then({ w, typeId: typeId!, attrs, objectIds, write });
     return { ok: true, keys, created, as };
   } catch (e) {
     if (e instanceof SetupStop) return { ok: false, reason: e.message };

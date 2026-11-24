@@ -615,16 +615,19 @@ const TestsSection = () => {
 const SetupPage = () => {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<SeedResult | null>(null);
-  const load = async (mode: 'assets' | 'registry') => {
+  const [confirmReset, setConfirmReset] = useState(false);
+  const run = async (resolver: 'loadDemo' | 'resetDemo', payload?: { mode: 'assets' | 'registry' }) => {
     setBusy(true);
+    setConfirmReset(false);
     try {
-      setResult(await call<SeedResult>('loadDemo', { mode }));
+      setResult(await call<SeedResult>(resolver, payload));
     } catch (e) {
       setResult({ ok: false, reason: String(e) });
     } finally {
       setBusy(false);
     }
   };
+  const load = (mode: 'assets' | 'registry') => run('loadDemo', { mode });
   return (
     <Stack space="space.200">
       <Text>
@@ -643,7 +646,27 @@ const SetupPage = () => {
         <Button onClick={() => void load('registry')} isDisabled={busy}>
           Load without Assets (registry mode)
         </Button>
+        <Button appearance="subtle" onClick={() => setConfirmReset(true)} isDisabled={busy}>
+          Reset demo
+        </Button>
       </Inline>
+      {confirmReset ? (
+        <SectionMessage appearance="warning" title="Reset the demo?">
+          <Text>
+            This deletes everything Tool Passport holds about Kestrel Studio: questions, request records, approvals, version changes, release-note labels,
+            facts, rules and mappings. Then it loads the demo again from the start, and in Assets it puts KS-DEV and KS-PROD back to version 13.2 and
+            their first values. Jira requests already raised stay in the service desk. Other tools are not touched. This can't be undone.
+          </Text>
+          <Inline space="space.100">
+            <Button appearance="danger" onClick={() => void run('resetDemo')}>
+              Yes, reset the demo
+            </Button>
+            <Button appearance="subtle" onClick={() => setConfirmReset(false)}>
+              Cancel
+            </Button>
+          </Inline>
+        </SectionMessage>
+      ) : null}
       {busy ? <Spinner /> : null}
       {result?.ok ? (
         <SectionMessage appearance="success" title="Demo data loaded">

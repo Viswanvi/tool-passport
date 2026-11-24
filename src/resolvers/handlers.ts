@@ -159,6 +159,19 @@ export async function handleEnvironments(
 const LoadDemo = z.object({ mode: z.enum(['assets', 'registry']).default('assets') });
 
 /** "Load demo data": Jira administrators only. `mode` picks Assets records or, on a site without Assets, registry mode. */
+/** "Reset demo" (spec section 16): Jira administrators only; clears and reloads the demo tool, nothing else. */
+export async function handleResetDemo(ctx: ResolverContext, deps: { check: WriteCheck; reset(actor: string): Promise<SeedResult> }): Promise<SeedResult> {
+  const allowed = await mayAdminister(ctx.accountId, deps.check);
+  if (!allowed.ok || !ctx.accountId) return { ok: false, reason: allowed.ok ? 'Not signed in' : allowed.reason };
+  try {
+    return await deps.reset(ctx.accountId);
+  } catch (e) {
+    // Every step is safe to repeat, so running it again finishes the job.
+    console.error(`[resetDemo] failed: ${String(e).slice(0, 300)}`);
+    return { ok: false, reason: `Reset stopped part way: ${String(e).slice(0, 200)}. Run it again; it is safe to repeat.` };
+  }
+}
+
 export async function handleLoadDemo(
   payload: unknown,
   ctx: ResolverContext,

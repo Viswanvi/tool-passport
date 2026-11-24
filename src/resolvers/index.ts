@@ -13,14 +13,16 @@ import { sqlLabelStore } from '../db/labels';
 import { loopDeps, noteEnvironmentVersion, readRequestSetup, readResolutionMap, saveRequestSetup, saveResolutionMap } from '../loop/forge';
 import { listDecisionNames, listDesks, usableRequestTypes } from '../loop/jsm-forge';
 import { readGroups } from '../providers/forge';
-import { ensureDemoRecords } from '../setup/assets-records';
+import { sqlResetStore } from '../db/reset';
+import { ensureDemoRecords, resetDemoRecords } from '../setup/assets-records';
+import { resetDemo } from '../setup/reset-demo';
 import { forgeGroupsClient, forgeSetupClient } from '../setup/forge';
 import { ensureDemoGroups } from '../setup/groups';
 import { loadDemoData } from '../setup/load-demo';
 import type { WriteCheck } from '../registry/authorise';
 import { sqlRegistryWriter } from '../registry/write';
 import { seedDemo } from '../seed/demo';
-import { handleAsk, handleEnvironments, handleLoadDemo, handleTools, type AskHandlerDeps, type ResolverContext } from './handlers';
+import { handleAsk, handleEnvironments, handleLoadDemo, handleResetDemo, handleTools, type AskHandlerDeps, type ResolverContext } from './handlers';
 import { handleChanges, handleRecentAsks, handleReleaseNotes, handleStillTrue, type ChangeDeps } from './change-handlers';
 import { handleCreateTool, handleEdit, handleToolDetails, type EditDeps } from './edit-handlers';
 import { handleRunEval, type EvalDeps } from './eval-handlers';
@@ -83,24 +85,44 @@ resolver.define('environments', ({ payload, context }) =>
   handleEnvironments(payload, ctxOf(context), { listTools, loadTool, listEnvironments, loadCatalog, readGroups }),
 );
 
+/**
+ * Load demo data as this admin. Assets mode: the Assets records first (made if missing: as the app, else as this
+ * admin), then the app's own records; registry mode: no Assets at all. Then the demo groups.
+ */
+function loadDemoAs(actor: string, mode: 'assets' | 'registry') {
+  return loadDemoData(
+    {
+      ensureRecords: () => ensureDemoRecords(forgeSetupClient('app'), forgeSetupClient('user')),
+      seed: (d) => seedDemo({ writer: sqlRegistryWriter, actor, ...d }),
+      // The person loading plays the asker too, so they join kestrel-dev-builders (spec section 16).
+      ensureGroups: () => ensureDemoGroups(forgeGroupsClient('app'), forgeGroupsClient('user'), actor),
+    },
+    mode,
+  );
+}
+
 resolver.define('loadDemo', ({ payload, context }) =>
   handleLoadDemo(payload, ctxOf(context), {
     check: writeCheck,
     // A minor-version upgrade fires no lifecycle event and the sweep may not have run yet (D27): bring the
     // tables up to date first. The runner applies only what this installation lacks.
-    // Assets mode: the Assets records first (made if missing: as the app, else as this admin), then the app's own
-    // records. Registry mode: no Assets at all.
     seed: async (actor, mode) => {
       await runMigrations();
-      return loadDemoData(
-        {
-          ensureRecords: () => ensureDemoRecords(forgeSetupClient('app'), forgeSetupClient('user')),
-          seed: (d) => seedDemo({ writer: sqlRegistryWriter, actor, ...d }),
-          // The person loading plays the asker too, so they join kestrel-dev-builders (spec section 16).
-          ensureGroups: () => ensureDemoGroups(forgeGroupsClient('app'), forgeGroupsClient('user'), actor),
-        },
-        mode,
-      );
+      return loadDemoAs(actor, mode);
+    },
+  }),
+);
+
+resolver.define('resetDemo', ({ context }) =>
+  handleResetDemo(ctxOf(context), {
+    check: writeCheck,
+    reset: async (actor) => {
+      await runMigrations();
+      return resetDemo({
+        store: sqlResetStore,
+        resetRecords: () => resetDemoRecords(forgeSetupClient('app'), forgeSetupClient('user')),
+        load: (mode) => loadDemoAs(actor, mode),
+      });
     },
   }),
 );

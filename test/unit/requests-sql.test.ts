@@ -33,6 +33,7 @@ const { sqlRequestRepo, isDuplicateKey } = await import('../../src/db/requests')
 const { loadAsk, purgeOldQuestions, recentAsksFor, saveAskResult } = await import('../../src/db/asks');
 const { sqlChangeRepo, utcIso } = await import('../../src/db/changes');
 const { sqlLabelStore } = await import('../../src/db/labels');
+const { sqlResetStore } = await import('../../src/db/reset');
 const { sqlApprovalStore } = await import('../../src/db/approvals');
 
 beforeEach(() => {
@@ -214,6 +215,31 @@ describe('version changes', () => {
     expect(statements[1]!.query).toContain('WHERE change_id IN (?, ?)');
     replies.push([{ change_id: 3, fact_id: 11, label: 'approved', quote: null, model_id: null }]);
     await expect(sqlLabelStore.labelsFor([3])).rejects.toThrow();
+  });
+
+  it('Reset demo finds the demo tool by name and clears only its rows, children before parents', async () => {
+    replies.push([{ id: 7 }], [{ provider: 'assets' }]);
+    expect(await sqlResetStore.demoTool()).toEqual({ id: 7, mode: 'assets' });
+    expect(statements[0]!.query).toContain('FROM tools WHERE name = ?');
+    expect(statements[0]!.params).toEqual(['Kestrel Studio']);
+    statements.length = 0;
+    for (let i = 0; i < 20; i++) replies.push({ affectedRows: 1 });
+    const cleared = await sqlResetStore.clearTool(7);
+    const qs = statements.map((s) => s.query.replace(/\s+/g, ' '));
+    // Every statement is scoped to the demo tool, directly or through its changes and facts.
+    expect(statements.every((s) => s.params.length === 1 && s.params[0] === 7)).toBe(true);
+    expect(qs.every((q) => /tool_id = \?/.test(q))).toBe(true);
+    const order = (t: string) => qs.findIndex((q) => q.startsWith(`DELETE FROM ${t} `));
+    expect(order('release_labels')).toBeLessThan(order('changes'));
+    expect(order('recheck_items')).toBeLessThan(order('changes'));
+    expect(order('fact_versions')).toBeLessThan(order('facts'));
+    for (const t of ['asks', 'requests', 'approval_grants', 'rules', 'readiness_keys', 'access_mappings', 'capability_links', 'catalog_keys', 'translations', 'environments']) {
+      expect(order(t)).toBeGreaterThanOrEqual(0);
+    }
+    expect(qs.some((q) => /DELETE FROM (tools|audit_log|app_settings)\b/.test(q))).toBe(false);
+    expect(Object.values(cleared).reduce((a, b) => a + b, 0)).toBe(statements.length);
+    replies.push([]);
+    expect(await sqlResetStore.demoTool()).toBeNull();
   });
 
   it('a change time without a zone is read as UTC (found live)', () => {

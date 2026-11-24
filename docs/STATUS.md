@@ -907,3 +907,21 @@ timed fresh-site runs, with the human.
     `kestrel-dev-builders` 1 member (the admin, already there, so no "addedToGroup"), `kestrel-prod-deployers`
     0 members: the app made the missing group. Whether it went as the app or as the admin isn't recorded; a
     `[loadDemo] … groups=created=… as=…` log line is added for the fresh-site run.
+- Step 4, Reset demo (spec section 16 step 7): `src/setup/reset-demo.ts` (`resetDemo`, no Forge imports),
+  `src/db/reset.ts` (`sqlResetStore`: the demo tool by its exact name; 15 DELETEs, each scoped to that tool id
+  directly or through its changes and facts, children first; never `tools`, `audit_log` or `app_settings`),
+  `resetDemoRecords` in `assets-records.ts` (makes sure the records exist, then one `PUT /object/{id}` each with
+  the section 16 values), the `resetDemo` resolver (Jira administrators only) sharing `loadDemoAs` with Load demo
+  data, and on Setup a "Reset demo" button that first shows what will be deleted and "This can't be undone",
+  then "Yes, reset the demo" / Cancel. Kept: the tool row, audit log, request and approval setup, groups, and
+  the Jira requests already raised (their later resolutions find no row and are ignored). If the Assets values
+  can't be put back, the reset still finishes and says what to set by hand; if the reload fails after clearing,
+  it says to run Reset again.
+  - Tests first (red: `resetDemoRecords is not a function`, `Cannot find module '../../src/setup/reset-demo'`,
+    `Cannot find module '/src/db/reset'`): `setup-assets.test.ts` (+3), `reset-demo.test.ts` (5),
+    `requests-sql.test.ts` (+1: every statement scoped to the tool, order, nothing else touched),
+    `resolvers.test.ts` (+1: administrators only). `npx vitest run`: `Test Files 29 passed (29)`, `Tests 415
+    passed (415)`; safety 47/47; tsc, eslint exit 0; `forge lint`: `No issues found.` Mutation checks: asks
+    cleared for every tool → `1 failed`; registry mode touching Assets → `1 failed`; restored, green. Deployed
+    5.2.0 (no scope change).
+  - Live: approved ("Yes, reset it") but not run yet: the demo site asked for a new sign-in.

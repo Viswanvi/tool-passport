@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { SavedAsk } from '../../src/db/asks';
-import { handleAsk, handleEnvironments, handleLoadDemo, type AskHandlerDeps } from '../../src/resolvers/handlers';
+import { handleAsk, handleEnvironments, handleLoadDemo, handleResetDemo, type AskHandlerDeps } from '../../src/resolvers/handlers';
 import { mayWriteTool } from '../../src/registry/authorise';
 import { DASHBOARD, demoWorld, depsFor, DEV, modelReplying, PRIYA, SAM, WEB, type World } from '../support/demo-world';
 
@@ -130,5 +130,18 @@ describe('write authorisation', () => {
     expect(seed).toHaveBeenLastCalledWith('acct-admin', 'assets');
     await handleLoadDemo({ mode: 'registry' }, { accountId: 'acct-admin' }, { check: admin(true), seed });
     expect(seed).toHaveBeenLastCalledWith('acct-admin', 'registry');
+  });
+
+  it('Reset demo is for Jira administrators only, and runs as the signed-in person', async () => {
+    const reset = vi.fn(async () => ({ ok: true as const, toolId: 1, environments: [], counts: {} }));
+    expect(await handleResetDemo({ accountId: PRIYA }, { check: admin(false), reset })).toMatchObject({ ok: false });
+    expect(await handleResetDemo({}, { check: admin(true), reset })).toMatchObject({ ok: false });
+    expect(reset).not.toHaveBeenCalled();
+    expect(await handleResetDemo({ accountId: 'acct-admin' }, { check: admin(true), reset })).toMatchObject({ ok: true });
+    expect(reset).toHaveBeenCalledWith('acct-admin');
+    const failing = vi.fn(async () => {
+      throw new Error('SQL timed out');
+    });
+    expect(await handleResetDemo({ accountId: 'acct-admin' }, { check: admin(true), reset: failing })).toMatchObject({ ok: false, reason: expect.stringContaining('Run it again') });
   });
 });

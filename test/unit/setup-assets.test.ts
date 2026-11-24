@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEMO_RECORDS, ensureDemoRecords, type AssetsSetupClient, type Reply } from '../../src/setup/assets-records';
+import { DEMO_RECORDS, ensureDemoRecords, resetDemoRecords, type AssetsSetupClient, type Reply } from '../../src/setup/assets-records';
 
 /**
  * "Load demo data" creates the Assets records itself (spec section 16, judge path step 2): the "Tool Passport
@@ -62,8 +62,18 @@ function fakeAssets(opts: { assets?: boolean; refuseWritesAs?: Array<'app' | 'us
         }),
       findObjects: async (_w, qlQuery) => {
         const t = state.types.find((x) => qlQuery.includes(`objectSchemaId = ${x.schemaId}`) && qlQuery.includes(x.name));
-        return ok({ values: state.objects.filter((o) => o.typeId === t?.id).map((o) => ({ objectKey: o.key, label: o.label })) });
+        return ok({ values: state.objects.filter((o) => o.typeId === t?.id).map((o) => ({ id: o.key.replace('TPENV-', 'id-'), objectKey: o.key, label: o.label })) });
       },
+      updateObject: async (_w, id, body) =>
+        write(`update ${id}`, () => {
+          const o = state.objects.find((x) => x.key.replace('TPENV-', 'id-') === id);
+          if (!o) return { status: 404, body: null };
+          const names = new Map((state.attrs.get(o.typeId) ?? []).map((a) => [a.id, a.name]));
+          for (const a of (body as { attributes: Array<{ objectTypeAttributeId: string; objectAttributeValues: Array<{ value: string }> }> }).attributes) {
+            o.attrs[names.get(a.objectTypeAttributeId) ?? '?'] = a.objectAttributeValues.map((v) => v.value);
+          }
+          return ok({ objectKey: o.key });
+        }),
       createObject: async (_w, body) =>
         write('object', () => {
           const b = body as { objectTypeId: string; attributes: Array<{ objectTypeAttributeId: string; objectAttributeValues: Array<{ value: string }> }> };
@@ -138,5 +148,37 @@ describe('the demo Assets records', () => {
     const consent = Object.assign(new Error('x'), { name: 'NEEDS_AUTHENTICATION_ERR' });
     const user: AssetsSetupClient = { ...f.user, createSchema: async () => Promise.reject(consent) };
     await expect(ensureDemoRecords(f.app, user)).rejects.toBe(consent);
+  });
+});
+
+describe('putting the demo records back (Reset demo)', () => {
+  it('after the demo moved KS-DEV to 14.0 with a frontend build, both records get the section 16 values again', async () => {
+    const f = fakeAssets();
+    await ensureDemoRecords(f.app, f.user);
+    Object.assign(f.state.objects[0]!.attrs, { Version: ['14.0'], 'Build environments': ['standard', 'frontend'] });
+    const r = await resetDemoRecords(f.app, f.user);
+    expect(r).toMatchObject({ ok: true, keys: { 'KS-DEV': 'TPENV-1', 'KS-PROD': 'TPENV-2' } });
+    expect(f.state.objects.map((o) => o.attrs)).toEqual(DEMO_RECORDS.map((d) => ({ ...d })));
+  });
+
+  it('on a site where the records were deleted, it makes them again', async () => {
+    const f = fakeAssets();
+    await ensureDemoRecords(f.app, f.user);
+    f.state.objects.length = 0;
+    expect(await resetDemoRecords(f.app, f.user)).toMatchObject({ ok: true, created: ['KS-DEV', 'KS-PROD'] });
+    expect(f.state.objects).toHaveLength(2);
+  });
+
+  it('where the app is refused, the admin puts them back; refused as both, it says which record', async () => {
+    const f = fakeAssets();
+    await ensureDemoRecords(f.app, f.user);
+    f.state.objects[0]!.attrs.Version = ['14.0'];
+    const asUser = fakeAssets({ refuseWritesAs: ['app'] });
+    Object.assign(asUser.state, { schemas: f.state.schemas, types: f.state.types, attrs: f.state.attrs, objects: f.state.objects });
+    expect(await resetDemoRecords(asUser.app, asUser.user)).toMatchObject({ ok: true, as: 'user' });
+    expect(f.state.objects[0]!.attrs.Version).toEqual(['13.2']);
+    const neither = fakeAssets({ refuseWritesAs: ['app', 'user'] });
+    Object.assign(neither.state, { schemas: f.state.schemas, types: f.state.types, attrs: f.state.attrs, objects: f.state.objects });
+    expect(await resetDemoRecords(neither.app, neither.user)).toMatchObject({ ok: false, reason: expect.stringContaining('update KS-DEV') });
   });
 });
