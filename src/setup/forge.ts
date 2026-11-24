@@ -1,6 +1,7 @@
 import { route, type Route } from '@forge/api';
 import { assets, requester, type Mode } from '../providers/assets-api';
 import type { AssetsSetupClient, Reply } from './assets-records';
+import type { GroupsClient } from './groups';
 
 /**
  * Forge wiring for the setup writes (spec section 14: Assets writes only in setup/ and seed/, behind the
@@ -42,5 +43,15 @@ export function forgeSetupClient(mode: Mode): AssetsSetupClient {
     createAttribute: (w, typeId, body) => send(mode, assets.attributeCreate(w, typeId), 'POST', body),
     findObjects: (w, qlQuery) => send(mode, assets.aql(w), 'POST', { qlQuery }),
     createObject: (w, body) => send(mode, assets.objectCreate(w), 'POST', body),
+  };
+}
+
+/** Jira group calls for the demo groups (setup only; paths from the Jira REST v3 Groups docs). */
+export function forgeGroupsClient(mode: Mode): GroupsClient {
+  return {
+    findGroup: (name) => send(mode, route`/rest/api/3/group/bulk?groupName=${name}`),
+    userGroups: (accountId) => send(mode, route`/rest/api/3/user/groups?accountId=${accountId}`),
+    createGroup: (name) => send(mode, route`/rest/api/3/group`, 'POST', { name }),
+    addUser: (name, accountId) => send(mode, route`/rest/api/3/group/user?groupname=${name}`, 'POST', { accountId }),
   };
 }

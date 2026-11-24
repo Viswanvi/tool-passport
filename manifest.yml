@@ -124,7 +124,9 @@ permissions:
     - write:servicedesk-request
     - manage:servicedesk-customer   # E5: adding a desk customer works; raising for the asker needs the JSM Customer role (D23)
     - read:group:jira               # E6 / demo seed: find the demo groups (verified by a real call, D21)
-    - write:group:jira              # demo seed: creating groups got 401 with this alone; right set decided in Phase 4
+    - write:group:jira              # demo seed: create the two demo groups and add the person loading (D45)
+    - read:user:jira                # with read:avatar:jira, what Jira's Create group / Add user to group docs list
+    - read:avatar:jira              # (Phase 0 got 401 "scope does not match" with write:group:jira alone)
     - read:cmdb-object:jira
     - write:cmdb-object:jira        # setup wizard and demo seed only
     - read:cmdb-schema:jira

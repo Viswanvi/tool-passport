@@ -655,6 +655,13 @@ const SetupPage = () => {
           <Text>{result.environments.map((e) => `${e.name} → ${e.providerRef}`).join(' · ')}</Text>
         </SectionMessage>
       ) : null}
+      {result?.ok && result.warnings?.length ? (
+        <SectionMessage appearance="warning" title="One more step">
+          {result.warnings.map((w) => (
+            <Text key={w}>{w}</Text>
+          ))}
+        </SectionMessage>
+      ) : null}
       {result && !result.ok ? (
         <SectionMessage appearance="error" title="Demo data not loaded">
           <Text>{result.reason}</Text>

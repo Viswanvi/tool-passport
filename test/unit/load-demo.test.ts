@@ -54,6 +54,34 @@ describe('Load demo data', () => {
     expect(ensureRecords).not.toHaveBeenCalled();
   });
 
+  it('then makes the demo groups, in either mode, and counts what it did', async () => {
+    const ensureGroups = vi.fn(async () => ({ ok: true as const, created: ['kestrel-dev-builders', 'kestrel-prod-deployers'], joined: true, as: 'user' as const }));
+    const assets = await loadDemoData({ ensureRecords: async () => ({ ...OK_RECORDS, created: [] }), seed: async () => SEEDED, ensureGroups });
+    expect(assets).toMatchObject({ ok: true, counts: { tools: 1, groupsCreated: 2, addedToGroup: 1 } });
+    const registry = await loadDemoData({ ensureRecords: vi.fn(), seed: async () => SEEDED, ensureGroups }, 'registry');
+    expect(registry).toMatchObject({ ok: true, counts: { groupsCreated: 2 } });
+    expect(ensureGroups).toHaveBeenCalledTimes(2);
+  });
+
+  it("groups that can't be made don't undo the load: it says exactly what to do by hand", async () => {
+    const r = await loadDemoData({
+      ensureRecords: async () => ({ ...OK_RECORDS, created: [] }),
+      seed: async () => SEEDED,
+      ensureGroups: async () => ({ ok: false as const, reason: 'create group kestrel-dev-builders: 401' }),
+    });
+    expect(r).toMatchObject({ ok: true, warnings: [expect.stringContaining('kestrel-dev-builders')] });
+    if (r.ok) {
+      expect(r.warnings![0]).toContain('401');
+      expect(r.warnings![0]).toContain('add yourself to kestrel-dev-builders');
+    }
+  });
+
+  it('no groups step runs when the load itself failed', async () => {
+    const ensureGroups = vi.fn();
+    await loadDemoData({ ensureRecords: async () => ({ ok: false, reason: 'no_assets' }), seed: vi.fn(), ensureGroups });
+    expect(ensureGroups).not.toHaveBeenCalled();
+  });
+
   it('Assets refused: nothing is written, and the reason says which step', async () => {
     const seed = vi.fn();
     const r = await loadDemoData({ ensureRecords: async () => ({ ok: false, reason: 'Assets create schema: 403' }), seed });

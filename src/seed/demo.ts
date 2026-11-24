@@ -30,7 +30,7 @@ export interface SeedDeps {
 }
 
 export type SeedResult =
-  | { ok: true; toolId: number; environments: Array<{ name: string; providerRef: string }>; counts: Record<string, number> }
+  | { ok: true; toolId: number; environments: Array<{ name: string; providerRef: string }>; counts: Record<string, number>; warnings?: string[] }
   | { ok: false; reason: string };
 
 const ENVIRONMENTS = ['KS-DEV', 'KS-PROD'] as const;

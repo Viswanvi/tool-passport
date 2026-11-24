@@ -14,7 +14,8 @@ import { loopDeps, noteEnvironmentVersion, readRequestSetup, readResolutionMap, 
 import { listDecisionNames, listDesks, usableRequestTypes } from '../loop/jsm-forge';
 import { readGroups } from '../providers/forge';
 import { ensureDemoRecords } from '../setup/assets-records';
-import { forgeSetupClient } from '../setup/forge';
+import { forgeGroupsClient, forgeSetupClient } from '../setup/forge';
+import { ensureDemoGroups } from '../setup/groups';
 import { loadDemoData } from '../setup/load-demo';
 import type { WriteCheck } from '../registry/authorise';
 import { sqlRegistryWriter } from '../registry/write';
@@ -95,6 +96,8 @@ resolver.define('loadDemo', ({ payload, context }) =>
         {
           ensureRecords: () => ensureDemoRecords(forgeSetupClient('app'), forgeSetupClient('user')),
           seed: (d) => seedDemo({ writer: sqlRegistryWriter, actor, ...d }),
+          // The person loading plays the asker too, so they join kestrel-dev-builders (spec section 16).
+          ensureGroups: () => ensureDemoGroups(forgeGroupsClient('app'), forgeGroupsClient('user'), actor),
         },
         mode,
       );

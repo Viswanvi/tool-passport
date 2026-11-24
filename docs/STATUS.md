@@ -885,3 +885,17 @@ timed fresh-site runs, with the human.
     `Owner-verified · 13.2`, `Approved · TPD-5`. Then "Load demo data" again → `KS-DEV → TPENV-4679 · KS-PROD →
     TPENV-4680`: the demo site is back in Assets mode. LLM calls: 1 expected (each load moves the catalog
     revision, so the question was translated again).
+- Step 3, the demo groups (built and unit-tested; not live yet): `src/setup/groups.ts` (`ensureDemoGroups`: finds
+  or creates `kestrel-dev-builders` and `kestrel-prod-deployers`, adds only the person loading to
+  kestrel-dev-builders; as the app first, then as the signed-in admin; consent passed up), `forgeGroupsClient`,
+  and Load demo data runs it after the data in both modes. If it fails, the load stands and Setup shows "One more
+  step" with the exact manual steps. Jira's Create group / Add user to group docs (read in the browser
+  2026-11-24): "Site administration (that is, member of the site-admin group)", granular scopes
+  `read:group:jira, read:user:jira, write:group:jira, read:avatar:jira`; the app lacked the last two, which
+  explains Phase 0's 401, so the manifest adds `read:user:jira` and `read:avatar:jira` (D45).
+  - Tests: `setup-groups.test.ts` (5) and `load-demo.test.ts` (+3), written with the code, so mutation checks
+    instead of a red first run: existing groups not checked → `1 failed`; joins the wrong group → `2 failed`; no
+    admin fallback → `2 failed`; a group failure hidden → `1 failed`; restored, green. `npx vitest run`: `Test
+    Files 28 passed (28)`, `Tests 405 passed (405)`; safety 47/47; tsc, eslint exit 0. `forge lint`: one
+    approval, `This deployment triggers a major version upgrade … because: Change due to scope modification`.
+  - Needs the human: a `forge install --upgrade` on the sites (standing rule: ask first), then a live run.
