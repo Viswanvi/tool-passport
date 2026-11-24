@@ -120,12 +120,15 @@ describe('write authorisation', () => {
     await expect(mayWriteTool(PRIYA, tool, { isJiraAdmin: async () => { throw consent; } })).rejects.toBe(consent);
   });
 
-  it('Load demo data refuses a non-administrator and seeds as the signed-in person', async () => {
+  it('Load demo data refuses a non-administrator and seeds as the signed-in person, in the mode asked for', async () => {
     const seed = vi.fn(async () => ({ ok: true as const, toolId: 1, environments: [], counts: {} }));
-    expect(await handleLoadDemo({ accountId: PRIYA }, { check: admin(false), seed })).toMatchObject({ ok: false });
-    expect(await handleLoadDemo({}, { check: admin(true), seed })).toMatchObject({ ok: false });
+    expect(await handleLoadDemo({}, { accountId: PRIYA }, { check: admin(false), seed })).toMatchObject({ ok: false });
+    expect(await handleLoadDemo({}, {}, { check: admin(true), seed })).toMatchObject({ ok: false });
+    expect(await handleLoadDemo({ mode: 'sideways' }, { accountId: 'acct-admin' }, { check: admin(true), seed })).toMatchObject({ ok: false });
     expect(seed).not.toHaveBeenCalled();
-    await handleLoadDemo({ accountId: 'acct-admin' }, { check: admin(true), seed });
-    expect(seed).toHaveBeenCalledWith('acct-admin');
+    await handleLoadDemo({ accountId: SAM }, { accountId: 'acct-admin' }, { check: admin(true), seed });
+    expect(seed).toHaveBeenLastCalledWith('acct-admin', 'assets');
+    await handleLoadDemo({ mode: 'registry' }, { accountId: 'acct-admin' }, { check: admin(true), seed });
+    expect(seed).toHaveBeenLastCalledWith('acct-admin', 'registry');
   });
 });

@@ -156,14 +156,20 @@ export async function handleEnvironments(
   return { environments, suggestions };
 }
 
+const LoadDemo = z.object({ mode: z.enum(['assets', 'registry']).default('assets') });
+
+/** "Load demo data": Jira administrators only. `mode` picks Assets records or, on a site without Assets, registry mode. */
 export async function handleLoadDemo(
+  payload: unknown,
   ctx: ResolverContext,
-  deps: { check: WriteCheck; seed(actor: string): Promise<SeedResult> },
+  deps: { check: WriteCheck; seed(actor: string, mode: 'assets' | 'registry'): Promise<SeedResult> },
 ): Promise<SeedResult> {
   const allowed = await mayAdminister(ctx.accountId, deps.check);
   if (!allowed.ok || !ctx.accountId) return { ok: false, reason: allowed.ok ? 'Not signed in' : allowed.reason };
+  const p = LoadDemo.safeParse(payload ?? {});
+  if (!p.success) return { ok: false, reason: 'Choose Assets or registry mode' };
   try {
-    return await deps.seed(ctx.accountId);
+    return await deps.seed(ctx.accountId, p.data.mode);
   } catch (e) {
     // Every write is safe to repeat, so running it again finishes the job.
     console.error(`[loadDemo] failed: ${String(e).slice(0, 300)}`);

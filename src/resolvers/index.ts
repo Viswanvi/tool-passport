@@ -82,18 +82,22 @@ resolver.define('environments', ({ payload, context }) =>
   handleEnvironments(payload, ctxOf(context), { listTools, loadTool, listEnvironments, loadCatalog, readGroups }),
 );
 
-resolver.define('loadDemo', ({ context }) =>
-  handleLoadDemo(ctxOf(context), {
+resolver.define('loadDemo', ({ payload, context }) =>
+  handleLoadDemo(payload, ctxOf(context), {
     check: writeCheck,
     // A minor-version upgrade fires no lifecycle event and the sweep may not have run yet (D27): bring the
     // tables up to date first. The runner applies only what this installation lacks.
-    // The Assets records first (made if missing: as the app, else as this admin), then the app's own records.
-    seed: async (actor) => {
+    // Assets mode: the Assets records first (made if missing: as the app, else as this admin), then the app's own
+    // records. Registry mode: no Assets at all.
+    seed: async (actor, mode) => {
       await runMigrations();
-      return loadDemoData({
-        ensureRecords: () => ensureDemoRecords(forgeSetupClient('app'), forgeSetupClient('user')),
-        seed: ({ findObjectKey }) => seedDemo({ writer: sqlRegistryWriter, findObjectKey, actor }),
-      });
+      return loadDemoData(
+        {
+          ensureRecords: () => ensureDemoRecords(forgeSetupClient('app'), forgeSetupClient('user')),
+          seed: (d) => seedDemo({ writer: sqlRegistryWriter, actor, ...d }),
+        },
+        mode,
+      );
     },
   }),
 );

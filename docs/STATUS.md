@@ -867,3 +867,21 @@ timed fresh-site runs, with the human.
     environments: 2 · catalogKeys: 25 · links: 7 · facts: 6 · rules: 8 · readinessKeys: 2 · accessMappings: 4` ·
     `KS-DEV → TPENV-4679 · KS-PROD → TPENV-4680`, with no "assetsRecordsCreated" count: nothing was created.
     The creating path is proven live only by E2's calls so far; the fresh-site run (step 8) will show it.
+- Step 2, registry mode (spec section 16, "Judge path without Assets"): `seedDemo` with `registry` looks nothing
+  up in Assets and gives each environment the section 16 values as owner-recorded values (`{ values, recordedAt,
+  recordedBy }`); `loadDemoData(…, 'registry')` skips the Assets records; `loadDemo` takes `{ mode }` (zod:
+  `assets` or `registry`, default `assets`); Setup has a second button, "Load without Assets (registry mode)",
+  and says registry values are weaker evidence. A site without Assets gets "Load the demo data in registry mode
+  instead".
+  - Tests first: `seed.test.ts` (+3: no Assets lookups and the recorded values; moment 1 answers through the
+    real registry provider, labelled `recorded_by_owner`; switching modes keeps the same two environments),
+    `load-demo.test.ts` (+1), `resolvers.test.ts` (mode passed, a bad mode refused). `npx vitest run`: `Test
+    Files 27 passed (27)`, `Tests 397 passed (397)`; safety `Tests 47 passed (47)`. tsc, eslint exit 0;
+    `forge lint`: `No issues found.` Deployed 4.31.0 (eligible for Runs on Atlassian).
+  - Live on the demo site (human: "Use the demo site", because toolpassport showed Atlassian's request-access
+    page for the account signed in now): "Load without Assets (registry mode)" → `KS-DEV → Recorded by owner ·
+    KS-PROD → Recorded by owner`. Ask in KS-DEV "Can I build a custom web front end or dashboard?": **Not
+    ready**, `KS-DEV · 13.2`, "Frontend build isn't set up in KS-DEV.", chips `Recorded by owner · Nov 24`,
+    `Owner-verified · 13.2`, `Approved · TPD-5`. Then "Load demo data" again → `KS-DEV → TPENV-4679 · KS-PROD →
+    TPENV-4680`: the demo site is back in Assets mode. LLM calls: 1 expected (each load moves the catalog
+    revision, so the question was translated again).

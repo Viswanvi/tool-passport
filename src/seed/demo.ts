@@ -1,5 +1,6 @@
 import type { CapabilityLink, Effect } from '../engine/model';
 import type { RegistryWriter } from '../registry/write';
+import { DEMO_RECORDS } from '../setup/assets-records';
 import { DEMO_CATALOG, DEMO_TOOL_NAME } from './demo-catalog';
 
 /**
@@ -18,8 +19,13 @@ export const ROUTES = { environmentOwner: 'environment_owner', toolOwner: 'tool_
 
 export interface SeedDeps {
   writer: RegistryWriter;
-  /** The Assets object key of the passport object with this name, or null. */
+  /** Assets mode: the Assets object key of the passport object with this name, or null. */
   findObjectKey(name: string): Promise<string | null>;
+  /**
+   * Registry mode (spec section 16, "Judge path without Assets"): no Assets at all; each environment carries the
+   * section 16 values, recorded by the person loading and shown as "Recorded by owner".
+   */
+  registry?: { now(): string };
   actor: string;
 }
 
@@ -68,15 +74,24 @@ const ACCESS: Array<{ action: string; env: EnvName; group: string | null; grants
   { action: 'community_app_framework', env: 'KS-PROD', group: null, grants: null },
 ];
 
+/** The section 16 values an environment's record holds, as the registry keeps them (no Name or Tool). */
+function recordedFor(name: EnvName): Record<string, string[]> {
+  const r = DEMO_RECORDS.find((d) => d.Name[0] === name)!;
+  return { Version: r.Version!, 'Build environments': r['Build environments']!, 'Features enabled': r['Features enabled']! };
+}
+
 export async function seedDemo(deps: SeedDeps): Promise<SeedResult> {
   const { writer, actor } = deps;
-  // Check the Assets objects first, so a missing one writes nothing.
+  // Assets mode: check the objects first, so a missing one writes nothing. Registry mode looks nothing up.
   const refs = new Map<EnvName, string>();
-  for (const name of ENVIRONMENTS) {
-    const ref = await deps.findObjectKey(name);
-    if (!ref) return { ok: false, reason: `No ${name} object in the Tool Passport Environments schema in Assets` };
-    refs.set(name, ref);
+  if (!deps.registry) {
+    for (const name of ENVIRONMENTS) {
+      const ref = await deps.findObjectKey(name);
+      if (!ref) return { ok: false, reason: `No ${name} object in the Tool Passport Environments schema in Assets` };
+      refs.set(name, ref);
+    }
   }
+  const recordedAt = deps.registry?.now();
 
   const counts: Record<string, number> = {};
   const count = (k: string) => (counts[k] = (counts[k] ?? 0) + 1);
@@ -85,7 +100,10 @@ export async function seedDemo(deps: SeedDeps): Promise<SeedResult> {
   count('tools');
   const envIds = new Map<EnvName, number>();
   for (const name of ENVIRONMENTS) {
-    envIds.set(name, await writer.upsertEnvironment({ toolId, name, provider: 'assets', providerRef: refs.get(name)!, ownerAccountId: actor, audienceGroup: null, recordedValues: null }));
+    const environment = recordedAt
+      ? { provider: 'registry' as const, providerRef: null, recordedValues: { values: recordedFor(name), recordedAt, recordedBy: actor } }
+      : { provider: 'assets' as const, providerRef: refs.get(name)!, recordedValues: null };
+    envIds.set(name, await writer.upsertEnvironment({ toolId, name, ...environment, ownerAccountId: actor, audienceGroup: null }));
     count('environments');
   }
   for (const k of DEMO_CATALOG) {
@@ -131,5 +149,5 @@ export async function seedDemo(deps: SeedDeps): Promise<SeedResult> {
   }
   await writer.bumpRevision(toolId);
   await writer.audit(actor, 'load_demo', 'tool', String(toolId), counts);
-  return { ok: true, toolId, environments: ENVIRONMENTS.map((name) => ({ name, providerRef: refs.get(name)! })), counts };
+  return { ok: true, toolId, environments: ENVIRONMENTS.map((name) => ({ name, providerRef: refs.get(name) ?? 'Recorded by owner' })), counts };
 }

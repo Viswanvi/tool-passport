@@ -3,6 +3,7 @@ import { answerQuestion } from '../../src/engine/answer';
 import type { CatalogKey } from '../../src/engine/catalog';
 import type { AccessMappingRow, CapabilityLink, EngineRepo, Environment, FactRow, FactVersionRow, ReadinessKeyRow, RuleRow, Tool } from '../../src/engine/model';
 import type { RegistryWriter } from '../../src/registry/write';
+import { readRegistry } from '../../src/providers/registry';
 import { seedDemo } from '../../src/seed/demo';
 import { DEMO_EXAMPLES } from '../../src/seed/demo-catalog';
 import { modelReplying, picks, WEB } from '../support/demo-world';
@@ -152,5 +153,57 @@ describe('Load demo data', () => {
     expect(await verdict('KS-DEV', picks({ key: 'max_upload_gb', value: 1 }))).toBe('yes');
     expect(await verdict('KS-DEV', picks({ key: 'websockets' }))).toBe('dont_know');
     expect(await verdict('KS-PROD', picks({ key: 'community_app_framework' }))).toBe('no');
+  });
+});
+
+describe('Load demo data in registry mode (spec section 16, "Judge path without Assets")', () => {
+  const NOW = '2026-11-24T10:00:00.000Z';
+
+  it('looks nothing up in Assets; the environments carry the section 16 values, recorded by the person loading', async () => {
+    const m = memoryRegistry();
+    let lookups = 0;
+    const r = await seedDemo({ writer: m.writer, findObjectKey: async () => (lookups++, null), registry: { now: () => NOW }, actor: 'acct-admin' });
+    expect(lookups).toBe(0);
+    expect(r).toMatchObject({ ok: true, environments: [{ name: 'KS-DEV', providerRef: 'Recorded by owner' }, { name: 'KS-PROD', providerRef: 'Recorded by owner' }] });
+    expect(m.db.environments.map((e) => ({ name: e.name, provider: e.provider, providerRef: e.providerRef, recordedValues: e.recordedValues }))).toEqual([
+      {
+        name: 'KS-DEV',
+        provider: 'registry',
+        providerRef: null,
+        recordedValues: { values: { Version: ['13.2'], 'Build environments': ['standard'], 'Features enabled': ['uploads', 'scheduling'] }, recordedAt: NOW, recordedBy: 'acct-admin' },
+      },
+      {
+        name: 'KS-PROD',
+        provider: 'registry',
+        providerRef: null,
+        recordedValues: { values: { Version: ['13.2'], 'Build environments': ['standard', 'frontend'], 'Features enabled': ['uploads', 'scheduling', 'single sign-on'] }, recordedAt: NOW, recordedBy: 'acct-admin' },
+      },
+    ]);
+  });
+
+  it('gives the same moment 1 answers through the real registry provider, labelled Recorded by owner', async () => {
+    const m = memoryRegistry();
+    await seedDemo({ writer: m.writer, findObjectKey: async () => null, registry: { now: () => NOW }, actor: 'acct-admin' });
+    const tool = m.db.tools[0]!;
+    const catalog = { revision: 1, keys: m.db.keys, links: m.db.links, examples: DEMO_EXAMPLES };
+    const env = (name: string) => m.db.environments.find((e) => e.name === name)!;
+    const mapped = async () => [...m.db.readiness.values()].map((k) => k.providerAttribute);
+    const ask = async (name: string, reply: unknown) =>
+      answerQuestion(
+        { question: 'q', tool, environment: env(name), asker: 'acct-priya', groups: { ok: true, names: ['kestrel-dev-builders'] }, catalog },
+        { chat: modelReplying(reply), repo: m.repo, environments: { read: (e) => readRegistry(e, { mappedAttributes: mapped, now: () => NOW }) } },
+      );
+    const dev = await ask('KS-DEV', WEB);
+    expect(dev.state === 'checked' ? dev.verdict : dev.state).toBe('not_ready');
+    if (dev.state === 'checked') expect(dev.outcome.results.find((x) => x.check.dimension === 'environment')!.label).toMatchObject({ kind: 'recorded_by_owner' });
+    const prod = await ask('KS-PROD', WEB);
+    expect(prod.state === 'checked' ? prod.verdict : prod.state).toBe('no');
+  });
+
+  it('switching a site from Assets to registry mode updates the same two environments', async () => {
+    const m = memoryRegistry();
+    await seedDemo({ writer: m.writer, findObjectKey: async (n) => OBJECTS[n] ?? null, actor: 'acct-admin' });
+    await seedDemo({ writer: m.writer, findObjectKey: async () => null, registry: { now: () => NOW }, actor: 'acct-admin' });
+    expect(m.db.environments).toHaveLength(2);
   });
 });

@@ -615,10 +615,10 @@ const TestsSection = () => {
 const SetupPage = () => {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<SeedResult | null>(null);
-  const load = async () => {
+  const load = async (mode: 'assets' | 'registry') => {
     setBusy(true);
     try {
-      setResult(await call<SeedResult>('loadDemo'));
+      setResult(await call<SeedResult>('loadDemo', { mode }));
     } catch (e) {
       setResult({ ok: false, reason: String(e) });
     } finally {
@@ -632,9 +632,16 @@ const SetupPage = () => {
         mappings. You become its owner. In Assets it creates the Tool Passport Environments schema with the KS-DEV and KS-PROD records, or uses
         them if they are already there. It is safe to run again.
       </Text>
-      <Inline>
-        <Button appearance="primary" onClick={() => void load()} isDisabled={busy}>
+      <Text>
+        No Assets on this site? Load it in registry mode: the environment values are recorded by the owner in Tool Passport instead, and answers
+        label them Recorded by owner, which is weaker evidence than an Assets record.
+      </Text>
+      <Inline space="space.100">
+        <Button appearance="primary" onClick={() => void load('assets')} isDisabled={busy}>
           Load demo data
+        </Button>
+        <Button onClick={() => void load('registry')} isDisabled={busy}>
+          Load without Assets (registry mode)
         </Button>
       </Inline>
       {busy ? <Spinner /> : null}

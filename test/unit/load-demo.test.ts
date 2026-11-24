@@ -44,6 +44,16 @@ describe('Load demo data', () => {
     expect(seed).not.toHaveBeenCalled();
   });
 
+  it('registry mode never touches Assets: the seed records the values itself', async () => {
+    const ensureRecords = vi.fn();
+    const seed = vi.fn(async (d: Pick<SeedDeps, 'findObjectKey' | 'registry'>) => {
+      expect(d.registry?.now()).toBe('2026-11-24T10:00:00.000Z');
+      return SEEDED;
+    });
+    expect(await loadDemoData({ ensureRecords, seed, now: () => '2026-11-24T10:00:00.000Z' }, 'registry')).toEqual(SEEDED);
+    expect(ensureRecords).not.toHaveBeenCalled();
+  });
+
   it('Assets refused: nothing is written, and the reason says which step', async () => {
     const seed = vi.fn();
     const r = await loadDemoData({ ensureRecords: async () => ({ ok: false, reason: 'Assets create schema: 403' }), seed });
