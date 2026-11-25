@@ -1130,6 +1130,20 @@ Spec checklist (section 18, Phase 4): Setup wizard ✓ (one request type for all
 demo through the real APIs ✓ (loading proven from scratch on tp-judge-1; Reset on the demo site); test screen runs
 both sets ✓; suggested questions ✓; written judge path tested on a fresh site ✓ **with Assets** (E9).
 
-**Not done, so Phase 4 is not fully signed off:** the registry-mode path on a fresh site (CLAUDE.md Phase 4 step 5,
-"with and without Assets"), and the two-asker privacy test. Also open for submission: the video, the Devpost text
+**Registry-mode run on the fresh site (2026-11-25, human: "Yes, registry check", "Yes, reset tp-judge-1"),
+untimed, production 2.1.0:** Setup → Load without Assets (registry mode): `KS-DEV → Recorded by owner · KS-PROD →
+Recorded by owner`, checklist `Kestrel Studio loaded in registry mode.`; Reset demo kept the mode (`cleared: 87`).
+Moment 1: **Not ready**, chip `Recorded by owner · Nov 25`. Moment 2: Request the fix → TPD-4; My tools → Records →
+Environments → Add or change, KS-DEV, Recorded by the owner, the guide's three lines → `Saved.`; TPD-4 Resolve this
+issue → `Answer now: Yes, with approval.`; Request approval → TPD-5 → `Answer now: Yes.` Moment 3: 3 GB **No**
+(`Recorded by owner`); KS-DEV saved again with `Version: 14.0` → Changes (after Refresh) `KS-DEV: 13.2 → 14.0 ·
+Recorded by owner`, KS-PROD untouched; 3 GB **Don't know yet** (`Verified on 13.2; KS-DEV runs 14.0`). The Still
+true / Changed steps are the same code in both modes and passed in the Assets run. LLM calls: 2.
+Found: the suggested questions after a reset come in a different order (catalog rows come back in another order),
+so the guide now says "or type it"; Changes needs Refresh after a save on the same tab (guide says so). With fast
+automated typing the UI Kit TextArea dropped lines (each change round-trips to the app); typing slower worked, and
+a person typing or pasting is not expected to hit it.
+
+**Not done, so Phase 4 is not fully signed off:** the two-asker privacy test (needs Sam signed in). The registry
+path is now checked on a fresh site (above). Also open for submission: the video, the Devpost text
 and Best Agents write-up, a LICENSE file (the human decides), and cancelling the tp-judge-1 trial.

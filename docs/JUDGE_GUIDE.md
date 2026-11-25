@@ -60,7 +60,7 @@ The checklist at the top shows each step as **Done** or **To do** and updates as
 ## 3. Moment 1: the answer depends on the environment
 
 Open the app: sidebar → **Apps** → **Tool Passport**. On the **Ask** tab, pick **Kestrel Studio** and **KS-DEV**,
-then click the suggested question **Can I build a custom web front end or dashboard?**
+then click the suggested question **Can I build a custom web front end or dashboard?** (or type it and click **Ask**).
 
 - Expected: **Not ready**. "Frontend build isn't set up in KS-DEV." Each line underneath names its evidence:
   *Assets record* (Build environments), *Owner-verified · 13.2*, *Mapped access · kestrel-dev-builders*. The next
@@ -114,7 +114,8 @@ An approval counts only when the approver resolves it. In this demo the approver
    all three lines, the first one now `Version: 14.0`: the form replaces every value.)
 3. Ask the 3 GB question in KS-DEV again: **Don't know yet**. The upload limit was verified on 13.2 and KS-DEV now
    runs 14.0, so the app no longer vouches for it. KS-PROD still answers No.
-4. Open **My tools** → **Changes**: *KS-DEV: 13.2 → 14.0 · Found in Assets record*, and a note of what was not
+4. Open **My tools** → **Changes** (click **Refresh** if you were already on My tools): *KS-DEV: 13.2 → 14.0 · Found
+   in Assets record* (*Recorded by owner* in registry mode), and a note of what was not
    touched (facts that don't depend on the version, policy rules, KS-PROD). The list of facts to re-verify is built in
    the background: if it says *Building the list…*, wait up to 5 minutes and click **Refresh**. For *Build a custom web front end
    or dashboard*, click **Still true on 14.0**. For the upload limit, click **Changed**, enter **5** and **Save**.
