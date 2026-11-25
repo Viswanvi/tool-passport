@@ -27,13 +27,13 @@ the employee asking (Priya in the video) and the tool owner (Marco), with your o
 
 1. Open the [installation link](https://developer.atlassian.com/console/install/116e4a95-46a5-4008-8a77-9177f8e23ed0?signature=AYABeBOvsiGiDaXFGITTJXv0SaIAAAADAAdhd3Mta21zAEthcm46YXdzOmttczp1cy13ZXN0LTI6NzA5NTg3ODM1MjQzOmtleS83MDVlZDY3MC1mNTdjLTQxYjUtOWY5Yi1lM2YyZGNjMTQ2ZTcAuAECAQB4CxqLTo9l4lqXuFjNim1xJM%2Bp%2F3TVP9xHS2BrU5DRRucB8Hj7T4MmnIhU5akWl5pzoQAAAH4wfAYJKoZIhvcNAQcGoG8wbQIBADBoBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDOD0JAw07f27V8F8XgIBEIA7dKrAKCYfrYkYJtQvIeUgMqQ8rhTDohP39PayEcH3s5n%2B682bPPVY%2Bw5D9USPs5o77ccLi%2Be7qlomgOIAB2F3cy1rbXMAS2Fybjphd3M6a21zOmV1LXdlc3QtMTo3MDk1ODc4MzUyNDM6a2V5LzQ2MzBjZTZiLTAwYzMtNGRlMi04NzdiLTYyN2UyMDYwZTVjYwC4AQICAHi9bVMAkme4qVQX1fQHo6ePw3H40A7cGfz7yrmSfBWMXgFKpXbOptH67Vllbilcs9HrAAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMMkyFEahs9%2B36EKTQAgEQgDuY3llj2%2F5UvFALfautqlMgDSNgY2ShYcRmYu8qPeeGgsWT7GJWGR0k7Rw6aCg3k06R%2FkiQiSYBHI%2BWqwAHYXdzLWttcwBLYXJuOmF3czprbXM6dXMtZWFzdC0xOjcwOTU4NzgzNTI0MzprZXkvNmMxMjBiYTAtNGNkNS00OTg1LWI4MmUtNDBhMDQ5NTJjYzU3ALgBAgIAeDYASx0XCjkny4iLV6vz%2BKtEGSGT6kdt0QRpkn6D%2FlVEAaNe4JzmVWrpJEHBN1biRTQAAAB%2BMHwGCSqGSIb3DQEHBqBvMG0CAQAwaAYJKoZIhvcNAQcBMB4GCWCGSAFlAwQBLjARBAyxcWouXocdF4f3GHICARCAO%2Fs1ZbTP7YgbQmqybuh8fJ%2FTJMdJfeUsg2TiOhwgv4KF5phAN8spaXgKGHzbaK5dI7AhcAmBohzzRAh3AgAAAAAMAAAQAAAAAAAAAAAAAAAAAGLcpKVj0k2gKGWiLyaubMb%2F%2F%2F%2F%2FAAAAAQAAAAAAAAAAAAAAAQAAADIxzJ9VXpQTOUhYT3KOxUZOf0T8ZV13dhK4R5xigaOLlkTeu78JymUYmKG3YTjC28CiRNmcPap6INasNvLghyJMBvk%3D&product=jira)
    (also on the Devpost page), click **Get app**, choose your site and accept the app's permissions.
-2. **A service desk.** If your site has none, create one: in the sidebar, **Spaces → +**, then **Service
-   management** and a template such as **Basic IT service management**. Jira can take about **10 minutes** before
-   it counts you as an agent on a desk you just created. Until then its requests open in the customer portal and you
-   can't resolve them, so set up the rest meanwhile.
+2. **A service desk.** If your site has none, create one. On a brand-new site Jira opens on *Welcome to Service
+   Collection*: click **Create space**. Otherwise use the sidebar, **Spaces → +**. Then choose **Service
+   management** → **Basic IT service management** → **Use template**, give it a name (for example *Tool Passport
+   Desk*) and click **Create space**.
 3. **Resolutions.** Open Jira settings (the gear icon at the top right) → **Work items** → **Resolutions**. If the
-   list is empty, which is normal on a new developer site, add two: **Done** and **Declined**. Without any
-   resolutions, Jira won't let an agent resolve a request.
+   list is empty, add two: **Done** and **Declined**. Without any resolutions, Jira won't let anyone resolve a
+   request with an outcome. (Some new sites already have them; one of ours did, another didn't.)
 
 ## 2. Set up Tool Passport
 
@@ -72,13 +72,12 @@ Try your own wording too. A question outside the tool's catalog gets **Don't kno
 
 ## 4. Moment 2: the guided fix
 
-Do this once you count as an agent on the desk (see step 1.2).
-
 1. Ask the KS-DEV question again and click **Request the fix**. The card shows *Fix requested (TPD-…)* with a link
    to the request. The request is private, raised for you, and assigned to the tool owner (also you). It says what
    is missing and where the evidence came from, such as *Assets record TPENV-1*.
 2. Make the fix in Assets: sidebar → **Assets** → **Schemas** → **Tool Passport Environments** → **Tool
-   Environment** → **KS-DEV**. Edit **Build environments** and add **frontend** next to *standard*.
+   Environment** → **KS-DEV**. On the object, click **3 more attributes** to see them all, click the **Build
+   environments** value, add **frontend** next to *standard*, and confirm with ✓.
    - **No Assets?** In Tool Passport, open **My tools** → **Records**, pick **Environments**, and under *Add or
      change* enter Name `KS-DEV`, Values come from **Recorded by the owner**, and these three lines, then **Save**:
 
@@ -87,11 +86,15 @@ Do this once you count as an agent on the desk (see step 1.2).
      Build environments: standard, frontend
      Features enabled: uploads, scheduling
      ```
-3. Resolve the request in Jira: search for its key (like `TPD-1`) and use the resolve transition with the
-   resolution **Done**. Within seconds the app comments on the request with the new answer, and the card turns
-   **Yes, with approval** by itself (or click **Re-check**).
-4. Click **Request approval**. Resolve that request with **Done**, the outcome you mapped to Approved. The card
-   turns **Yes**, with the evidence line *Approved · TPD-…*.
+3. Resolve the request: click **view request** on the card and then **Resolve this issue** (and confirm). This works
+   from the request's portal page straight away, even on a desk you created minutes ago. Within seconds the app
+   comments on the request with the new answer ("Answer now: Yes, with approval…"), and the card turns **Yes, with
+   approval** (click **Ask again** under *Your recent questions*, or **Re-check**).
+4. Click **Request approval**, open that request the same way and **Resolve this issue**. On our test site this set
+   the resolution **Done**, the outcome you mapped to Approved, and the app answered "Answer now: Yes." The card turns
+   **Yes**, with the evidence line *Approved · TPD-…*. If the app instead says the approval is still pending, resolve
+   it in Jira's agent view with the resolution **Done** (Jira can take about 10 minutes after you create a desk before
+   it lets you act as an agent there).
 
 An approval counts only when the approver resolves it. In this demo the approver is the tool owner, which is you.
 
@@ -111,8 +114,9 @@ An approval counts only when the approver resolves it. In this demo the approver
    all three lines, the first one now `Version: 14.0`: the form replaces every value.)
 3. Ask the 3 GB question in KS-DEV again: **Don't know yet**. The upload limit was verified on 13.2 and KS-DEV now
    runs 14.0, so the app no longer vouches for it. KS-PROD still answers No.
-4. Open **My tools** → **Changes**: *KS-DEV: 13.2 → 14.0*, with the facts to re-verify on 14.0 and a note of what
-   was not touched (facts that don't depend on the version, policy rules, KS-PROD). For *Build a custom web front end
+4. Open **My tools** → **Changes**: *KS-DEV: 13.2 → 14.0 · Found in Assets record*, and a note of what was not
+   touched (facts that don't depend on the version, policy rules, KS-PROD). The list of facts to re-verify is built in
+   the background: if it says *Building the list…*, wait up to 5 minutes and click **Refresh**. For *Build a custom web front end
    or dashboard*, click **Still true on 14.0**. For the upload limit, click **Changed**, enter **5** and **Save**.
 5. Ask the 3 GB question in KS-DEV once more: **Yes**. Your recent questions mark the earlier answers *May have
    changed* until you ask again.
@@ -131,8 +135,9 @@ Changed.
    before it raises the request. Fixes and approvals stay on the Tool Passport page.
 4. Other agents can reuse the check: in Rovo Studio, add the tool **Check tool readiness** to any agent.
 
-The free developer site we tested did not include Rovo; Atlassian offered it there through a Teamwork Collection
-free trial.
+Rovo isn't part of a free developer site. On two new developer sites we tested, Rovo never appeared, even after
+starting a Teamwork Collection trial on one of them. So this part needs a site that already has Rovo; the video shows
+it working on such a site. Everything else in this guide works without Rovo.
 
 ## Start over
 
@@ -145,7 +150,7 @@ Jira stay in the desk. Nothing else is touched.
 
 | What you see | What to do |
 | --- | --- |
-| A request opens in the customer portal and you can't resolve it | The desk is new: wait about 10 minutes after creating it, then reload. |
+| A request opens in the customer portal | The desk is new and Jira doesn't count you as an agent yet (about 10 minutes). Use **Resolve this issue** on the portal page; that's enough for the demo. |
 | Resolving says *Resolution is required* with nothing to pick | Add the resolutions **Done** and **Declined** (step 1.3), then save Setup → **2. Approvals** again. |
 | **One more step** after Load demo data | The demo groups couldn't be made automatically. Follow the steps shown there. |
 | The card says *The app is not allowed to read the record for KS-DEV* | The app can't read Assets on this site. Use **Load without Assets (registry mode)** instead. |

@@ -739,8 +739,8 @@ const BeforeYouStart = () => (
       You need no extra role to try the demo yourself. Other people who ask need the Jira Service Management Customer role, given in Atlassian Administration.
     </Text>
     <Text>
-      A service desk you have just created can take about 10 minutes before Jira counts you as one of its agents. Until then its requests open in the customer portal
-      and you can&apos;t resolve them: wait, then reload.
+      A service desk you have just created can take about 10 minutes before Jira counts you as one of its agents. Until then its requests open in the customer portal;
+      you can still resolve them there with Resolve this issue.
     </Text>
     <Text>
       If Jira settings → Work items → Resolutions is empty on this site, add Done and Declined there before step 2. With no resolutions, Jira won&apos;t let an

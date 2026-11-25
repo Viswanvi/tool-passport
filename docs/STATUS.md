@@ -1045,5 +1045,48 @@ timed fresh-site runs, with the human.
     the human's OK (the first try from this shell could not show GitHub's sign-in; the human signed in through Git
     Credential Manager): `* [new branch] main -> main`. GitHub: head `10dface`, linked to the account; PRIVACY.md and
     Issues load. The spec's byline "@QiBR" was left as the human wrote it.
-  - Still to do in step 8: the fresh site with Rovo (the human creates it and starts the trial), installing from the
-    link, the timed judge-guide run (E9) with and without Assets, and E8's second site.
+  - **Timed judge-guide run (E9), 2026-11-25, PASS.** Site: `tp-judge-1`, a new free developer site the human made
+    from go.atlassian.com/cloud-dev, plus a Teamwork Collection trial (14 days, started Nov 25, auto-renews to paid
+    unless cancelled: **cancel by Dec 8**). Driven in the browser pane following docs/JUDGE_GUIDE.md, clock from
+    opening the installation link (08:55:07 UTC):
+    - Install from the link (human: "Yes, install it"; ~1.3 min waiting for that OK): `forge install list` →
+      `production · tp-judge-1.atlassian.net: Jira · 2 · Up-to-date`. Log: `[lifecycle] migrations applied:
+      v001_tools … v024_requests_portal_url`.
+    - Desk: the new site opened Jira on "Welcome to Service Collection → Create space"; Basic IT service management,
+      Tool Passport Desk (TPD). Resolutions already existed (Done, Won't Do, Duplicate, Declined), unlike toolpassport.
+      The site also made its own "Demo service space (DEMO)".
+    - Setup (gear → Marketplace apps → Tool Passport setup): checklist `Model: claude-haiku-5-5, picked
+      automatically` before anything else (Forge LLM works in production); Requests `Fix requests go to Tool Passport
+      Desk (TPD) as "Get IT help".`; Approvals `Saved. Setting an approval request to "Done" approves it.`; **Load demo
+      data on a fresh site**: `assetsRecordsCreated: 8 · groupsCreated: 2 · addedToGroup: 1 · KS-DEV → TPENV-1 ·
+      KS-PROD → TPENV-2` (log `[loadDemo] mode=assets assets_created=8 groups=created=2 joined=true as=user`): the
+      creating path of steps 1 and 3 is now proven live; Assets records read back as section 16. False-Yes suite: `All
+      47 cases passed` (log `[runSafety] passed=47/47`).
+    - **Moment 1 at 09:02:33: 7.4 min** (6.1 min without the install wait). **Not ready**, "Frontend build isn't set
+      up in KS-DEV.", `Assets record`, `Owner-verified · 13.2`, `Mapped access · kestrel-dev-builders`, next "Needs
+      design review". KS-PROD: **No**, "Policy for KS-PROD: Not allowed in production."
+    - Moment 2: Request the fix → TPD-1; Assets KS-DEV Build environments + frontend; the desk was 6 minutes old, so
+      `/browse/TPD-1` opened the customer portal. **Found:** the portal's "Resolve this issue" works at once and set
+      `Resolved with resolution Done`; within seconds the app commented `Answer now: Yes, with approval.` (sweep
+      `requests looked=1 rechecked=1`). Request approval → TPD-2, resolved the same way → `Answer now: Yes.` (log
+      `[issue-event] TPD-2 rechecked`): the owner resolving counts. Moment 2 done at 09:07:45. The guide and Setup's
+      "Before you start" now say to use Resolve this issue instead of waiting.
+    - Unknown loop: "Does Kestrel Studio support WebSockets for live dashboards?" → Don't know yet → Ask the owner →
+      TPD-3 → Open questions, Yes · All environments · Holds for every version → `Published. Answered and closed:
+      TPD-3. Still open: 0.`
+    - Moment 3: "Can I upload a 3 GB file?" KS-DEV **No** (`the recorded limit on 13.2 is 2 GB`); Assets Version 14.0;
+      again **Don't know yet** (`Verified on 13.2; KS-DEV runs 14.0`); Changes `KS-DEV: 13.2 → 14.0 · Found in Assets
+      record`, `Building the list…` until the sweep (`[sweep] … lists listed=1` at 09:15:47), then 4 facts to
+      re-verify, `Not listed: 3`, `Policy rules untouched: 8`, `Other environments untouched: KS-PROD (13.2)`. Still
+      true on 14.0 (web front end), Changed → 5 (upload) → the 3 GB question **Yes**, `Owner-verified · 14.0`;
+      recent questions show *May have changed*.
+    - **Rovo (E8 second site): not possible here.** Hours after the trial started, tp-judge-1 had no Ask Rovo button;
+      Administration lists Jira, Confluence and Loom on Teamwork Collection Standard but no Rovo app, and Rovo access
+      says nothing is blocked. The guide now says the Rovo part needs a site that already has Rovo.
+    - Guide fixes from the run (docs/JUDGE_GUIDE.md): the new-site "Create space" path, resolutions may already exist,
+      Assets "3 more attributes", resolve from the portal, the Changes list can take up to 5 minutes, the Rovo note.
+      Setup copy changed to match (not yet deployed).
+    - LLM calls in the run: 3 (dashboard, WebSockets, 3 GB; everything else cached). The browser session expired once
+      mid-run; the human signed in again.
+  - Still to do in step 8: deploy the copy change to development and production, push the guide and records, cancel
+    the tp-judge-1 trial (human), and the registry-mode path on a fresh site (not timed).
