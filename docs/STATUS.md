@@ -1088,5 +1088,48 @@ timed fresh-site runs, with the human.
       Setup copy changed to match (not yet deployed).
     - LLM calls in the run: 3 (dashboard, WebSockets, 3 GB; everything else cached). The browser session expired once
       mid-run; the human signed in again.
-  - Still to do in step 8: deploy the copy change to development and production, push the guide and records, cancel
-    the tp-judge-1 trial (human), and the registry-mode path on a fresh site (not timed).
+  - Then (human: "Yes, both"): Setup copy deployed to development 5.9.0 and production 2.1.0 (no scope change);
+    guide and records pushed, GitHub `main` 65b891b..6ea7a86. Left for the human: cancel the tp-judge-1 trial by
+    Dec 8.
+
+### Phase 4 sign-off checks (2026-11-25; human: "Yes, sign-off checks")
+
+Steps 1-8 are done (Setup wizard D46, demo seed and Reset, the false-Yes suite in the app D47, README and judge
+guide, production and distribution D48, the timed fresh-site run). Branch `phase-4`, code at `5ee8b53`.
+
+Results, verbatim:
+- `npx vitest run`: `Test Files 31 passed (31)`, `Tests 433 passed (433)`. `npx vitest run test/safety`: `Tests 47
+  passed (47)`. `npm run typecheck`: exit 0. `npm run lint`: exit 0.
+- `forge lint`: `No issues found.`
+- `forge eligibility -e development`: `The version of your app [5.9.0] that's deployed to [development] is eligible
+  for the Runs on Atlassian program.` `forge eligibility -e production`: `The version of your app [2.1.0] that's
+  deployed to [production] is eligible for the Runs on Atlassian program.`
+- `forge install list`: production on tp-judge-1 (version 2), development on toolpassport and one-atlas-oibs
+  (version 5), all `Up-to-date`.
+- Deployed = committed: `git diff --stat 5ee8b53 -- src manifest.yml package.json package-lock.json` is empty.
+- Searches: `external`/`remotes` in manifest.yml: 0. `participant`/`emailAddress`/`displayName` in src: 0. Token or
+  password patterns in src and test: 0. Writes outside `setup/` and `seed/`: one, `src/loop/jsm-forge.ts:41`, the
+  request loop assigning a Jira request to its owner (not Assets); the only other Assets call there is the AQL read
+  (`src/providers/forge.ts:44`, a POST that only reads). Account ids read from a resolver or Rovo payload: 0. The
+  `src/safety/` code is called only by the `runSafety` resolver (the other two imports are types).
+
+Section 14 self-review, what Phase 4 changed (the earlier tables still hold):
+
+| Risk | Added in Phase 4 | Proven by |
+| --- | --- | --- |
+| A false Yes from missing data | The false-Yes suite runs in the app on the build's own case list (D47) | `safety-run.test.ts`; old and new suites failed the same cases under 8 engine breaks; live 47/47 in development and production |
+| Someone other than the owner changes a fact, rule or mapping | `loadDemo`, `resetDemo`, `setupStatus`, `chooseModel` and `runSafety` all check Jira administrator on the server (`mayAdminister`) before anything else | `resolvers.test.ts` (loadDemo, resetDemo refuse a non-administrator), `setup-wizard.test.ts`, `safety-run.test.ts`; mutation checks removing the check from setupStatus, chooseModel and runSafety → red |
+| A request pretends to be someone else | The new resolvers take no account id: `loadDemo` {mode}, `chooseModel` {model}, the rest nothing | Search above; zod payloads |
+| The app changes environments | Assets writes (schema, type, attributes, the two records, Reset putting values back) and group writes only in `src/setup/` and `src/seed/`, behind the administrator check; Reset deletes only rows of the demo tool, never `tools`, `audit_log` or `app_settings` | Search above; `setup-assets.test.ts`, `setup-groups.test.ts`, `reset-demo.test.ts`, `requests-sql.test.ts`; live on a fresh site |
+| Scope creep | Two scopes added, `read:user:jira` and `read:avatar:jira`, because Jira's group APIs list them (D45); no others | manifest; install screen lists 19 permissions |
+| One asker's question leaks to another | Unchanged in Phase 4. The two-asker privacy test (section 19) still needs Sam signed in | Open |
+| Data kept longer than needed / what is stored | PRIVACY.md states it; logs hold no question text, names or account ids; personal data declared No (D48) | Log line review; PRIVACY.md |
+| Data leaves Atlassian | Still no egress; production eligible for Runs on Atlassian; the public repository has no personal data in any version (D48) | `forge eligibility` above; history scans before each push |
+
+Spec checklist (section 18, Phase 4): Setup wizard ✓ (one request type for all kinds, D46); Load demo data and Reset
+demo through the real APIs ✓ (loading proven from scratch on tp-judge-1; Reset on the demo site); test screen runs
+both sets ✓; suggested questions ✓; written judge path tested on a fresh site ✓ **with Assets** (E9).
+
+**Not done, so Phase 4 is not fully signed off:** the registry-mode path on a fresh site (CLAUDE.md Phase 4 step 5,
+"with and without Assets"), and the two-asker privacy test. Also open for submission: the video, the Devpost text
+and Best Agents write-up, a LICENSE file (the human decides), and cancelling the tp-judge-1 trial.
