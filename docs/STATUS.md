@@ -1144,6 +1144,23 @@ so the guide now says "or type it"; Changes needs Refresh after a save on the sa
 automated typing the UI Kit TextArea dropped lines (each change round-trips to the app); typing slower worked, and
 a person typing or pasting is not expected to hit it.
 
-**Not done, so Phase 4 is not fully signed off:** the two-asker privacy test (needs Sam signed in). The registry
-path is now checked on a fresh site (above). Also open for submission: the video, the Devpost text
+**Privacy test (spec section 19), 2026-11-25, PASS** (human: "Privacy test with Sam"; demo site, development 5.9.0).
+Priya (the admin, in the browser pane) asked "Does Kestrel Studio support WebSockets for live dashboards?" in KS-DEV →
+Don't know yet → Ask the owner → **TPD-9**. Sam, signed in by the human in a private window, asked "Can my dashboard
+keep a live two-way connection open to the server?" → the same unknown (`Keep two-way connections open
+(websockets)`) → Ask the owner → **TPD-10**, its own request. Sam's page had no My tools tab and listed only Sam's
+question; Priya's listed only hers. Read back as the owner through Jira's REST API: different reporters (each raised
+for its asker), same assignee (the owner); both descriptions hold only the requirement ("Someone asked … What they
+want to do: Keep two-way connections open (websockets)"), neither asker's wording; **participants 0** on both; Sam's
+request never contains Priya's account id. Owner view: one group, `Asked in KS-DEV · 2 open requests · TPD-9 ·
+TPD-10`, no wording. One Publish (Yes, all environments, every version): `Published. Answered and closed: TPD-9,
+TPD-10. Still open: 0.`; both `Resolved / Done`, each with the same public comment `The tool owner answered in Tool
+Passport. Answer now: Yes. Everything this needs is in place in KS-DEV.`, participants still 0. Logs: `[ask] … cached=true`
+(Priya), `[ask] … cached=false model=claude-haiku-5-5` (Sam), `[request] question raised=1` twice, `[publish] websockets
+settled=2 open=0`. LLM calls: 1.
+
+**Phase 4: every item now passes** (Setup wizard, demo seed and Reset, the test screen, README and judge guide, the
+timed fresh-site run with Assets, registry mode on a fresh site, the privacy test). Open for submission: the video,
+the Devpost text and Best Agents write-up, the Devpost form, a LICENSE file (the human decides), and cancelling the
+tp-judge-1 trial by Dec 8. Also open for submission: the video, the Devpost text
 and Best Agents write-up, a LICENSE file (the human decides), and cancelling the tp-judge-1 trial.
