@@ -30,7 +30,7 @@ the employee asking (Priya in the video) and the tool owner (Marco), with your o
 2. **A service desk.** If your site has none, create one. On a brand-new site Jira opens on *Welcome to Service
    Collection*: click **Create space**. Otherwise use the sidebar, **Spaces → +**. Then choose **Service
    management** → **Basic IT service management** → **Use template**, give it a name (for example *Tool Passport
-   Desk*) and click **Create space**.
+   Desk*), pick any **Team type** (for example *Information technology*) and click **Create space**.
 3. **Resolutions.** Open Jira settings (the gear icon at the top right) → **Work items** → **Resolutions**. If the
    list is empty, add two: **Done** and **Declined**. Without any resolutions, Jira won't let anyone resolve a
    request with an outcome. (Some new sites already have them; one of ours did, another didn't.)

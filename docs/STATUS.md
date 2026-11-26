@@ -1427,3 +1427,28 @@ clock), a fresh install's 20 migrations, and Set it all up and the change note o
   new migration is missing for up to 5 minutes, and screens reading that table fail meanwhile (a failed engine read is
   Not verified, never a pass). A fresh install runs every migration at install. So: no new migration after judges
   start installing (from the Dec 20 submission), or make the read tolerate the missing column first.
+
+### Timed fresh-site run on production 2.4.0, 2026-11-26 (human: "Yes, let's start")
+
+The human created a new free developer site, **tp-judge-2**, signing up in the browser pane themselves (sign-up
+opened Confluence on an unpublished "Meeting notes" draft, left as it was). Then I followed the judge guide, asking in
+chat before installing (the human: "Yes, click Install") and before adding resolutions ("Yes, add both"). Times are
+UTC; the clock started when the installation link opened.
+
+| Step | Time | Result |
+| --- | --- | --- |
+| Installation link opened | 18:31:22 | Developer console page: tool-passport, permissions listed, **Get app** |
+| Get app → site tp-judge-2 → Install | 18:34:42 | "Installation successful". `[lifecycle] migrations applied: v001_tools … v018_app_settings, v025_rules_approval_days, v026_story_shares`: **all 20 migrations of a fresh install in one run, no error** (D54 checked live) |
+| Service desk | about 18:35 | Welcome to Service Collection → Create space → Basic IT service management → Use template → name *Tool Passport Desk* (key TPD), **Team type** *Information technology (IT)* (a required field the guide did not mention; guide updated) → Create space |
+| Resolutions | about 18:36 | Jira settings → Resolutions was **empty** (guide step 1.3): added Done and Declined |
+| Setup → **Set it all up** | 18:36:44 | The box listed exactly: requests to Tool Passport Desk (TPD) as "Get IT help"; "Done" approves, "Declined" declines; load Kestrel Studio. One click → "Setting up. Loading the demo takes up to a minute…" → **Ready to ask**, steps 1 to 3 Done ("Kestrel Studio loaded with Assets"). `[loadDemo] mode=assets assets_created=8 groups=created=2 joined=true as=user`. No "One more step". **First live run of Set it all up: worked.** |
+| Moment 1 | 18:37:32 | Ask → Kestrel Studio and KS-DEV already picked → suggested question → **Not ready**, "Frontend build isn't set up in KS-DEV.", four stamps as in the guide. `[ask] state=checked verdict=not_ready cached=false model=claude-haiku-5-5`. **6 min 10 s from the installation link** (E9 target: 10 minutes), including my two questions to the human |
+| Request the fix | 18:38:02 | Path "Asked → Set up frontend build · TPD-1 → Get approval → Yes", "Fix requested (TPD-1) from <the admin> · view request" |
+| Fix in Assets, resolve TPD-1 | 18:40:17 | KS-DEV (TPENV-1) Build environments + frontend; TPD-1 resolved in the agent view (it worked straight away on the new desk) with Resolution Done. `[issue-event] TPD-1 rechecked`. The open card: **"The answer changed by itself at 12:09 AM: Not ready → Yes, with approval"** (first live sighting of the change note) |
+| Request approval, resolve TPD-2 with Done | 18:41:29 | `[request] approval raised=1`; `[issue-event] TPD-2 rechecked`. The open card: **"The answer changed by itself at 12:11 AM: Yes, with approval → Yes"**, four green stamps, policy stamp **"Approved · TPD-2 · until Dec 27"** (decided 18:41 UTC 26 Nov + 30 days, shown in the viewer's IST date) |
+
+From the installation link to Yes: **10 min 7 s**. LLM calls: 1.
+
+Small thing seen: "Your recent questions" under the card still said "Not ready" after the card had changed by
+itself; the list loads when the page does, not when the open card re-checks. Untested still: approvals expiring for
+real, and Rovo (no Rovo on tp-judge-2). tp-judge-2 stays as a spare judge-style site with the demo at Yes.
