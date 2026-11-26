@@ -1159,6 +1159,23 @@ Passport. Answer now: Yes. Everything this needs is in place in KS-DEV.`, partic
 (Priya), `[ask] … cached=false model=claude-haiku-5-5` (Sam), `[request] question raised=1` twice, `[publish] websockets
 settled=2 open=0`. LLM calls: 1.
 
+**Outside MCP client test, 2026-11-25, PASS** (human: "Test MCP first"; for the rules' "Best app with Atlassian
+MCP" bonus, "a Forge app that exposes tools via the Atlassian MCP server using the rovo:mcp module"). Docs read: *Build
+a Rovo MCP app*, section *Connect to a third-party AI client (Preview)*: external exposure is off by default; endpoint
+`https://mcp.atlassian.com/forge/<appId>`. On the demo site, with the human's OK: Administration → Sites →
+one-atlas-oibs → Connected apps → tool-passport → Tools: `Expose tools to MCP-compatible apps: Disabled` → Enable →
+`Enabled`. Client: MCP Inspector v2.16.0 (`npx -y @modelcontextprotocol/inspector`, human approved), streamable-http
+to the endpoint; the human signed in and approved the consent (`MCP Inspector is requesting access to tool-passport ·
+One-atlas-oibs · Read, Write, and Search`). Result: `Connected`, `MCP 2025-03-26`; `tools/list` → one tool,
+`check-tool-readiness_development`, annotated READ-ONLY and IDEMPOTENT, our description and three inputs. Calls:
+KS-DEV "Can I build a custom web dashboard?" → `"answer": "Not ready. Frontend build isn't set up in KS-DEV."`,
+evidence `Assets record · Build environments`, `Owner-verified · 13.2`, `Mapped access · kestrel-dev-builders` (6.4 s);
+KS-PROD → `"answer": "No. Policy for KS-PROD: Not allowed in production."` (5.3 s). Logs: `[ask] … cached=false` then
+`cached=true`, each followed by `[rovo] check verdict=…`: the same handler as the Rovo action. LLM calls: 1. The
+Inspector could not store its token in the OS keychain (too long), so it stayed in memory and went when the Inspector
+was stopped. Tools stay enabled on the demo site for now (the human decides; see the Devpost checklist). Judge guide
+section 8 added.
+
 **Phase 4: every item now passes** (Setup wizard, demo seed and Reset, the test screen, README and judge guide, the
 timed fresh-site run with Assets, registry mode on a fresh site, the privacy test). Open for submission: the video,
 the Devpost text and Best Agents write-up, the Devpost form, a LICENSE file (the human decides), and cancelling the

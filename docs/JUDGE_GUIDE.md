@@ -140,6 +140,20 @@ Rovo isn't part of a free developer site. On two new developer sites we tested, 
 starting a Teamwork Collection trial on one of them. So this part needs a site that already has Rovo; the video shows
 it working on such a site. Everything else in this guide works without Rovo.
 
+## 8. Optional: the check from any MCP client
+
+The same readiness check is available to MCP-compatible AI clients through the Atlassian MCP server.
+
+1. Turn it on (it is off by default): Atlassian Administration → **Apps** → **Sites** → your site → **Connected
+   apps** → **tool-passport** → **Tools** → **Enable tools**. Only the read-only *Check tool readiness* tool is
+   exposed.
+2. In your MCP client, add a remote MCP server (Streamable HTTP) with the address
+   `https://mcp.atlassian.com/forge/116e4a95-46a5-4008-8a77-9177f8e23ed0`, connect, sign in with your Atlassian
+   account and approve access for your site.
+3. Call the tool with Tool `Kestrel Studio`, Environment `KS-DEV` and Question `Can I build a custom web dashboard?`.
+   It answers as the page does: "Not ready. Frontend build isn't set up in KS-DEV.", with the same labelled
+   evidence.
+
 ## Start over
 
 Setup → **3. Demo data** → **Reset demo**, then **Yes, reset the demo**. This deletes what Tool Passport holds about
