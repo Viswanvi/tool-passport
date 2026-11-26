@@ -1406,4 +1406,24 @@ Live on the demo site (dev):
 
 Still untested: approvals expiring for real (needs 30 days; the safety cases and unit tests cover it with a fixed
 clock), a fresh install's 20 migrations, and Set it all up and the change note on the Ask page (the fresh-site run).
-Production is still 2.3.0.
+
+### Production 2.4.0, 2026-11-26 (human: "Yes, deploy")
+
+- Before: working tree clean at f751935; `npx vitest run`: `Test Files 37 passed (37)`, `Tests 508 passed (508)`;
+  `npx tsc --noEmit -p .` and `npx eslint src test` exit 0; `forge lint`: `No issues found.`
+- `forge deploy -e production --non-interactive` (16:04 UTC): `Deployed tool-passport to the production environment.`,
+  "[2.4.0] … eligible for the Runs on Atlassian program"; `forge eligibility -e production`: 2.4.0 eligible.
+  `forge install list`: tp-judge-1 production, major 2, Up-to-date: no new permission, so no `forge install --upgrade`
+  and no re-approval.
+- tp-judge-1's sweep added the new tables: `[sweep] migrations applied: v025_rules_approval_days, v026_story_shares`
+  (16:05:49 UTC). **The window I warned about, seen:** I opened the app 20 seconds before that. A Passport load at
+  16:05:29 ran before the column existed, and the My tools load at 16:05:31 logged `ForgeSQLAPIError … Unknown column
+  'approval_days' in 'field list'` (the owner's records read). From 16:05:49 on everything read normally: Passport at
+  16:06:03 showed the same grid as on 2.3.0 (KS-DEV · 14.0 web front end Don't know yet, KS-PROD No; community app
+  framework No / No; runtime 3.9 Don't know yet / Yes; scheduled jobs and single sign-on Yes / Yes; "Not verified yet
+  · 14"), and My tools → Show records → Policy rules listed the 8 rules (no limits set there; nothing changed on
+  tp-judge-1). LLM calls: 0.
+- Lesson for later deploys: a minor version fires no lifecycle event (D27), so on a site that already has the app a
+  new migration is missing for up to 5 minutes, and screens reading that table fail meanwhile (a failed engine read is
+  Not verified, never a pass). A fresh install runs every migration at install. So: no new migration after judges
+  start installing (from the Dec 20 submission), or make the read tolerate the missing column first.
