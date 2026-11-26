@@ -1304,6 +1304,16 @@ Verified:
   list unchanged). Work item MSD-1: the apps menu under the title lists **Tool Passport** (closed without adding it,
   so MSD-1 is unchanged). LLM calls: 0.
 
-Untested: **Check this story** end to end on a real work item (needs a work item to add the panel to; 1 model
-call), plus the earlier list (Set it all up, the change note during a real resolution, a path step with its
-request key). Production is still 2.2.0.
+**Check this story, live** (human: "Yes, create it"): on the demo site the human approved creating one test story,
+**MSD-19** in Marketing Software Development, summary "Build a usage dashboard for the sales team in KS-DEV",
+description "Charts of weekly usage for the sales team. Needs a custom web front end." Apps button under the title →
+Tool Passport added the panel to MSD-19. The panel showed the intro text, **KS-DEV** already picked and "KS-DEV is named
+in the story." Check this story → **Not ready**, `KS-DEV · 13.2`, "Frontend build isn't set up in KS-DEV.", the four
+stamps (Tool can do it Yes, Owner-verified · 13.2; Policy allows it Needs approval, Policy rule · Needs design
+review; Set up here Missing, Frontend build, Assets record · read 05:17 PM; You have access Yes, Mapped access ·
+kestrel-dev-builders), the path Asked → Set up frontend build → Get approval → Yes, and **Request the fix** (not
+clicked). Log: `[story] state=checked verdict=not_ready cached=false model=claude-haiku-5-5`. LLM calls: 1. MSD-19
+stays on the demo site with the panel added, for the video.
+
+Untested: Set it all up, the change note during a real resolution, and a path step with its request key (all for
+the fresh-site run). Production is still 2.2.0.
