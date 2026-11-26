@@ -60,8 +60,8 @@ or no resolution named Done), do that one step below; the box keeps everything e
      by the owner inside Tool Passport, and answers label them *Recorded by owner*, which is weaker evidence than an
      Assets record.
 4. **Model.** Nothing to do: the app picks an active model on your site by itself.
-5. **Tests.** Click **Run the false-Yes suite**. It runs the app's 49 safety cases on fixed test data inside the
-   app and should show **All 49 cases passed**. It reads nothing from your site and makes no model calls. The
+5. **Tests.** Click **Run the false-Yes suite**. It runs the app's 51 safety cases on fixed test data inside the
+   app and should show **All 51 cases passed**. It reads nothing from your site and makes no model calls. The
    **40-question set** below it is optional: it makes about 40 model calls, so it can run once every 10 minutes.
 
 ## 3. Moment 1: the answer depends on the environment
@@ -89,7 +89,10 @@ next step. Capabilities nobody has verified yet are folded under **Not verified 
 **Check a story before the sprint.** Open any Jira work item and click the apps button under its title (choose
 **Tool Passport** if a list opens; with no other apps on the site, the button adds the panel straight away). Write or pick a story such as *Build a usage dashboard for the sales team in KS-DEV*: the panel
 suggests **KS-DEV** because the story names it. Click **Check this story**: the same **Not ready** card, with
-**Request the fix**, before anyone starts the work. (One model call per new story.)
+**Request the fix**, before anyone starts the work. (One model call per new story.) Then click **Add to story**: the
+answer, its four stamps and the path to Yes go on the work item as your comment (refresh the work item to see it), so
+the team sees the blocker where it plans. If you then do moment 2 from this panel, the story gets the new answer by
+itself when the fix request is resolved.
 
 ## 4. Moment 2: the guided fix
 
@@ -113,14 +116,20 @@ suggests **KS-DEV** because the story names it. Click **Check this story**: the 
    from the request's portal page straight away, even on a desk you created minutes ago. Within seconds the app
    comments on the request with the new answer ("Answer now: Yes, with approval…"). If the Ask page is still open,
    the card turns **Yes, with approval** by itself within about 10 seconds, with a note *Not ready → Yes, with
-   approval*; otherwise click **Ask again** under *Your recent questions*, or **Re-check**.
+   approval*; otherwise click **Ask again** under *Your recent questions*, or **Re-check**. If you added the answer to
+   a story, the app comments there too: *Tool Passport update: Yes, with approval (was Not ready)*.
 4. Click **Request approval**, open that request the same way and **Resolve this issue**. On our test site this set
    the resolution **Done**, the outcome you mapped to Approved, and the app answered "Answer now: Yes." The card turns
-   **Yes**, with the evidence line *Approved · TPD-…*. If the app instead says the approval is still pending, resolve
+   **Yes**, with the policy stamp *Approved · TPD-… · until* a date 30 days on. If the app instead says the approval is still pending, resolve
    it in Jira's agent view with the resolution **Done** (Jira can take about 10 minutes after you create a desk before
    it lets you act as an agent there).
 
 An approval counts only when the approver resolves it. In this demo the approver is the tool owner, which is you.
+
+Approvals don't last forever: the policy stamp reads *Approved · TPD-… · until* a date 30 days on, because the demo's
+design-review rule says approvals count for 30 days. After that the answer goes back to **Yes, with approval** with
+*Your approval TPD-… has expired*, and the path says *Get approval again*. The owner sets the number of days per rule
+(My tools → **Show records** → **Policy rules**, *Approval lasts*); blank means no limit.
 
 ## 5. The unknown loop
 

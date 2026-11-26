@@ -1336,3 +1336,74 @@ the fresh-site run). Production is still 2.2.0.
   panel directly** (one app on the site, no list): I meant only to open a menu. The panel loaded, read TPD-1 as me and
   picked KS-DEV ("KS-DEV is named in the story"); Check this story was not clicked (no model call). I then removed the
   panel from TPD-1 (panel menu → Remove), so TPD-1 is as before. Judge guide wording adjusted for this.
+
+### Approvals that expire, and Add to story, 2026-11-26 (human: "Yes, build both")
+
+Two features (D52, D53) and a migration change (D54). Commits ff5d004, 1df739c, b7361d0 (local).
+
+- Tests: `npx vitest run`: `Test Files 37 passed (37)`, `Tests 508 passed (508)`; `npm run typecheck` and
+  `npm run lint` exit 0; `forge lint`: `No issues found.` False-Yes suite 51 of 51 (new cases 17a and 17b). Mutation
+  check: with expiry switched off (`if (valid.ok || true)`), `Tests 2 failed | 49 passed (51)` (17a and 17b); code
+  restored.
+- Forge SQL limit (D54): developer.atlassian.com/platform/forge/limits-sql/ says "DDL Requests per minute (RPM) | 25"
+  per installation; `migrationRunner.run()` spends 2 more (node_modules/@forge/sql/out/migration.js: create and list
+  `__migrations`). A fresh install now runs 20 migrations. Not yet run on a fresh install: the next fresh-site run
+  checks it.
+- Dev 5.16.0, then 5.17.0 (the fix below), both "eligible for the Runs on Atlassian program". The sweep applied the
+  new migrations on both development installations: `[sweep] migrations applied: v025_rules_approval_days,
+  v026_story_shares` (14:28:49 and 14:28:51 UTC).
+
+Live on the demo site (dev):
+
+- **My slip, put right:** creating the test story, my first typing went into MSD-19's title instead of the create
+  form (the form had not taken focus), and Jira saved it. I closed the empty form without creating anything and set
+  MSD-19's title back to "Build a usage dashboard for the sales team in KS-DEV" (checked after a reload; the
+  description was never touched). MSD-19's History shows the two title edits.
+- The human approved one more test story: **MSD-20**, "Build a weekly support dashboard in KS-DEV", description
+  "Charts of weekly ticket volume for the support team. Needs a custom web front end. Test story for Add to story."
+  Panel added from the apps button (a list with Tool Passport). KS-DEV suggested.
+- Check this story → Not ready with the four stamps (`[story] state=checked verdict=not_ready cached=false
+  model=claude-haiku-5-5`, 1 model call). **Add to story** → the button turned "Added to story" with "Added to this
+  work item as your comment. When a request for it is resolved, Tool Passport adds the new answer there too."
+  (`[story] added verdict=not_ready`). After a reload MSD-20's comments show, by the admin: "Tool Passport: Not ready ·
+  Kestrel Studio in KS-DEV · 13.2 / Frontend build isn't set up in KS-DEV. / Tool can do it: Yes (Owner-verified ·
+  13.2) / Policy allows it: Needs approval (Policy rule · Needs design review) / Set up here: Missing · Frontend build
+  (Assets record · Build environments) / You have access: Yes (Mapped access · kestrel-dev-builders) / Path to Yes:
+  Asked → Set up frontend build → Get approval → Yes / Checked for <the admin, as a mention>. Access and approvals are
+  personal …".
+- **Found live, fixed:** after a reload I checked the story again (a new ask, `cached=true`, no model call) and
+  requested the fix from that card (TPD-11). The story had been remembered against the first ask, so it would never
+  have heard. Stories are now found by the person, tool, environment and catalog keys (b7361d0, dev 5.17.0), with
+  tests for it.
+- **Path step with its request key, seen live:** after Request the fix the path read "Asked → Set up frontend build ·
+  TPD-11 → Get approval → Yes" and "Fix requested (TPD-11) from <the admin> · view request".
+- **Owner form, seen live:** My tools → Show records → Policy rules → Add or change: custom_ui, KS-DEV, Needs
+  approval, Tool owner, *Approval lasts* 30, "Needs design review" → Save; the list then read "custom_ui · KS-DEV:
+  needs approval (Needs design review), approval lasts 30 days" (`[edit] rule saved`).
+- KS-DEV in Assets (TPENV-4679): Build environments set to standard, frontend. TPD-11 resolved in the agent view.
+  My first try did not take (the *Resolve this issue* form needs a resolution and I had not filled it; the status
+  stayed Waiting for support, and the sweeps at 14:58, 15:03 and 15:08 rightly found nothing resolved). Second try:
+  Resolution **Done** → Update → "Resolved · Done".
+- **The story heard by itself, seen live:** `[sweep] requests looked=1 rechecked=1` and `[story] updated 1 story
+  verdict=yes_with_approval` (15:13:49; the event for TPD-11 arrived the same second and logged `[issue-event] TPD-11
+  already`: one re-check, one update). MSD-20 then showed a comment by the app (author `tool-passport`): "Tool Passport
+  update: Yes, with approval (was Not ready) · Kestrel Studio in KS-DEV · 13.2 / Allowed in KS-DEV with approval: Needs
+  design review. / … Set up here: Yes · Frontend build … / Path to Yes: Asked → Get approval → Yes / Checked again for
+  <the admin> after TPD-11 was resolved."
+- **Approval with its date, seen live:** Check this story again → Yes, with approval → Request approval → TPD-12
+  (`[request] approval raised=1`); TPD-12 resolved with **Done** (mapped to Approved) → `[story] updated 1 story
+  verdict=yes`, `[issue-event] TPD-12 rechecked`. MSD-20: "Tool Passport update: Yes (was Yes, with approval) … Policy
+  allows it: Yes (Approved · TPD-12 · until 2026-12-26) … Checked again for <the admin> after TPD-12 was resolved."
+  The panel card: **Yes**, four green stamps, the policy stamp "Approved · TPD-12 · until Dec 26" (decided 26 Nov, 30
+  days: the UTC reading of `decided_at` is right).
+- Also: one click of mine landed on Jira's "Try template" link under Confluence content, which opened a Teamwork
+  Collection trial offer; I closed it without starting anything.
+- LLM calls: 2 (`[story] … cached=false`, 14:53:14 for MSD-20's first check; 15:14:34, because saving the rule moved
+  the catalog revision, so the stored reading no longer applied, as designed).
+- Left on the demo site: MSD-20 with its three comments; KS-DEV with the frontend build; the admin's approval TPD-12
+  (until 26 Dec); the 30-day limit on the KS-DEV design-review rule. Reset demo (planned before the video) puts KS-DEV
+  and the records back and clears the approval.
+
+Still untested: approvals expiring for real (needs 30 days; the safety cases and unit tests cover it with a fixed
+clock), a fresh install's 20 migrations, and Set it all up and the change note on the Ask page (the fresh-site run).
+Production is still 2.3.0.

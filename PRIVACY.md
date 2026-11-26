@@ -26,6 +26,9 @@ In Forge SQL, Atlassian's hosted database for the app, separately for each site:
 - **Tool records** that tool owners and Jira administrators enter: capabilities, facts and the versions they were
   verified on, policy rules, readiness requirements, group mappings and environments.
 - **Request records:** the keys of the Jira requests it raised, their kind and status.
+- **Stories an answer was added to:** when someone clicks **Add to story**, the work item's key and the verdict it
+  was given (for example `not_ready`), so the app can add the new answer there when it changes. No text from the
+  work item is kept.
 - **An audit log** of every change to the records: who made it (account ID), what changed and when.
 
 ## What the app reads but does not keep
@@ -48,6 +51,13 @@ notes are sent the same way to suggest labels. Atlassian applies its usual moder
 
 Fix requests, approval requests and questions to a tool owner are created in the site's own service desk, privately
 for the person asking. They are ordinary Jira data, controlled by the site's settings and administrators.
+
+## Comments on work items
+
+**Add to story** posts an answer on a work item only when the person clicks it, as their own comment, so everyone
+who can see the work item can read it. It holds the verdict, the reason, the evidence labels (such as the name of an
+access group) and a mention of that person. When the answer later changes, the app adds one comment with the new
+answer. These comments are ordinary Jira data.
 
 ## Retention and deletion
 
