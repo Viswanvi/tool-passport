@@ -1452,3 +1452,21 @@ From the installation link to Yes: **10 min 7 s**. LLM calls: 1.
 Small thing seen: "Your recent questions" under the card still said "Not ready" after the card had changed by
 itself; the list loads when the page does, not when the open card re-checks. Untested still: approvals expiring for
 real, and Rovo (no Rovo on tp-judge-2). tp-judge-2 stays as a spare judge-style site with the demo at Yes.
+
+### "Your recent questions" follows the open card, 2026-11-26 (human: "Yes, fix it")
+
+Found in the fresh-site run: after the open card changed by itself, the line under it still said "Not ready" (the list
+loaded only when a question was asked). Now the Ask page reads the list again whenever a re-check changes the card, or
+after a manual Re-check (the server had already saved the new verdict). Frontend only (`useAnswer.recheck`); only the
+Ask page passes the callback, so Passport and the story panel are unchanged.
+
+- `npx tsc --noEmit -p .` and `npx eslint src test` exit 0; `npx vitest run`: `Tests 508 passed (508)` (no frontend
+  tests exist for UI Kit screens; checked live instead).
+- Dev 5.18.0 ("eligible for the Runs on Atlassian program"). Live on the demo site: KS-DEV's Build environments set back
+  to standard in Assets; Ask → dashboard question in KS-DEV → Not ready (`[ask] … cached=false`, 1 LLM call: the rule
+  edit earlier had moved the catalog revision), top recent line "… · KS-DEV · Not ready"; Request the fix → TPD-13;
+  frontend added back; TPD-13 resolved with Done (`[issue-event] TPD-13 rechecked`). The open page then showed "The
+  answer changed by itself at 12:23 AM: Not ready → Yes" **and** the top recent line "… · KS-DEV · Yes", with no
+  reload. (A click of mine opened TPD-13's title for editing when the page shifted; I cancelled it with ✗ without
+  typing, and the title is unchanged.)
+- Demo site left as before this check: KS-DEV with standard, frontend. Production still 2.4.0.

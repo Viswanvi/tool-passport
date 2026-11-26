@@ -332,8 +332,11 @@ function useAnswer(onAnswered?: () => void) {
       const r = await call<RecheckReply>('recheck', { askId });
       if (r.ok) {
         const before = shown.current;
-        if (before && before.title !== r.card.title) setChanged({ from: before, to: r.card, at: new Date().toISOString(), byItself: quiet });
+        const changedNow = before !== null && before.title !== r.card.title;
+        if (changedNow) setChanged({ from: before, to: r.card, at: new Date().toISOString(), byItself: quiet });
         setCard(r.card);
+        // The server saved the new answer: lists showing it (Your recent questions) read it again.
+        if (changedNow || !quiet) onAnswered?.();
       } else if (!quiet) setNotice('Could not check again just now. Try again.');
     } catch {
       if (!quiet) setNotice('Could not check again just now. Try again.');
