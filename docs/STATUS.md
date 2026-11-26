@@ -1250,3 +1250,22 @@ Verified:
 
 Still untested: the one-click Set it all up click, the change note during a real resolution, and a path step
 showing a request key live (all for the fresh-site run). Production is still 2.1.0.
+
+### Production 2.2.0, 2026-11-26 (human: "Yes, deploy")
+
+- Before: working tree clean at e401150; `npm test`: `Tests 461 passed (461)`; `npx tsc --noEmit -p .` and
+  `npx eslint src test` exit 0; `forge lint`: `No issues found.`; `forge install list`: production on
+  tp-judge-1.atlassian.net, major version 2, Up-to-date.
+- `forge deploy -e production --non-interactive`: `Deployed tool-passport to the production environment.`, "The
+  version of your app [2.2.0] … is eligible for the Runs on Atlassian program". `forge eligibility -e production`:
+  2.2.0 eligible. No permission changes, so no `forge install --upgrade`: `forge install list` still shows
+  tp-judge-1 on major 2, Up-to-date, and the site serves the new code (below).
+- Live on tp-judge-1 (production, registry mode): the Ask page lists the suggestions in the fixed order (Build a
+  custom web front end or dashboard, Use the community app framework, Run code on runtime version 3.9). Ask again
+  on the stored "Can I upload a 3 GB file?" (KS-DEV) → **Don't know yet**, `KS-DEV · 14.0`, stamps: Tool can do it
+  **Not verified** (Upload a file of a given size; "Not verified · Verified on 13.2; KS-DEV runs 14.0"), Policy allows
+  it **Nothing to check**, Set up here **Yes** (Uploads; Recorded by owner · Nov 25), You have access **Nothing to
+  check**; action Ask the owner. Setup page: **Ready to ask**, "Requests go to Tool Passport Desk (TPD) as “Get IT
+  help”", "Resolution “Done” approves and “Declined” declines", "Kestrel Studio is loaded"; checklist unchanged.
+  LLM calls: 0.
+- The installation link is unchanged; new installs get 2.2.0.
