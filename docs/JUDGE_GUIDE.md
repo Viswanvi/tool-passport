@@ -86,8 +86,8 @@ web front end or dashboard* is **Not ready** in KS-DEV and **No** in KS-PROD, *U
 **No** in both, and the version-verified ones are **Yes**. Click any cell to open its full card, with its stamps and
 next step. Capabilities nobody has verified yet are folded under **Not verified yet**.
 
-**Check a story before the sprint.** Open any Jira work item, click the apps button under its title, and choose
-**Tool Passport**. Write or pick a story such as *Build a usage dashboard for the sales team in KS-DEV*: the panel
+**Check a story before the sprint.** Open any Jira work item and click the apps button under its title (choose
+**Tool Passport** if a list opens; with no other apps on the site, the button adds the panel straight away). Write or pick a story such as *Build a usage dashboard for the sales team in KS-DEV*: the panel
 suggests **KS-DEV** because the story names it. Click **Check this story**: the same **Not ready** card, with
 **Request the fix**, before anyone starts the work. (One model call per new story.)
 

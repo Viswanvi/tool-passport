@@ -1317,3 +1317,22 @@ stays on the demo site with the panel added, for the video.
 
 Untested: Set it all up, the change note during a real resolution, and a path step with its request key (all for
 the fresh-site run). Production is still 2.2.0.
+
+### Production 2.3.0, 2026-11-26 (human: "Yes, deploy")
+
+- Before: working tree clean at ab6aa3b; `npm test`: `Tests 480 passed (480)`; `npx tsc --noEmit -p .` and
+  `npx eslint src test` exit 0; `forge lint`: `No issues found.`
+- `forge deploy -e production --non-interactive`: `Deployed tool-passport to the production environment.`, "[2.3.0]
+  … eligible for the Runs on Atlassian program"; `forge eligibility -e production`: 2.3.0 eligible. `forge install
+  list`: tp-judge-1 production, major 2, Up-to-date: the new issue panel needed no new permission, so no
+  `forge install --upgrade` and no re-approval.
+- Live on tp-judge-1 (production, registry mode, KS-DEV recorded on 14.0 from the registry run): tabs Ask · Passport ·
+  My tools. Passport: columns "KS-DEV · 14.0" and "KS-PROD · 13.2"; Build a custom web front end **Don't know yet** /
+  **No**; community app framework **No** / **No**; runtime 3.9 **Don't know yet** / **Yes**; scheduled jobs and single
+  sign-on **Yes** / **Yes**; "Not verified yet · 14" folded. (KS-DEV's version-dependent rows say Don't know yet
+  because it moved to 14.0 without re-verification, while KS-PROD on 13.2 still says Yes: version validity on one
+  screen.) LLM calls: 0.
+- Story panel on production: on TPD-1 (the fix request from the timed run) the button under the title **added the
+  panel directly** (one app on the site, no list): I meant only to open a menu. The panel loaded, read TPD-1 as me and
+  picked KS-DEV ("KS-DEV is named in the story"); Check this story was not clicked (no model call). I then removed the
+  panel from TPD-1 (panel menu → Remove), so TPD-1 is as before. Judge guide wording adjusted for this.
