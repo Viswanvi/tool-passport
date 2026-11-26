@@ -10,13 +10,24 @@ import type { Catalog, Check, CheckResult, CheckStatus, Environment, Label, Outc
 
 export type LozengeAppearance = 'success' | 'inprogress' | 'moved' | 'removed' | 'new' | 'default';
 
-export type ChipLabel = 'Owner-verified' | 'Assets record' | 'Recorded by owner' | 'Mapped access' | 'Policy rule' | 'Approved' | 'Declined' | 'Not verified';
+export type ChipLabel =
+  | 'Owner-verified'
+  | 'Assets record'
+  | 'Recorded by owner'
+  | 'Mapped access'
+  | 'Policy rule'
+  | 'Approved'
+  | 'Approval expired'
+  | 'Declined'
+  | 'Not verified';
 
 export interface Chip {
   label: ChipLabel;
   detail: string;
   readAt?: string | null;
   changedAt?: string | null;
+  /** Approved: when it stops counting. Approval expired: when it stopped. */
+  until?: string | null;
 }
 
 export type ActionKind = 'request_fix' | 'fix_requested' | 'request_approval' | 'approval_requested' | 'ask_owner' | 'owner_asked' | 'recheck' | 'try_again';
@@ -177,12 +188,19 @@ export function chipOf(label: Label): Chip {
     case 'default_policy':
       return { label: 'Policy rule', detail: 'allowed by default' };
     case 'approved':
-      return { label: 'Approved', detail: label.requestKey };
+      return { label: 'Approved', detail: label.requestKey, ...(label.until ? { until: label.until } : {}) };
+    case 'approval_expired':
+      return { label: 'Approval expired', detail: label.requestKey, ...(label.expiredAt ? { until: label.expiredAt } : {}) };
     case 'declined':
       return { label: 'Declined', detail: label.requestKey };
     case 'not_verified':
       return { label: 'Not verified', detail: label.missing };
   }
+}
+
+/** The policy rule's own words ("Needs design review"), from a rule label or an expired approval under it. */
+export function ruleReason(label: Label): string | null {
+  return label.kind === 'policy_rule' || label.kind === 'approval_expired' ? label.reason : null;
 }
 
 /** The results that decided the verdict, in order. */
@@ -213,7 +231,9 @@ function reasonFor(o: Outcome, ctx: CardContext): string {
 
   if (o.verdict === 'dont_know') return sentence(`${subject}: ${label.kind === 'not_verified' ? label.missing : 'not verified'}`);
   if (o.verdict === 'yes_with_approval') {
-    return sentence(`Allowed in ${env} with approval${label.kind === 'policy_rule' && label.reason ? `: ${label.reason}` : ''}`);
+    const why = ruleReason(label);
+    if (label.kind === 'approval_expired') return sentence(`Your approval ${label.requestKey} has expired, so this needs approval again${why ? `: ${why}` : ''}`);
+    return sentence(`Allowed in ${env} with approval${why ? `: ${why}` : ''}`);
   }
   if (o.verdict === 'not_ready') {
     if (first.check.dimension === 'access' && label.kind === 'mapped_access') {
@@ -317,7 +337,8 @@ function fixStep(r: CheckResult, ctx: CardContext): PathStep[] {
 
 function approvalStep(r: CheckResult): PathStep[] {
   if (r.status !== 'approval' || r.check.dimension !== 'policy') return [];
-  const step: PathStep = { id: `approval:${r.check.action}`, kind: 'approval', label: 'Get approval', state: 'todo' };
+  const label = r.label.kind === 'approval_expired' ? 'Get approval again' : 'Get approval';
+  const step: PathStep = { id: `approval:${r.check.action}`, kind: 'approval', label, state: 'todo' };
   return [r.pending ? requestedStep(step, r.pending.requestKey) : step];
 }
 
@@ -368,7 +389,7 @@ export function buildCard(answer: Answer, ctx: CardContext): Card {
         where,
         chips: chipsFor(o),
         action: actionFor(o),
-        next: o.verdict === 'not_ready' ? o.next.map((r) => (r.label.kind === 'policy_rule' && r.label.reason ? r.label.reason : subjectOf(r, ctx.catalog))) : [],
+        next: o.verdict === 'not_ready' ? o.next.map((r) => ruleReason(r.label) || subjectOf(r, ctx.catalog)) : [],
         checked: o.results.map((r) => subjectOf(r, ctx.catalog)),
         checks: o.results.map((r) => ({ subject: subjectOf(r, ctx.catalog), dimension: r.check.dimension, status: r.status, statusText: STATUS_TEXT[r.status], chip: chipOf(r.label) })),
         stamps: stampsFor(o, ctx, answer.anyEnvironment),

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { answerRequirement, type Answer } from '../engine/answer';
-import { buildCard, requestedStep, type Card } from '../engine/card';
+import { buildCard, requestedStep, ruleReason, type Card } from '../engine/card';
 import type { CatalogChoice } from '../engine/catalog';
 import type { Catalog, CheckResult, EngineRepo, Environment, EnvironmentReader, Groups, Tool } from '../engine/model';
 import { approvalOutcome, type ResolutionMap } from './resolution';
@@ -153,6 +153,8 @@ export interface RecheckDeps {
   repo: EngineRepo;
   environments: EnvironmentReader;
   noteVersion?(tool: Tool, environment: Environment, observed: string | null): Promise<unknown>;
+  /** The clock approvals are checked against; tests fix it. */
+  now?(): Date;
 }
 
 export interface LoopDeps extends RecheckDeps {
@@ -190,6 +192,7 @@ export async function recheckAsk(ask: StoredAsk, deps: RecheckDeps): Promise<Rec
       repo: deps.repo,
       environments: deps.environments,
       noteVersion: deps.noteVersion ? (e, v) => deps.noteVersion!(tool, e, v) : undefined,
+      now: deps.now ? () => deps.now!() : undefined,
     },
   );
   return { ask, answer, card: buildCard(answer, { toolName: tool.name, environment, catalog }), tool, environment, catalog };
@@ -346,12 +349,13 @@ export function approvalRequestText(
   const action = r.check.dimension === 'policy' ? r.check.action : '';
   const label = x.catalog.keys.get(action)?.label;
   const actionName = label ? label[0]!.toLowerCase() + label.slice(1) : action.replace(/_/g, ' ');
-  const reason = r.label.kind === 'policy_rule' ? r.label.reason : null;
+  const reason = ruleReason(r.label);
   const summary = `Approval needed in ${env}: ${actionName}${reason ? ` (${reason})` : ''}`;
   const description = [
     `Tool Passport checked ${x.tool.name} in ${env} for the person this request was raised for. Everything else is in place; the policy needs an approval.`,
     '',
     `Policy: ${actionName} in ${env} needs approval${reason ? `: ${reason}` : ''}.`,
+    ...(r.label.kind === 'approval_expired' ? [`Their earlier approval, ${r.label.requestKey}, has expired: this policy's approvals count for a limited time.`] : []),
     `What they want to do: ${x.restated}.`,
     '',
     `${howToDecide(x.map)} Any other outcome leaves the approval pending. Tool Passport records the decision and adds the new answer here as a comment.`,

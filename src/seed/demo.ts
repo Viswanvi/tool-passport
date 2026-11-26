@@ -56,6 +56,9 @@ const FACTS: Array<{ key: string; value: boolean | number; versionSensitive: boo
   { key: 'single_sign_on', value: true, versionSensitive: false, quote: null },
 ];
 
+// Approvals count for 30 days, then the answer asks for approval again (D52; not in spec section 16).
+const APPROVAL_DAYS = 30;
+
 const RULES: Array<{ action: string; env: EnvName; effect: Effect; reason: string; approval: boolean }> = [
   { action: 'custom_ui', env: 'KS-DEV', effect: 'approval', reason: 'Needs design review', approval: true },
   { action: 'custom_ui', env: 'KS-PROD', effect: 'deny', reason: 'Not allowed in production', approval: false },
@@ -128,6 +131,7 @@ export async function seedDemo(deps: SeedDeps): Promise<SeedResult> {
       effect: r.effect,
       approvalRoute: r.approval ? ROUTES.toolOwner : null,
       reason: r.reason,
+      approvalDays: r.approval ? APPROVAL_DAYS : null,
     });
     count('rules');
   }

@@ -69,6 +69,23 @@ export function time(v: unknown, table: string, column: string): string | null {
 }
 
 /**
+ * Forge SQL returns TIMESTAMP as "YYYY-MM-DD HH:MM:SS" in UTC with no zone; a browser reads that as local time
+ * (found live: a change at 12:49 UTC showed as 12:49 PM in a UTC+5:30 browser). Times that are shown or compared
+ * get a "Z".
+ */
+export function utcIso(s: string): string {
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(s) ? `${s.replace(' ', 'T')}Z` : s;
+}
+
+/** rules.approval_days: NULL, or a whole number of days. Anything else is a bad row (Not verified, never no limit). */
+function approvalDays(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = typeof v === 'number' ? v : typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : NaN;
+  if (!Number.isSafeInteger(n) || n < 1 || n > 3650) throw new BadRow('rules', 'approval_days', v);
+  return n;
+}
+
+/**
  * `fact_versions.value_json` holds `{ "value": <boolean | number | string> }`. Wrapping keeps a stored string
  * from being read as JSON a second time (JSON columns may arrive parsed or as text, store.ts). D30.
  */
@@ -119,6 +136,7 @@ function ruleRow(r: Row): RuleRow {
     reason: textOrNull(r.reason, 'rules', 'reason'),
     revision: id(r.revision, 'rules', 'revision'),
     status: oneOf(r.status, STATUS, 'rules', 'status'),
+    approvalDays: approvalDays(r.approval_days),
   };
 }
 
@@ -171,7 +189,8 @@ export const sqlEngineRepo: EngineRepo = {
       actionKey: text(r.action_key, 'approval_grants', 'action_key'),
       requestKey: text(r.request_key, 'approval_grants', 'request_key'),
       status: oneOf(r.status, ['pending', 'approved', 'declined'] as const, 'approval_grants', 'status'),
-      decidedAt: time(r.decided_at, 'approval_grants', 'decided_at'),
+      // Compared with the clock when the rule limits approvals, so it must read as UTC.
+      decidedAt: ((t) => (t === null ? null : utcIso(t)))(time(r.decided_at, 'approval_grants', 'decided_at')),
     };
     return grant;
   },
@@ -187,7 +206,7 @@ export const sqlEngineRepo: EngineRepo = {
   },
 };
 
-const RULE_COLUMNS = 'id, tool_id, environment_id, audience_group, action_key, effect, approval_route, reason, revision, status';
+const RULE_COLUMNS = 'id, tool_id, environment_id, audience_group, action_key, effect, approval_route, reason, revision, status, approval_days';
 const READINESS_COLUMNS = 'id, tool_id, key_name, provider_attribute, match_kind, expected, label, fix_route';
 const ACCESS_COLUMNS = 'id, tool_id, environment_id, action_key, group_name, grants, source, attested_by, attested_at, grant_route';
 

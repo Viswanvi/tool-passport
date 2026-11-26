@@ -144,7 +144,8 @@ export async function rovoCheck(payload: unknown, context: unknown, deps: RovoDe
       verdict: c.title,
       reason: c.reason,
       where: c.where,
-      evidence: c.chips.map((chip) => `${chip.label} · ${chip.detail}`),
+      // Dates as YYYY-MM-DD (UTC): the agent has no viewer time zone to format for.
+      evidence: c.chips.map((chip) => `${chip.label} · ${chip.detail}${chip.until ? ` · ${chip.label === 'Approval expired' ? 'on' : 'until'} ${chip.until.slice(0, 10)}` : ''}`),
       checked: c.checked,
       next: c.next,
       nextStep: nextStep(c, r.askId),

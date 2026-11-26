@@ -278,6 +278,9 @@ const RuleForm = ({ d, save }: { d: Details; save: Save }) => {
   const [effect, setEffect] = useState('approval');
   const [route, setRoute] = useState('tool_owner');
   const [reason, setReason] = useState('');
+  const [days, setDays] = useState('');
+  // Blank: approvals don't lapse. Otherwise a whole number of days, 1 to 365 (checked again on the server).
+  const daysValue = days.trim() === '' ? null : /^\d{1,3}$/.test(days.trim()) && Number(days) >= 1 && Number(days) <= 365 ? Number(days) : undefined;
   return (
     <Stack space="space.100">
       {known.length ? <Text>Actions in use: {known.join(', ')}</Text> : null}
@@ -299,13 +302,19 @@ const RuleForm = ({ d, save }: { d: Details; save: Save }) => {
             <Pick options={ROUTES} value={route} onChange={setRoute} />
           </Field>
         ) : null}
+        {effect === 'approval' ? (
+          <Field label="Approval lasts (days, blank: no limit)" width={230}>
+            <Input value={days} onChange={setDays} placeholder="30" />
+          </Field>
+        ) : null}
       </Inline>
+      {effect === 'approval' && daysValue === undefined ? <Text color="color.text.danger">Days: a whole number from 1 to 365, or leave it blank.</Text> : null}
       <Inline space="space.150" shouldWrap alignBlock="end">
         <Field label="Reason shown on the card" width={360}>
           <Input value={reason} onChange={setReason} placeholder="Needs design review" />
         </Field>
         <SaveButton
-          disabled={!action.trim()}
+          disabled={!action.trim() || (effect === 'approval' && daysValue === undefined)}
           onClick={() =>
             void save({
               entity: 'rule',
@@ -316,6 +325,7 @@ const RuleForm = ({ d, save }: { d: Details; save: Save }) => {
               effect,
               approvalRoute: effect === 'approval' ? route : null,
               reason: orNull(reason),
+              approvalDays: effect === 'approval' ? (daysValue ?? null) : null,
             })
           }
         />
@@ -450,7 +460,7 @@ const Current = ({ d, view }: { d: Details; view: string }) => {
   }
   if (view === 'rule') {
     const effect = { allow: 'allowed', deny: 'not allowed', approval: 'needs approval' } as const;
-    for (const x of r.rules) lines.push(<Text key={x.id}>{`${x.actionKey} · ${envName(d, x.environmentId)}${x.audienceGroup ? ` · ${x.audienceGroup}` : ''}: ${effect[x.effect]}${x.reason ? ` (${x.reason})` : ''}`}</Text>);
+    for (const x of r.rules) lines.push(<Text key={x.id}>{`${x.actionKey} · ${envName(d, x.environmentId)}${x.audienceGroup ? ` · ${x.audienceGroup}` : ''}: ${effect[x.effect]}${x.reason ? ` (${x.reason})` : ''}${x.effect === 'approval' && x.approvalDays ? `, approval lasts ${x.approvalDays} ${x.approvalDays === 1 ? 'day' : 'days'}` : ''}`}</Text>);
   }
   if (view === 'readinessKey') for (const k of r.readinessKeys) lines.push(<Text key={k.id}>{`${k.key}: ${k.providerAttribute} ${k.match} "${k.expected}" (${k.label})`}</Text>);
   if (view === 'accessMapping') {

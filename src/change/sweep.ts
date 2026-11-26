@@ -6,7 +6,6 @@
 import { purgeOldQuestions } from '../db/asks';
 import { sqlChangeRepo } from '../db/changes';
 import { runMigrations } from '../db/migrations';
-import { clearPhase0Settings } from '../db/phase0-cleanup';
 import { listEnvironments, listTools, loadTool } from '../db/repo';
 import { sweepRequests } from '../loop/events';
 import { loopDeps, noteEnvironmentVersion } from '../loop/forge';
@@ -16,7 +15,6 @@ export async function sweep(): Promise<void> {
   try {
     const applied = await runMigrations();
     if (applied.length) console.log(`[sweep] migrations applied: ${applied.join(', ')}`);
-    await clearPhase0Settings(applied, 'sweep');
   } catch (e) {
     console.error(`[sweep] migrations failed: ${String(e).slice(0, 300)}`);
     return;

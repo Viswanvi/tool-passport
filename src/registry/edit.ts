@@ -62,6 +62,8 @@ export const EditPayload = z.discriminatedUnion('entity', [
     effect: z.enum(['allow', 'deny', 'approval']),
     approvalRoute: Route,
     reason: Short(200),
+    // Approval rules only: how many days an approval counts. Left out or null: it doesn't lapse.
+    approvalDays: z.number().int().min(1).max(365).nullable().optional(),
   }),
   z.object({
     entity: z.literal('readinessKey'),
@@ -194,6 +196,7 @@ export async function applyEdit(edit: Edit, tool: Tool, actor: string, deps: App
         effect: edit.effect,
         approvalRoute: edit.effect === 'approval' ? (edit.approvalRoute ?? 'tool_owner') : null,
         reason: edit.reason || null,
+        approvalDays: edit.effect === 'approval' ? (edit.approvalDays ?? null) : null,
       };
       await writer.upsertRule(rule);
       after = rule;

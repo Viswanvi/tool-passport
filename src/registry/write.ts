@@ -57,6 +57,8 @@ export interface RuleInput {
   effect: Effect;
   approvalRoute: string | null;
   reason: string | null;
+  /** Approval rules only: days an approval counts after it is decided; null, it doesn't lapse. */
+  approvalDays: number | null;
 }
 
 export interface ReadinessKeyInput {
@@ -173,11 +175,11 @@ export const sqlRegistryWriter: RegistryWriter = {
 
   async upsertRule(r) {
     await run(
-      `INSERT INTO rules (tool_id, environment_id, audience_group, action_key, effect, approval_route, reason, status, scope_key)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)
+      `INSERT INTO rules (tool_id, environment_id, audience_group, action_key, effect, approval_route, reason, approval_days, status, scope_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
        ON DUPLICATE KEY UPDATE effect = VALUES(effect), approval_route = VALUES(approval_route), reason = VALUES(reason),
-         status = 'active', revision = revision + 1`,
-      r.toolId, r.environmentId, r.audienceGroup, r.actionKey, r.effect, r.approvalRoute, r.reason,
+         approval_days = VALUES(approval_days), status = 'active', revision = revision + 1`,
+      r.toolId, r.environmentId, r.audienceGroup, r.actionKey, r.effect, r.approvalRoute, r.reason, r.effect === 'approval' ? r.approvalDays : null,
       scopeKey(r.toolId, r.environmentId, r.audienceGroup, r.actionKey),
     );
   },

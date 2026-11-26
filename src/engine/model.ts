@@ -80,6 +80,8 @@ export interface RuleRow extends Scoped {
   approvalRoute: string | null;
   reason: string | null;
   revision: number;
+  /** Approval rules only: how many days an approval counts after it was decided. Null or absent: it doesn't lapse. */
+  approvalDays?: number | null;
 }
 
 export interface ReadinessKeyRow {
@@ -156,8 +158,11 @@ export type Label =
   | { kind: 'owner_verified'; version: string; by: string; at: string; quote: string | null }
   | { kind: 'policy_rule'; ruleId: number; revision: number; effect: Effect; reason: string | null }
   | { kind: 'default_policy' }
-  | { kind: 'approved'; requestKey: string; at: string | null }
+  /** `until`: when the approval stops counting, if the rule limits it. */
+  | { kind: 'approved'; requestKey: string; at: string | null; until?: string | null }
   | { kind: 'declined'; requestKey: string; at: string | null }
+  /** An approval that counted once and has run out (or whose decision time can't be read): approval is needed again. */
+  | { kind: 'approval_expired'; requestKey: string; expiredAt: string | null; ruleId: number; revision: number; reason: string | null }
   | { kind: 'assets_record'; attribute: string; readAt: string; changedAt: string | null }
   | { kind: 'recorded_by_owner'; attribute: string; readAt: string; changedAt: string | null }
   | { kind: 'mapped_access'; group: string; grants: string | null; source: 'idp_synced' | 'manual'; by: string }

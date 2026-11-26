@@ -38,11 +38,14 @@ export interface EvalDeps {
   environments: EnvironmentReader;
   /** Version bookkeeping (change/detect.ts). Answers never depend on it: versions are compared at read time. */
   noteVersion?: (environment: Environment, observed: string | null) => Promise<unknown>;
+  /** The clock approvals are checked against; tests fix it. */
+  now?: () => Date;
 }
 
 interface Ctx extends EvalContext {
   env: EnvRead | null;
   repo: EngineRepo;
+  now: Date;
 }
 
 export async function evaluate(checks: Check[], ctx: EvalContext, deps: EvalDeps): Promise<Outcome> {
@@ -54,7 +57,7 @@ export async function evaluate(checks: Check[], ctx: EvalContext, deps: EvalDeps
       // Bookkeeping only; the sweep notices the version on its next run.
     }
   }
-  const x: Ctx = { ...ctx, env, repo: deps.repo };
+  const x: Ctx = { ...ctx, env, repo: deps.repo, now: deps.now?.() ?? new Date() };
   const results: CheckResult[] = [];
   for (const c of checks) results.push(await runCheck(c, x));
   return combine(results);
@@ -198,7 +201,13 @@ async function policy(c: Extract<Check, { dimension: 'policy' }>, x: Ctx): Promi
       return result(c, 'pass', label);
     case 'approval': {
       const grant = await x.repo.approvalGrant(x.asker, x.tool.id, x.environment.id, c.action);
-      if (grant?.status === 'approved') return result(c, 'pass', { kind: 'approved', requestKey: grant.requestKey, at: grant.decidedAt });
+      if (grant?.status === 'approved') {
+        const valid = approvalValidity(grant.decidedAt, rule.approvalDays ?? null, x.now);
+        if (valid.ok) return result(c, 'pass', { kind: 'approved', requestKey: grant.requestKey, at: grant.decidedAt, ...(valid.until ? { until: valid.until } : {}) });
+        // Run out: approval is needed again, and a new request can be raised. Never a pass.
+        const expired: Label = { kind: 'approval_expired', requestKey: grant.requestKey, expiredAt: valid.expiredAt, ruleId: rule.id, revision: rule.revision, reason: rule.reason };
+        return { check: c, status: 'approval', label: expired, route: rule.approvalRoute, pending: null };
+      }
       if (grant?.status === 'declined') return result(c, 'fail', { kind: 'declined', requestKey: grant.requestKey, at: grant.decidedAt });
       return { check: c, status: 'approval', label, route: rule.approvalRoute, pending: grant ? { requestKey: grant.requestKey } : null };
     }
@@ -206,6 +215,27 @@ async function policy(c: Extract<Check, { dimension: 'policy' }>, x: Ctx): Promi
       // effect is a VARCHAR in Forge SQL (D11); an unknown value must not be read as allow.
       return notVerified(c, 'The policy rule for this action is not readable', 'ask_owner');
   }
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Whether an approval still counts. A rule with no limit: always (until: null). With a limit, from the moment the
+ * approver decided: a decision time that is missing or can't be read, or a limit that isn't a whole number of days,
+ * counts as run out, so an unreadable time can never keep an approval alive.
+ */
+export function approvalValidity(
+  decidedAt: string | null,
+  days: number | null,
+  now: Date,
+): { ok: true; until: string | null } | { ok: false; expiredAt: string | null } {
+  if (days === null) return { ok: true, until: null };
+  if (!Number.isSafeInteger(days) || days < 1) return { ok: false, expiredAt: null };
+  const decided = decidedAt ? Date.parse(decidedAt) : NaN;
+  if (Number.isNaN(decided)) return { ok: false, expiredAt: null };
+  const until = decided + days * DAY_MS;
+  const at = new Date(until).toISOString();
+  return now.getTime() < until ? { ok: true, until: at } : { ok: false, expiredAt: at };
 }
 
 // ---- environment: "Ready" -----------------------------------------------------------------------------

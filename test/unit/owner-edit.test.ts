@@ -187,12 +187,23 @@ describe('what each write must say', () => {
   it('a rule: an approval route only for approval (the tool owner by default), and an environment of the tool', async () => {
     const s = setup();
     await handleEdit(VALID.rule, { accountId: MARCO }, s.deps);
-    await handleEdit({ ...VALID.rule, effect: 'deny', approvalRoute: 'environment_owner', reason: 'Not allowed' }, { accountId: MARCO }, s.deps);
+    await handleEdit({ ...VALID.rule, effect: 'deny', approvalRoute: 'environment_owner', reason: 'Not allowed', approvalDays: 30 }, { accountId: MARCO }, s.deps);
+    await handleEdit({ ...VALID.rule, approvalDays: 30 }, { accountId: MARCO }, s.deps);
     expect(s.written('rule')).toEqual([
-      { toolId: 1, environmentId: DEV, audienceGroup: null, actionKey: 'external_api_calls', effect: 'approval', approvalRoute: 'tool_owner', reason: 'Needs security approval' },
-      { toolId: 1, environmentId: DEV, audienceGroup: null, actionKey: 'external_api_calls', effect: 'deny', approvalRoute: null, reason: 'Not allowed' },
+      { toolId: 1, environmentId: DEV, audienceGroup: null, actionKey: 'external_api_calls', effect: 'approval', approvalRoute: 'tool_owner', reason: 'Needs security approval', approvalDays: null },
+      // Days are for approvals only.
+      { toolId: 1, environmentId: DEV, audienceGroup: null, actionKey: 'external_api_calls', effect: 'deny', approvalRoute: null, reason: 'Not allowed', approvalDays: null },
+      { toolId: 1, environmentId: DEV, audienceGroup: null, actionKey: 'external_api_calls', effect: 'approval', approvalRoute: 'tool_owner', reason: 'Needs security approval', approvalDays: 30 },
     ]);
     expect(await handleEdit({ ...VALID.rule, environmentId: 999 }, { accountId: MARCO }, s.deps)).toMatchObject({ ok: false });
+  });
+
+  it('a rule: approval days are a whole number from 1 to 365', async () => {
+    const s = setup();
+    for (const approvalDays of [0, -1, 1.5, 366, '30']) {
+      expect(await handleEdit({ ...VALID.rule, approvalDays }, { accountId: MARCO }, s.deps)).toMatchObject({ ok: false });
+    }
+    expect(s.written('rule')).toEqual([]);
   });
 
   it('an access mapping: "no access needed" is explicit, otherwise a group is required', async () => {

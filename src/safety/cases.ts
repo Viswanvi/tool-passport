@@ -17,9 +17,11 @@ import { loopWorld, resolvedEvent, statusEvent } from './fix-world';
  * its starting point is Yes, so it can't pass just because something else already blocked. The worlds are
  * fixed test data in memory and the model is scripted: nothing is read from the site and no model is called.
  *
- * Two cases have a different bar, recorded in docs/DECISIONS.md D28: case 12 (an unmapped resolution leaves
- * the approval pending, so the truthful card is "Yes, with approval · Approval requested", never Yes) and
- * case 13 (an injected question must get exactly the plain question's verdict, never a better one).
+ * Some cases have a different bar, recorded in docs/DECISIONS.md D28 and D52: case 12 (an unmapped resolution
+ * leaves the approval pending, so the truthful card is "Yes, with approval · Approval requested", never Yes),
+ * case 13 (an injected question must get exactly the plain question's verdict, never a better one) and case 17
+ * (an approval that has run out, or whose decision time can't be read, means approval is needed again: "Yes, with
+ * approval", never Yes).
  */
 
 export interface SafetyCase {
@@ -47,6 +49,11 @@ function verdictOf(a: Answer): string {
 
 function notYes(a: Answer): void {
   ok(!YES.has(verdictOf(a)), `expected not Yes, got ${verdictOf(a)}`);
+}
+
+/** Cases 12 and 17: approval is needed (again), so "Yes, with approval" is the truthful answer; Yes never is. */
+function neverYes(a: Answer): void {
+  ok(verdictOf(a) !== 'yes', 'expected anything but Yes, got yes');
 }
 
 function resultsOf(a: Answer): CheckResult[] {
@@ -97,6 +104,7 @@ const G13 = '13. Injection and pressure';
 const G14 = "14. An environment outside the asker's audience";
 const G15 = 'Every result that is not a pass says why';
 const G16 = 'The card never shows a pass the checks did not give';
+const G17 = 'An approval counts only while its rule allows';
 
 export const SAFETY_CASES: readonly SafetyCase[] = [
   { id: '0', group: G0, title: 'combine() refuses an empty check list', run: () => throws(() => combine([]), 'combine([])') },
@@ -770,7 +778,58 @@ export const SAFETY_CASES: readonly SafetyCase[] = [
       }
     },
   },
+
+  {
+    id: '17a',
+    group: G17,
+    title: 'an approval past the number of days its rule allows',
+    async run() {
+      // The starting point is Yes: the same approval, a day before it runs out.
+      const before = await askAt(approvalLimited(30), DECIDED_PLUS(29));
+      same(verdictOf(before), 'yes', 'the starting point must be Yes');
+      for (const days of [30, 31, 400]) {
+        const w = approvalLimited(30);
+        const a = await askAt(w, DECIDED_PLUS(days));
+        neverYes(a);
+        same(verdictOf(a), 'yes_with_approval', `verdict ${days} days after the decision`);
+        like(resultFor(a, 'policy'), { status: 'approval', label: { kind: 'approval_expired', requestKey: 'TPD-12' }, pending: null }, 'policy check');
+        const policy = cardOf(w, a).stamps.find((s) => s.dimension === 'policy');
+        ok(policy?.state !== 'pass', 'the policy stamp says Yes over an expired approval');
+      }
+    },
+  },
+  {
+    id: '17b',
+    group: G17,
+    title: 'an approval whose decision time is missing or unreadable, under a rule with a limit',
+    async run() {
+      for (const decidedAt of [null, '', 'not a date']) {
+        const w = approvalLimited(30);
+        w.grants[0]!.decidedAt = decidedAt;
+        const a = await askAt(w, DECIDED_PLUS(1));
+        neverYes(a);
+        like(resultFor(a, 'policy'), { status: 'approval', label: { kind: 'approval_expired' } }, `policy check, decided at ${JSON.stringify(decidedAt)}`);
+      }
+    },
+  },
 ];
+
+/** yesWorld's grant TPD-12 was decided at this time. */
+const DECIDED = '2026-11-24T15:00:00.000Z';
+const DECIDED_PLUS = (days: number) => new Date(Date.parse(DECIDED) + days * 86_400_000);
+
+/** The Yes world, with approvals under the KS-DEV design-review rule counting for this many days. */
+function approvalLimited(days: number): World {
+  const w = yesWorld();
+  same(w.grants[0]?.decidedAt, DECIDED, 'the starting grant');
+  w.rules.find((r) => r.actionKey === 'custom_ui' && r.environmentId === DEV)!.approvalDays = days;
+  return w;
+}
+
+/** The dashboard question in KS-DEV, checked against a fixed clock. */
+function askAt(w: World, now: Date): Promise<Answer> {
+  return answerQuestion(askInput(w, DASHBOARD, DEV), { ...depsFor(w, modelReplying(WEB)), now: () => now });
+}
 
 /**
  * One change to a world whose dashboard answer in KS-DEV is Yes, covering every other verdict: Don't know yet

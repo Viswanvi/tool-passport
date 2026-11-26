@@ -53,6 +53,23 @@ describe('row reading', () => {
     }
   });
 
+  it("reads a rule's approval days: none, a number, or a bad row (never read as no limit)", async () => {
+    replies.push([RULE, { ...RULE, id: 201, approval_days: null }, { ...RULE, id: 202, approval_days: 30 }, { ...RULE, id: 203, approval_days: '7' }]);
+    expect((await sqlEngineRepo.rules(1, 'custom_ui')).map((r) => r.approvalDays)).toEqual([null, null, 30, 7]);
+    expect(statements[0]!.query).toMatch(/approval_days FROM rules/);
+    for (const approval_days of [0, -1, 1.5, 'thirty', 4000]) {
+      replies.push([{ ...RULE, approval_days }]);
+      await expect(sqlEngineRepo.rules(1, 'custom_ui'), JSON.stringify(approval_days)).rejects.toThrow(/Unreadable rules.approval_days/);
+    }
+  });
+
+  it("reads an approval's decision time as UTC (Forge SQL's TIMESTAMP text has no zone)", async () => {
+    const grant = { id: 500, asker_account_id: 'acct-priya', tool_id: 1, environment_id: 11, action_key: 'custom_ui', request_key: 'TPD-12', status: 'approved' };
+    replies.push([{ ...grant, decided_at: '2026-11-24 15:00:00' }], [{ ...grant, decided_at: null, status: 'pending' }]);
+    expect(await sqlEngineRepo.approvalGrant('acct-priya', 1, 11, 'custom_ui')).toMatchObject({ status: 'approved', decidedAt: '2026-11-24T15:00:00Z' });
+    expect(await sqlEngineRepo.approvalGrant('acct-priya', 1, 11, 'custom_ui')).toMatchObject({ status: 'pending', decidedAt: null });
+  });
+
   it('fact values are wrapped as { value }, from a parsed or a text JSON column', () => {
     expect(factValue({ value: 2 })).toBe(2);
     expect(factValue('{"value":true}')).toBe(true);

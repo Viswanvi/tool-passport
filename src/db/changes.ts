@@ -1,6 +1,6 @@
 import { sql, type UpdateQueryResponse } from '@forge/sql';
 import type { ChangeRecord, ChangeRepo } from '../change/changes';
-import { factsWithVersions, id, oneOf, text, textOrNull, time } from './repo';
+import { factsWithVersions, id, oneOf, text, textOrNull, time, utcIso } from './repo';
 import { fromJsonColumn, limitClause } from './store';
 
 /**
@@ -31,13 +31,7 @@ export function changeRow(r: Row): ChangeRecord {
   };
 }
 
-/**
- * Forge SQL returns TIMESTAMP as "YYYY-MM-DD HH:MM:SS" in UTC with no zone; a browser reads that as local time
- * (found live: a change at 12:49 UTC showed as 12:49 PM in a UTC+5:30 browser). Shown times get a "Z".
- */
-export function utcIso(s: string): string {
-  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(s) ? `${s.replace(' ', 'T')}Z` : s;
-}
+export { utcIso };
 
 async function select(query: string, ...params: unknown[]): Promise<Row[]> {
   const res = await sql.prepare<Row>(query).bindParams(...params).execute();

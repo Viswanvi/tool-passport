@@ -61,7 +61,7 @@ function memoryRegistry() {
     async upsertRule(r) {
       db.calls++;
       const scope = `${r.toolId}|${r.environmentId ?? '*'}|${r.audienceGroup ?? '*'}|${r.actionKey}`;
-      db.rules.set(scope, { id: db.rules.get(scope)?.id ?? seq++, toolId: r.toolId, environmentId: r.environmentId, audienceGroup: r.audienceGroup, actionKey: r.actionKey, effect: r.effect, approvalRoute: r.approvalRoute, reason: r.reason, revision: 1, status: 'active' });
+      db.rules.set(scope, { id: db.rules.get(scope)?.id ?? seq++, toolId: r.toolId, environmentId: r.environmentId, audienceGroup: r.audienceGroup, actionKey: r.actionKey, effect: r.effect, approvalRoute: r.approvalRoute, reason: r.reason, revision: 1, status: 'active', approvalDays: r.approvalDays });
     },
     async upsertReadinessKey(rk) {
       db.calls++;
@@ -110,6 +110,8 @@ describe('Load demo data', () => {
     expect(m.db.audits).toHaveLength(1);
     expect(m.db.tools[0]).toMatchObject({ name: 'Kestrel Studio', ownerAccountId: 'acct-admin', defaultPolicy: 'none', versionGranularity: 'minor' });
     expect(m.db.facts.find((f) => f.factKey === 'websockets')).toBeUndefined();
+    // Approvals under the demo's approval rules count for 30 days (D52); other rules have no limit.
+    for (const rule of m.db.rules.values()) expect(rule.approvalDays, `${rule.actionKey} ${rule.effect}`).toBe(rule.effect === 'approval' ? 30 : null);
   });
 
   it('is safe to run twice: same rows, no duplicates', async () => {

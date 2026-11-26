@@ -68,15 +68,18 @@ const day = (iso: string | null | undefined) => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
 
+/** "until Dec 26" on an approval that lapses; "on Dec 26" on one that has. */
+const untilText = (c: Chip) => (c.until && day(c.until) ? ` · ${c.label === 'Approval expired' ? 'on' : 'until'} ${day(c.until)}` : '');
+
 function chipText(c: Chip): string {
   if (c.label === 'Assets record') return `Assets record · read ${time(c.readAt)}`;
   if (c.label === 'Recorded by owner') return `Recorded by owner${c.changedAt ? ` · ${day(c.changedAt)}` : ''}`;
-  return `${c.label} · ${c.detail}`;
+  return `${c.label} · ${c.detail}${untilText(c)}`;
 }
 
 function checkLine(c: Card['checks'][number]): string {
   const chip = c.chip;
-  const extra = chip.label === 'Assets record' || chip.label === 'Recorded by owner' ? `${chip.detail}${chip.changedAt ? `, changed ${day(chip.changedAt)}` : ''}` : chip.detail;
+  const extra = chip.label === 'Assets record' || chip.label === 'Recorded by owner' ? `${chip.detail}${chip.changedAt ? `, changed ${day(chip.changedAt)}` : ''}` : `${chip.detail}${untilText(chip)}`;
   return `${c.subject}: ${c.statusText} (${chip.label}${extra ? ` · ${extra}` : ''})`;
 }
 

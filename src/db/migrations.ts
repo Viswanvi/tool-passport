@@ -8,8 +8,11 @@ import { migrationRunner } from '@forge/sql';
  * VARCHAR here and validated in code, and the reserved words `key` and `match` are renamed
  * (`key_name`, `match_kind`); see docs/DECISIONS.md D11-D13.
  *
- * Migration names are permanent: the runner records them per installation. Never edit a
- * shipped statement; add a new migration instead.
+ * Migration names are permanent: the runner records them per installation. A change to an existing table is a new
+ * migration. The one exception (DECISIONS D54): Forge SQL allows 25 DDL requests per minute per installation and the
+ * runner itself spends 2 per run, so the small changes once shipped as v021-v024 are also written into the CREATE
+ * statements below and their entries retired. Installations that ran them have the same columns; new ones get them
+ * at creation, keeping a fresh install's first run well under the limit.
  */
 export interface Migration {
   name: string;
@@ -81,6 +84,7 @@ export const MIGRATIONS: Migration[] = [
   comparison VARCHAR(8) NOT NULL,               -- has | eq | gte | lte; fixed here, never by the model
   requires_value BOOLEAN NOT NULL DEFAULT FALSE,
   synonyms JSON NULL,
+  unit VARCHAR(128) NULL,                       -- was v021: what a value means ("file size in gigabytes (GB)"), D30
   UNIQUE KEY one_key (tool_id, key_name)
 )`,
   },
@@ -139,7 +143,10 @@ export const MIGRATIONS: Migration[] = [
   reason VARCHAR(512) NULL,
   revision INT NOT NULL DEFAULT 1,
   status VARCHAR(16) NOT NULL DEFAULT 'active', -- not in the spec's table list, but mostSpecific() filters retired rows
-  KEY rules_by_action (tool_id, action_key)
+  scope_key VARCHAR(512) NULL,                  -- was v022/v023: one rule per scope, like facts.scope_key (D31)
+  approval_days INT NULL,                       -- also added by v025 on older installations (D52)
+  KEY rules_by_action (tool_id, action_key),
+  UNIQUE KEY one_rule_per_scope (scope_key)
 )`,
   },
   {
@@ -207,6 +214,7 @@ export const MIGRATIONS: Migration[] = [
   rechecked_at TIMESTAMP NULL,
   result JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  portal_url VARCHAR(512) NULL,                 -- was v024: the request's customer portal link (D32)
   UNIQUE KEY one_request_key (request_key),
   UNIQUE KEY one_open_request (open_key)
 )`,
@@ -305,35 +313,44 @@ export const MIGRATIONS: Migration[] = [
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 )`,
   },
-  // v019_experiment_runs (Phase 0 experiment log) was removed from this list at Phase 0 sign-off, so new
-  // installs never create it; installs that ran it drop it here. Names stay permanent: v019 is never reused.
+  // Retired names, never reused (D54). v019_experiment_runs was the Phase 0 experiment log, and v020 dropped it on
+  // the installations that had it (all of them ran v020 long ago; a new one never had the table). v021-v024 added
+  // catalog_keys.unit, rules.scope_key with its unique index, and requests.portal_url, now in the CREATE statements.
   {
-    name: 'v020_drop_experiment_runs',
-    ddl: 'DROP TABLE IF EXISTS experiment_runs',
+    // Approval rules only: how many days an approval counts after it is decided; NULL, it doesn't lapse
+    // (DECISIONS D52). Not in the spec's column list.
+    name: 'v025_rules_approval_days',
+    ddl: 'ALTER TABLE rules ADD COLUMN IF NOT EXISTS approval_days INT NULL',
   },
   {
-    // What a value means ("file size in gigabytes (GB)"), shown to the model so it can convert units
-    // (E4: "500 MB" → 0.5). Not in the spec's column list (DECISIONS D30).
-    name: 'v021_catalog_key_unit',
-    ddl: 'ALTER TABLE catalog_keys ADD COLUMN IF NOT EXISTS unit VARCHAR(128) NULL',
-  },
-  {
-    // One rule per scope (tool|environment-or-*|group-or-*|action), like facts.scope_key, so writing a rule
-    // again updates it instead of adding a duplicate (DECISIONS D31).
-    name: 'v022_rules_scope_key',
-    ddl: 'ALTER TABLE rules ADD COLUMN IF NOT EXISTS scope_key VARCHAR(512) NULL',
-  },
-  {
-    name: 'v023_rules_scope_unique',
-    ddl: 'CREATE UNIQUE INDEX IF NOT EXISTS one_rule_per_scope ON rules (scope_key)',
-  },
-  {
-    // The request's customer portal link from the create reply (`_links.web`), so the card can open it
-    // for the asker. Not in the spec's column list (DECISIONS D32).
-    name: 'v024_requests_portal_url',
-    ddl: 'ALTER TABLE requests ADD COLUMN IF NOT EXISTS portal_url VARCHAR(512) NULL',
+    // "Add to story": a story an answer was posted on, and the verdict it was last told, so a later re-check
+    // adds the new answer there once (compare-and-set on verdict). D53.
+    name: 'v026_story_shares',
+    ddl: `CREATE TABLE IF NOT EXISTS story_shares (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  ask_id BIGINT NOT NULL,
+  tool_id BIGINT NOT NULL,
+  issue_key VARCHAR(64) NOT NULL,
+  verdict VARCHAR(24) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY one_share (ask_id, issue_key),
+  KEY shares_by_ask (ask_id)
+)`,
   },
 ];
+
+/** Names that were shipped and are retired (D54): never reused, so no installation mistakes a new one for them. */
+export const RETIRED_MIGRATIONS = [
+  'v019_experiment_runs',
+  'v020_drop_experiment_runs',
+  'v021_catalog_key_unit',
+  'v022_rules_scope_key',
+  'v023_rules_scope_unique',
+  'v024_requests_portal_url',
+] as const;
+
+/** DDL requests one run spends besides the migrations: the runner creates and lists its __migrations table. */
+export const RUNNER_DDL = 2;
 
 // The runner is a module-level singleton that accumulates enqueued statements, so the list is
 // enqueued exactly once per process; run() then applies only what this installation lacks.

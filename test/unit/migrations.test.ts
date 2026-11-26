@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@forge/sql', () => ({ migrationRunner: { enqueue: vi.fn(), run: vi.fn() }, sql: {} }));
 
-const { MIGRATIONS, SPEC_TABLES } = await import('../../src/db/migrations');
+const { MIGRATIONS, RETIRED_MIGRATIONS, RUNNER_DDL, SPEC_TABLES } = await import('../../src/db/migrations');
 
 const tableOf = (ddl: string) => /CREATE TABLE IF NOT EXISTS (\w+)/.exec(ddl)?.[1];
 
@@ -18,10 +18,25 @@ describe('Forge SQL migrations', () => {
     }
   });
 
-  it('never creates the Phase 0 experiment log, and drops it where it exists', () => {
+  it('never creates the Phase 0 experiment log and never reuses a retired name', () => {
     expect(MIGRATIONS.map((m) => tableOf(m.ddl))).not.toContain('experiment_runs');
-    expect(MIGRATIONS.some((m) => m.ddl === 'DROP TABLE IF EXISTS experiment_runs')).toBe(true);
-    expect(MIGRATIONS.map((m) => m.name)).not.toContain('v019_experiment_runs');
+    const names = MIGRATIONS.map((m) => m.name);
+    for (const retired of RETIRED_MIGRATIONS) {
+      expect(names).not.toContain(retired);
+      // A new name never shares a retired one's number either.
+      expect(names.map((n) => n.slice(0, 4))).not.toContain(retired.slice(0, 4));
+    }
+  });
+
+  it('creates on a new installation what the retired migrations added on older ones (D54)', () => {
+    const ddl = (t: string) => MIGRATIONS.find((m) => tableOf(m.ddl) === t)?.ddl ?? '';
+    expect(ddl('catalog_keys')).toMatch(/\bunit VARCHAR\(128\) NULL,/);
+    expect(ddl('rules')).toMatch(/\bscope_key VARCHAR\(512\) NULL,/);
+    expect(ddl('rules')).toMatch(/UNIQUE KEY one_rule_per_scope \(scope_key\)/);
+    expect(ddl('requests')).toMatch(/\bportal_url VARCHAR\(512\) NULL,/);
+    // v025 adds the same column to older installations; on a new one it is already there.
+    expect(ddl('rules')).toMatch(/\bapproval_days INT NULL,/);
+    expect(MIGRATIONS.find((m) => m.name === 'v025_rules_approval_days')?.ddl).toBe('ALTER TABLE rules ADD COLUMN IF NOT EXISTS approval_days INT NULL');
   });
 
   it('has unique, ordered, permanent migration names', () => {
@@ -31,8 +46,10 @@ describe('Forge SQL migrations', () => {
     for (const n of names) expect(n).toMatch(/^v\d{3}_[a-z_]+$/);
   });
 
-  it('stays under the Forge SQL DDL limit of 25 statements per minute', () => {
-    expect(MIGRATIONS.length).toBeLessThan(25);
+  it('stays under the Forge SQL limit of 25 DDL requests per minute, with room for a second run that minute', () => {
+    // A fresh install's first run spends one request per migration plus the runner's own two; Load demo data right
+    // after runs the runner again (two more). Limit: developer.atlassian.com/platform/forge/limits-sql/.
+    expect(MIGRATIONS.length + RUNNER_DDL + RUNNER_DDL).toBeLessThanOrEqual(25);
   });
 
   it('never uses foreign keys (unsupported) or the reserved column names key and match', () => {
