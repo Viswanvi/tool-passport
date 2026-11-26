@@ -1,4 +1,5 @@
 import { answerQuestion, type Answer } from '../engine/answer';
+import { buildCard, type Card } from '../engine/card';
 import type { CheckResult, Groups } from '../engine/model';
 import { combine } from '../engine/verdict';
 import { handleIssueEvent } from '../loop/events';
@@ -32,6 +33,11 @@ const YES = new Set(['yes', 'yes_with_approval']);
 
 async function ask(w: World, question = DASHBOARD, environmentId: number | null = DEV, reply: unknown = WEB, asker = PRIYA): Promise<Answer> {
   return answerQuestion(askInput(w, question, environmentId, asker), depsFor(w, modelReplying(reply)));
+}
+
+/** The card the page would show for this answer, in the world it was asked in. */
+function cardOf(w: World, a: Answer, environmentId: number | null = DEV): Card {
+  return buildCard(a, { toolName: w.tool.name, environment: w.environments.find((e) => e.id === environmentId) ?? null, catalog: w.catalog });
 }
 
 function verdictOf(a: Answer): string {
@@ -89,6 +95,7 @@ const G12 = '12. An approval request resolved with an unmapped resolution';
 const G13 = '13. Injection and pressure';
 const G14 = "14. An environment outside the asker's audience";
 const G15 = 'Every result that is not a pass says why';
+const G16 = 'The card never shows a pass the checks did not give';
 
 export const SAFETY_CASES: readonly SafetyCase[] = [
   { id: '0', group: G0, title: 'combine() refuses an empty check list', run: () => throws(() => combine([]), 'combine([])') },
@@ -709,6 +716,35 @@ export const SAFETY_CASES: readonly SafetyCase[] = [
         same(r.label.kind, 'not_verified', `${r.check.dimension} label`);
         ok((r.label as { missing: string }).missing.length > 0, `${r.check.dimension} label names nothing missing`);
         ok(r.settle !== undefined, `${r.check.dimension} result has no next step`);
+      }
+    },
+  },
+
+  {
+    id: 'stamps',
+    group: G16,
+    title: 'a passport stamp shows Yes only when every check under it passed',
+    async run() {
+      const removals: Array<(w: World) => void> = [(w) => (w.access = []), (w) => (w.readiness = []), (w) => (w.rules = []), (w) => w.readFailures.set(DEV, 'unreachable'), () => undefined];
+      const cards = [];
+      for (const remove of removals) {
+        const w = yesWorld();
+        remove(w);
+        cards.push(cardOf(w, await ask(w)));
+      }
+      for (const env of [DEV, PROD, null]) {
+        const w = demoWorld();
+        cards.push(cardOf(w, await ask(w, DASHBOARD, env), env));
+      }
+      ok(cards.some((c) => c.stamps.some((s) => s.state !== 'pass')), 'no blocked stamp was produced');
+      for (const c of cards) {
+        for (const s of c.stamps) {
+          const checks = c.checks.filter((x) => (s.dimension === 'capability' ? x.dimension === 'capability' || x.dimension === 'unlinked' : x.dimension === s.dimension));
+          if (s.state === 'pass') ok(checks.length > 0 && checks.every((x) => x.status === 'pass'), `${s.dimension} stamp says Yes over ${JSON.stringify(checks.map((x) => x.status))}`);
+          if (s.state === 'not_checked' || s.state === 'none') same(checks.length, 0, `${s.dimension} checks under a stamp that says ${s.statusText}`);
+          if (c.where === 'Any environment' && s.dimension !== 'capability') same(s.state, 'not_checked', `${s.dimension} stamp for Any environment`);
+        }
+        if (c.verdict !== 'yes') ok(!c.path.some((p) => p.kind === 'yes' && p.state !== 'todo'), 'the path marks Yes as reached');
       }
     },
   },

@@ -6,10 +6,15 @@ Employees ask **"Can I do X with tool T in environment E?"**, for example *"Can 
 Kestrel Studio in KS-DEV?"* Tool Passport answers from recorded evidence and names the source of every piece:
 
 - **Yes**, **Yes, with approval**, **Not ready**, **No**, or **Don't know yet**, with the reason;
-- one line per check, each labelled with its evidence: *Assets record*, *Owner-verified · 13.2*, *Policy rule*,
-  *Mapped access*, *Approved*, or *Not verified* when nothing is recorded;
-- the next step: **Request the fix**, **Request approval** or **Ask the owner**, each a private Jira Service
-  Management request raised for the person asking. When it's resolved, the answer updates by itself.
+- four **passport stamps**, one per check (the tool can do it, policy allows it, set up here, you have access),
+  each labelled with its evidence: *Assets record*, *Owner-verified · 13.2*, *Policy rule*, *Mapped access*,
+  *Approved*, or *Not verified* when nothing is recorded. A stamp shows Yes only when every check under it passed;
+- the **path to Yes** and the next step: **Request the fix**, **Request approval** or **Ask the owner**, each a
+  private Jira Service Management request raised for the person asking. When it's resolved, the answer updates by
+  itself, and the card says what changed.
+
+Setup is one click after you create a service desk: the setup page proposes the desk, request type, approval
+outcomes and demo data, and sets them when you click.
 
 Facts are verified per tool version. When an environment moves to a new version, Tool Passport stops vouching for
 the facts that depend on the version in that environment only, and the owner re-verifies them on one screen.
@@ -32,9 +37,9 @@ the demo with and without Assets, and the optional Rovo agent.
 
 ## Never a false Yes
 
-The **false-Yes suite** holds 47 cases. Each takes away one piece of evidence from a question whose answer is Yes
+The **false-Yes suite** holds 48 cases. Each takes away one piece of evidence from a question whose answer is Yes
 (an access mapping, a policy rule, a group lookup, a readable record, a verified fact), or adds pressure such as
-"my manager approved this", and the answer must then be anything but Yes. The build runs it
+"my manager approved this", and the answer must then be anything but Yes. One more checks that no passport stamp shows Yes over a check that did not pass. The build runs it
 (`test/safety/false-yes.test.ts`), and so can any Jira administrator, from Setup → Tests. Both run the same case
 list in [src/safety/cases.ts](src/safety/cases.ts).
 

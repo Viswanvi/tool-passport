@@ -1179,5 +1179,47 @@ section 8 added.
 **Phase 4: every item now passes** (Setup wizard, demo seed and Reset, the test screen, README and judge guide, the
 timed fresh-site run with Assets, registry mode on a fresh site, the privacy test). Open for submission: the video,
 the Devpost text and Best Agents write-up, the Devpost form, a LICENSE file (the human decides), and cancelling the
-tp-judge-1 trial by Dec 8. Also open for submission: the video, the Devpost text
-and Best Agents write-up, a LICENSE file (the human decides), and cancelling the tp-judge-1 trial.
+tp-judge-1 trial by Dec 8.
+
+## Polish pass: passport card and one-click setup, 2026-11-26 (human: "make sure we get that wow factor")
+
+What changed (DECISIONS D49):
+
+- **Passport stamps.** The server card now has `stamps`: one per kind of check (Tool can do it, Policy allows it,
+  Set up here, You have access), each the worst status of the checks under it, with that check's evidence label.
+  "Any environment" stamps for policy, setup and access say **Not checked**. The page draws them as coloured tiles
+  instead of the chip row; `chips` and `checked` stay in the card for Rovo.
+- **Path to Yes.** `path`: Asked → each missing piece → each approval → Yes (Not ready and Yes, with approval only),
+  drawn as a progress tracker; a step with an open request shows its key ("Set up frontend build · TPD-1").
+- **Change note.** When a re-check changes the answer, the page shows "The answer changed by itself at …: Not ready →
+  Yes, with approval" (or "Checked again at …" after a click).
+- **Loading words** ("Reading your question, then checking the tool, policy, setup and access…", "Checking again…",
+  "Raising your private request…") and an empty state for a site with no tools.
+- **Suggested questions in a fixed order**: most checks first, then key (a reset no longer reorders them).
+- **One-click setup** (`quickSetupPlan`, `quickSetup`): the setup page proposes steps 1 to 3 and sets them on a Jira
+  administrator's click; the server works the plan out again on the click. It keeps what is set, never chooses
+  between two desks, prefers "Get IT help", and maps approvals only from a resolution named Done.
+- **False-Yes suite: 48 cases.** New case `stamps` (group 16): a stamp shows Yes only when every check under it
+  passed. Mutation check: drawing Needs approval or Missing as Yes made it fail
+  (`Tests 1 failed | 47 passed (48)`), then the code was restored.
+
+Verified:
+
+- `npx tsc --noEmit -p .` exit 0; `npx eslint src test` exit 0; `npm test`: `Test Files 32 passed (32)`,
+  `Tests 457 passed (457)`; `forge lint`: `No issues found.`
+- `forge deploy -e development`: 5.10.0, 5.11.0, 5.12.0, each "eligible for the Runs on Atlassian program";
+  `forge eligibility -e development`: 5.12.0 eligible. No new scopes, so no `forge install --upgrade`.
+- Live on the demo site (development): Ask again on the stored KS-DEV question → **Not ready** with the four stamps
+  (Yes / Needs approval / Missing, Frontend build, Assets record read 02:37 PM / Yes, kestrel-dev-builders) and the
+  path Asked → Set up frontend build → Get approval → Yes. Ask again on KS-PROD → **No**, policy stamp red (Policy
+  rule · Not allowed in production), access stamp Missing (kestrel-prod-deployers). Any environment, the suggested
+  question → **Yes**, tool stamp Yes (Owner-verified · 13.2), the other three **Not checked**. Setup page: the
+  one-click box reads **Ready to ask** with all three lines already set (TPD desk, "Get IT help", Done approves and
+  Declined declines, Kestrel Studio loaded). Setup → Tests → Run the false-Yes suite: **All 48 cases passed**;
+  log `[runSafety] passed=48/48`.
+- LLM calls: none expected. The two Ask again clicks re-check stored keys; the Any environment question had been
+  asked before, and the translation cache is per tool, catalog revision and question, so its saved reading was
+  most likely reused (the app doesn't log model calls, so this is not proven).
+
+Untested: the one-click **Set it all up** click itself (the demo site is already set up; it needs a fresh site), the
+change note during a real resolution, and the path step showing a request key live. Production is still 2.1.0.

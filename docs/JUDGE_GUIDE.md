@@ -38,7 +38,14 @@ the employee asking (Priya in the video) and the tool owner (Marco), with your o
 ## 2. Set up Tool Passport
 
 Open Jira settings (gear icon) → **Marketplace apps**, then in the sidebar under **Apps**, **Tool Passport setup**.
-The checklist at the top shows each step as **Done** or **To do** and updates as you go.
+
+**The quick way.** The box at the top, **Set up in one click**, lists exactly what it will set: your service desk
+with the request type **Get IT help**, **Done** approves and **Declined** declines, and the demo data. Click **Set it
+all up** (**No Assets?** click **No Assets? Set up in registry mode**). It takes up to a minute. When the box says
+**Ready to ask**, go to section 3. If a line has a warning sign instead (for example, the site has two service desks
+or no resolution named Done), do that one step below; the box keeps everything else.
+
+**Step by step.** The checklist shows each step as **Done** or **To do** and updates as you go.
 
 1. **Requests.** Choose your service desk and a request type that needs only a summary and a description (on a new
    IT desk, **Get IT help**), then **Save**. Fix requests, approval requests and questions to the owner all use it.
@@ -53,8 +60,8 @@ The checklist at the top shows each step as **Done** or **To do** and updates as
      by the owner inside Tool Passport, and answers label them *Recorded by owner*, which is weaker evidence than an
      Assets record.
 4. **Model.** Nothing to do: the app picks an active model on your site by itself.
-5. **Tests.** Click **Run the false-Yes suite**. It runs the app's 47 safety cases on fixed test data inside the
-   app and should show **All 47 cases passed**. It reads nothing from your site and makes no model calls. The
+5. **Tests.** Click **Run the false-Yes suite**. It runs the app's 48 safety cases on fixed test data inside the
+   app and should show **All 48 cases passed**. It reads nothing from your site and makes no model calls. The
    **40-question set** below it is optional: it makes about 40 model calls, so it can run once every 10 minutes.
 
 ## 3. Moment 1: the answer depends on the environment
@@ -62,18 +69,22 @@ The checklist at the top shows each step as **Done** or **To do** and updates as
 Open the app: sidebar → **Apps** → **Tool Passport**. On the **Ask** tab, pick **Kestrel Studio** and **KS-DEV**,
 then click the suggested question **Can I build a custom web front end or dashboard?** (or type it and click **Ask**).
 
-- Expected: **Not ready**. "Frontend build isn't set up in KS-DEV." Each line underneath names its evidence:
-  *Assets record* (Build environments), *Owner-verified · 13.2*, *Mapped access · kestrel-dev-builders*. The next
-  step after the fix is a design review.
-- Switch the environment to **KS-PROD** and ask again: **No**, not allowed in production (*Policy rule*), even
-  though KS-PROD has the frontend build.
+- Expected: **Not ready**. "Frontend build isn't set up in KS-DEV." Under it, four passport stamps, one per check,
+  each naming its evidence: **Tool can do it · Yes** (*Owner-verified · 13.2*), **Policy allows it · Needs
+  approval** (*Policy rule · Needs design review*), **Set up here · Missing** (Frontend build, *Assets record*) and
+  **You have access · Yes** (*Mapped access · kestrel-dev-builders*). Below them, the **path to Yes**: Asked → Set up
+  frontend build → Get approval → Yes.
+- Switch the environment to **KS-PROD** and ask again: **No**. The policy stamp is red: not allowed in production
+  (*Policy rule*), even though KS-PROD has the frontend build.
+- Pick **Any environment** and ask again: only the tool stamp is checked; the other three say **Not checked**.
 
 Try your own wording too. A question outside the tool's catalog gets **Don't know yet**, never a guess.
 
 ## 4. Moment 2: the guided fix
 
 1. Ask the KS-DEV question again and click **Request the fix**. The card shows *Fix requested (TPD-…)* with a link
-   to the request. The request is private, raised for you, and assigned to the tool owner (also you). It says what
+   to the request, and the path's step becomes *Set up frontend build · TPD-…*. Keep the page open: while a request
+   is open, the card checks again every 10 seconds and shows a note when the answer changes by itself. The request is private, raised for you, and assigned to the tool owner (also you). It says what
    is missing and where the evidence came from, such as *Assets record TPENV-1*.
 2. Make the fix in Assets: sidebar → **Assets** → **Schemas** → **Tool Passport Environments** → **Tool
    Environment** → **KS-DEV**. On the object, click **3 more attributes** to see them all, click the **Build

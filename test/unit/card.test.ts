@@ -107,7 +107,98 @@ describe('verdict words, colours and actions', () => {
   });
 });
 
+describe('passport stamps: one per check kind, built by code from the checks', () => {
+  it('KS-DEV: the tool can, policy needs approval, frontend build missing, access yes', async () => {
+    const c = await card(demoWorld(), DEV);
+    expect(c.stamps.map((s) => [s.dimension, s.title, s.state, s.statusText])).toEqual([
+      ['capability', 'Tool can do it', 'pass', 'Yes'],
+      ['policy', 'Policy allows it', 'approval', 'Needs approval'],
+      ['environment', 'Set up here', 'missing', 'Missing'],
+      ['access', 'You have access', 'pass', 'Yes'],
+    ]);
+    expect(c.stamps[0]).toMatchObject({ detail: null, chip: { label: 'Owner-verified', detail: '13.2' }, more: 0 });
+    expect(c.stamps[1]).toMatchObject({ chip: { label: 'Policy rule', detail: 'Needs design review' } });
+    expect(c.stamps[2]).toMatchObject({ detail: 'Frontend build', chip: { label: 'Assets record', readAt: '2026-11-24T14:02:00.000Z' } });
+    expect(c.stamps[3]).toMatchObject({ chip: { label: 'Mapped access', detail: 'kestrel-dev-builders' } });
+  });
+
+  it('KS-PROD: the policy stamp says No and names the rule', async () => {
+    const c = await card(demoWorld(), PROD);
+    expect(c.stamps[1]).toMatchObject({ dimension: 'policy', state: 'fail', statusText: 'No', chip: { label: 'Policy rule', detail: 'Not allowed in production' } });
+  });
+
+  it('Any environment: only the tool stamp is checked; the rest say Not checked', async () => {
+    const c = await card(demoWorld(), null);
+    expect(c.stamps.map((s) => s.state)).toEqual(['pass', 'not_checked', 'not_checked', 'not_checked']);
+    for (const s of c.stamps.slice(1)) expect(s).toMatchObject({ statusText: 'Not checked', chip: null, detail: null, more: 0 });
+  });
+
+  it('an unverified capability is a Not verified stamp that names it, never a Yes', async () => {
+    const c = await card(demoWorld(), DEV, picks({ key: 'websockets' }));
+    expect(c.stamps[0]).toMatchObject({ dimension: 'capability', state: 'unknown', statusText: 'Not verified' });
+    expect(c.stamps[0]!.detail).toContain('websockets');
+  });
+
+  it('cards with no checks have no stamps', async () => {
+    expect((await card(demoWorld(), DEV, { capabilities: [], unsupported: 'x', restated: 'x' })).stamps).toEqual([]);
+    const a: Answer = { state: 'try_again', reason: 'model_unavailable' };
+    expect(buildCard(a, { toolName: 'T', environment: null, catalog: demoWorld().catalog }).stamps).toEqual([]);
+  });
+});
+
+describe('the path to Yes', () => {
+  it('KS-DEV: asked, set up the frontend build, get approval, Yes', async () => {
+    const c = await card(demoWorld(), DEV);
+    expect(c.path).toEqual([
+      { id: 'asked', kind: 'asked', label: 'Asked', state: 'done' },
+      { id: 'ready:frontend_build', kind: 'fix', label: 'Set up frontend build', state: 'todo' },
+      { id: 'approval:custom_ui', kind: 'approval', label: 'Get approval', state: 'todo' },
+      { id: 'yes', kind: 'yes', label: 'Yes', state: 'todo' },
+    ]);
+  });
+
+  it('Yes, with approval: asked, get approval, Yes; a pending approval shows its request', async () => {
+    const w = yesWorld();
+    w.grants = [];
+    expect((await card(w, DEV)).path.map((s) => s.label)).toEqual(['Asked', 'Get approval', 'Yes']);
+    w.grants.push({ id: 9, askerAccountId: PRIYA, toolId: 1, environmentId: DEV, actionKey: 'custom_ui', requestKey: 'TPD-12', status: 'pending', decidedAt: null });
+    expect((await card(w, DEV)).path[1]).toEqual({ id: 'approval:custom_ui', kind: 'approval', label: 'Get approval · TPD-12', state: 'requested', requestKey: 'TPD-12' });
+  });
+
+  it('No, Yes, Don\'t know yet and Any environment have no path', async () => {
+    expect((await card(demoWorld(), PROD)).path).toEqual([]);
+    expect((await card(yesWorld(), DEV)).path).toEqual([]);
+    expect((await card(demoWorld(), DEV, picks({ key: 'websockets' }))).path).toEqual([]);
+    expect((await card(demoWorld(), null)).path).toEqual([]);
+  });
+});
+
 describe('card rules that hold everywhere', () => {
+  it('a stamp says Yes only when every check under it passed, and shows the worst one', async () => {
+    const rank = ['pass', 'approval', 'missing', 'unknown', 'fail'];
+    const w = yesWorld();
+    w.access = [];
+    const cards: Card[] = [await card(w, DEV)];
+    for (const env of [DEV, PROD, null]) {
+      for (const reply of [WEB, picks({ key: 'max_upload_gb', value: 3 }), picks({ key: 'websockets' }), picks({ key: 'web_frontend' }, { key: 'max_upload_gb', value: 1 })]) {
+        cards.push(await card(demoWorld(), env, reply));
+      }
+    }
+    for (const c of cards) {
+      for (const s of c.stamps) {
+        const under = c.checks.filter((x) => (s.dimension === 'capability' ? x.dimension === 'capability' || x.dimension === 'unlinked' : x.dimension === s.dimension));
+        if (s.state === 'not_checked' || s.state === 'none') {
+          expect(under).toEqual([]);
+          continue;
+        }
+        const worst = under.map((x) => x.status).sort((a, b) => rank.indexOf(b) - rank.indexOf(a))[0];
+        expect(s.state).toBe(worst);
+        if (s.state === 'pass') expect(under.every((x) => x.status === 'pass')).toBe(true);
+        expect(s.more).toBe(under.length - 1);
+      }
+    }
+  });
+
   it('at most three chips, one action, no forbidden words, no model wording', async () => {
     const answers: Card[] = [];
     for (const env of [DEV, PROD, null]) {

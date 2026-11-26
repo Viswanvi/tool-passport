@@ -1,12 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ForgeReconciler, {
   Box,
   Button,
   Checkbox,
+  EmptyState,
   Heading,
+  Icon,
   Inline,
   Link,
   Lozenge,
+  ProgressTracker,
   SectionMessage,
   Select,
   Spinner,
@@ -22,7 +25,7 @@ import ForgeReconciler, {
   useProductContext,
   xcss,
 } from '@forge/react';
-import type { Card, CardRequest, Chip } from '../engine/card';
+import type { Card, CardRequest, Chip, PathStep, Stamp } from '../engine/card';
 import { call, cardStyle, type Option } from './common';
 import { ChangesSection, RecentQuestions } from './changes';
 import { AddToolSection, ToolRecords } from './records';
@@ -36,6 +39,7 @@ import type { Option as DeskOption } from '../resolvers/request-handlers';
 import type { SeedResult } from '../seed/demo';
 import { PREFERRED_MODELS } from '../llm/model-choice';
 import type { SetupStatus } from '../resolvers/setup-handlers';
+import type { QuickPlan, QuickSetupReply } from '../resolvers/quick-setup';
 import type { SafetyRun } from '../safety/run';
 
 /**
@@ -100,6 +104,66 @@ interface CardActions {
   canRecheck: boolean;
 }
 
+// How each stamp state looks. The state itself comes from the server's card; the page only picks colours.
+type Look = { glyph: 'status-success' | 'clock' | 'status-warning' | 'question-circle' | 'status-error' | 'minus'; icon: IconColor; text: TextColor; box: ReturnType<typeof xcss> };
+type IconColor = 'color.icon.success' | 'color.icon.information' | 'color.icon.warning' | 'color.icon.discovery' | 'color.icon.danger' | 'color.icon.subtle';
+type TextColor = 'color.text.success' | 'color.text.information' | 'color.text.warning' | 'color.text.discovery' | 'color.text.danger' | 'color.text.subtle';
+
+const TILE = { borderWidth: 'border.width', borderStyle: 'solid', borderRadius: 'radius.medium', padding: 'space.150', flexGrow: 1, flexBasis: '0', minWidth: '150px' } as const;
+
+const NEUTRAL: Look = { glyph: 'minus', icon: 'color.icon.subtle', text: 'color.text.subtle', box: xcss({ ...TILE, backgroundColor: 'color.background.neutral', borderColor: 'color.border' }) };
+const LOOK: Record<Stamp['state'], Look> = {
+  pass: { glyph: 'status-success', icon: 'color.icon.success', text: 'color.text.success', box: xcss({ ...TILE, backgroundColor: 'color.background.success', borderColor: 'color.border.success' }) },
+  approval: { glyph: 'clock', icon: 'color.icon.information', text: 'color.text.information', box: xcss({ ...TILE, backgroundColor: 'color.background.information', borderColor: 'color.border.information' }) },
+  missing: { glyph: 'status-warning', icon: 'color.icon.warning', text: 'color.text.warning', box: xcss({ ...TILE, backgroundColor: 'color.background.warning', borderColor: 'color.border.warning' }) },
+  unknown: { glyph: 'question-circle', icon: 'color.icon.discovery', text: 'color.text.discovery', box: xcss({ ...TILE, backgroundColor: 'color.background.discovery', borderColor: 'color.border.discovery' }) },
+  fail: { glyph: 'status-error', icon: 'color.icon.danger', text: 'color.text.danger', box: xcss({ ...TILE, backgroundColor: 'color.background.danger', borderColor: 'color.border.danger' }) },
+  not_checked: NEUTRAL,
+  none: NEUTRAL,
+};
+
+/** One passport stamp: what was checked, the answer, and the evidence label it rests on. */
+const StampTile = ({ stamp }: { stamp: Stamp }) => {
+  const look = LOOK[stamp.state];
+  return (
+    <Box xcss={look.box}>
+      <Stack space="space.050">
+        <Inline space="space.075" alignBlock="center">
+          <Icon glyph={look.glyph} color={look.icon} label={stamp.statusText} size="small" />
+          <Text weight="semibold">{stamp.title}</Text>
+        </Inline>
+        <Text weight="bold" color={look.text}>
+          {stamp.statusText}
+        </Text>
+        {stamp.detail ? <Text size="small">{stamp.detail}</Text> : null}
+        {stamp.chip ? (
+          <Text size="small" color="color.text.subtlest">
+            {chipText(stamp.chip)}
+          </Text>
+        ) : null}
+        {stamp.more ? (
+          <Text size="small" color="color.text.subtlest">
+            {`+${stamp.more} more ${stamp.more === 1 ? 'check' : 'checks'}`}
+          </Text>
+        ) : null}
+      </Stack>
+    </Box>
+  );
+};
+
+/** The steps left before Yes. Done steps are filled; the first step not done is the current one. */
+const PathToYes = ({ path }: { path: PathStep[] }) => {
+  const current = path.findIndex((s) => s.state !== 'done');
+  const items = path.map((s, i) => ({
+    id: s.id,
+    label: s.label,
+    status: (s.state === 'done' ? 'visited' : i === current ? 'current' : 'unvisited') as 'visited' | 'current' | 'unvisited',
+    // A step with an open request is half way to the next one.
+    percentageComplete: s.state === 'done' ? 100 : s.state === 'requested' ? 50 : 0,
+  }));
+  return <ProgressTracker items={items} label="Path to Yes" spacing="cozy" />;
+};
+
 const VerdictCard = ({ card, busy, onRecheck, onRequest, canRecheck }: { card: Card } & CardActions) => {
   const [open, setOpen] = useState(false);
   const kind = card.action?.kind;
@@ -117,21 +181,30 @@ const VerdictCard = ({ card, busy, onRecheck, onRequest, canRecheck }: { card: C
           <Lozenge appearance={card.lozenge} isBold>
             {card.title}
           </Lozenge>
-          {card.where ? <Text>{card.where}</Text> : null}
+          {card.where ? <Text color="color.text.subtle">{card.where}</Text> : null}
         </Inline>
-        <Text>{card.reason}</Text>
+        <Heading size="small" as="h3">
+          {card.reason}
+        </Heading>
         {card.banner ? (
           <SectionMessage appearance="information">
             <Text>{card.banner}</Text>
           </SectionMessage>
         ) : null}
-        {card.chips.length ? (
+        {card.stamps.length ? (
+          <Inline space="space.100" alignBlock="stretch" shouldWrap>
+            {card.stamps.map((s) => (
+              <StampTile key={s.dimension} stamp={s} />
+            ))}
+          </Inline>
+        ) : card.chips.length ? (
           <Inline space="space.100" shouldWrap>
             {card.chips.map((c) => (
               <Tag key={`${c.label}|${c.detail}`} text={chipText(c)} />
             ))}
           </Inline>
         ) : null}
+        {card.path.length ? <PathToYes path={card.path} /> : null}
         {kind && WAITING.has(kind) && card.action?.requests ? (
           <OpenRequests label={card.action.label} to={kind === 'owner_asked'} requests={card.action.requests} />
         ) : null}
@@ -151,7 +224,7 @@ const VerdictCard = ({ card, busy, onRecheck, onRequest, canRecheck }: { card: C
           {card.next.length ? <Text>next: {card.next.join(', ')}</Text> : null}
           {card.checks.length ? (
             <Button appearance="subtle" onClick={() => setOpen(!open)}>
-              {open ? 'Hide checks' : `Show ${card.checks.length} checks`}
+              {open ? 'Hide checks' : card.checks.length === 1 ? 'Show the check' : `Show all ${card.checks.length} checks`}
             </Button>
           ) : null}
         </Inline>
@@ -162,7 +235,7 @@ const VerdictCard = ({ card, busy, onRecheck, onRequest, canRecheck }: { card: C
             ))}
           </Stack>
         ) : null}
-        {card.checked.length ? <Text size="small">I checked: {card.checked.join(' · ')}</Text> : null}
+        {card.checked.length && !card.stamps.length ? <Text size="small">I checked: {card.checked.join(' · ')}</Text> : null}
       </Stack>
     </Box>
   );
@@ -182,6 +255,13 @@ const AskPage = () => {
   const [notice, setNotice] = useState<string | null>(null);
   const [asked, setAsked] = useState<{ toolId: number; environmentId: number | null; question: string } | null>(null);
   const [asksMade, setAsksMade] = useState(0);
+  // What the spinner is waiting for, in plain words.
+  const [working, setWorking] = useState('');
+  // The answer before the last re-check, when the re-check changed it: shown as "Not ready → Yes, with approval".
+  const [changed, setChanged] = useState<{ from: Card; to: Card; at: string; byItself: boolean } | null>(null);
+  // The poller's re-check runs from an interval, so it reads the card on screen through this ref.
+  const shown = useRef<Card | null>(null);
+  shown.current = card;
 
   useEffect(() => {
     void call<{ tools: Array<{ id: number; name: string }> }>('tools').then((r) => {
@@ -196,6 +276,7 @@ const AskPage = () => {
     setAskId(null);
     setFailed(null);
     setNotice(null);
+    setChanged(null);
   };
 
   useEffect(() => {
@@ -212,6 +293,7 @@ const AskPage = () => {
 
   const run = async (payload: { toolId: number; environmentId: number | null; question: string }) => {
     setBusy(true);
+    setWorking('Reading your question, then checking the tool, policy, setup and access…');
     setAsked(payload);
     clear();
     try {
@@ -233,11 +315,17 @@ const AskPage = () => {
       if (asked && !quiet) await run(asked);
       return;
     }
-    if (!quiet) setBusy(true);
+    if (!quiet) {
+      setBusy(true);
+      setWorking('Checking again…');
+    }
     try {
       const r = await call<RecheckReply>('recheck', { askId });
-      if (r.ok) setCard(r.card);
-      else if (!quiet) setNotice('Could not check again just now. Try again.');
+      if (r.ok) {
+        const before = shown.current;
+        if (before && before.title !== r.card.title) setChanged({ from: before, to: r.card, at: new Date().toISOString(), byItself: quiet });
+        setCard(r.card);
+      } else if (!quiet) setNotice('Could not check again just now. Try again.');
     } catch {
       if (!quiet) setNotice('Could not check again just now. Try again.');
     } finally {
@@ -248,6 +336,7 @@ const AskPage = () => {
   /** A recent question, checked again with its stored keys (no model call); clears "may have changed". */
   const askAgain = async (id: number) => {
     setBusy(true);
+    setWorking('Checking again…');
     clear();
     try {
       const r = await call<RecheckReply>('recheck', { askId: id });
@@ -270,6 +359,7 @@ const AskPage = () => {
       return;
     }
     setBusy(true);
+    setWorking('Raising your private request…');
     setNotice(null);
     try {
       const r = await call<RaiseReply>(kind === 'fix' ? 'requestFix' : kind === 'approval' ? 'requestApproval' : 'askOwner', { askId });
@@ -305,9 +395,10 @@ const AskPage = () => {
   if (tools === null) return <Spinner />;
   if (tools.length === 0) {
     return (
-      <SectionMessage appearance="information" title="No tools yet">
-        <Text>A Jira administrator can load the demo data under Jira settings → Marketplace apps → Tool Passport setup.</Text>
-      </SectionMessage>
+      <EmptyState
+        header="No tools yet"
+        description="A Jira administrator can load the demo data under Jira settings → Marketplace apps → Tool Passport setup. Then ask things like “Can I build a dashboard in KS-DEV?”"
+      />
     );
   }
 
@@ -346,7 +437,24 @@ const AskPage = () => {
           ))}
         </Inline>
       ) : null}
-      {busy ? <Spinner /> : null}
+      {busy ? (
+        <Inline space="space.100" alignBlock="center">
+          <Spinner size="small" />
+          <Text color="color.text.subtle">{working}</Text>
+        </Inline>
+      ) : null}
+      {changed && card ? (
+        <SectionMessage appearance={changed.to.verdict === 'yes' || changed.to.verdict === 'yes_with_approval' ? 'success' : 'information'}>
+          <Inline space="space.100" alignBlock="center" shouldWrap>
+            <Text>{changed.byItself ? `The answer changed by itself at ${time(changed.at)}:` : `Checked again at ${time(changed.at)}:`}</Text>
+            <Lozenge appearance={changed.from.lozenge}>{changed.from.title}</Lozenge>
+            <Text>→</Text>
+            <Lozenge appearance={changed.to.lozenge} isBold>
+              {changed.to.title}
+            </Lozenge>
+          </Inline>
+        </SectionMessage>
+      ) : null}
       {notice ? (
         <SectionMessage appearance="warning">
           <Text>{notice}</Text>
@@ -802,18 +910,152 @@ const ModelSection = ({ model, onSaved }: { model: SetupStatus['model']; onSaved
   );
 };
 
+type PlanReply = QuickPlan | { ok: false; reason: string };
+
+const PlanRow = ({ state, text }: { state: 'done' | 'will' | 'stop'; text: string }) => (
+  <Inline space="space.100" alignBlock="start">
+    {state === 'done' ? (
+      <Icon glyph="status-success" color="color.icon.success" label="Already set" size="small" />
+    ) : state === 'will' ? (
+      <Icon glyph="arrow-right" color="color.icon.brand" label="Will be set" size="small" />
+    ) : (
+      <Icon glyph="status-warning" color="color.icon.warning" label="Needs you" size="small" />
+    )}
+    <Text>{text}</Text>
+  </Inline>
+);
+
+const quoted = (names: string[]) => names.map((n) => `“${n}”`).join(' or ');
+
+/** Steps 1 to 3 in one click: the server proposes exactly what it would set, and sets it only on the click. */
+const QuickSetup = ({ refreshKey, onDone }: { refreshKey: number; onDone: () => void }) => {
+  const [plan, setPlan] = useState<PlanReply | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [reply, setReply] = useState<QuickSetupReply | null>(null);
+
+  useEffect(() => {
+    void call<PlanReply>('quickSetupPlan')
+      .then(setPlan)
+      .catch((e: unknown) => setPlan({ ok: false, reason: String(e) }));
+  }, [refreshKey]);
+
+  const apply = async (mode: 'assets' | 'registry') => {
+    setBusy(true);
+    setReply(null);
+    try {
+      const r = await call<QuickSetupReply>('quickSetup', { mode });
+      setReply(r);
+      onDone();
+    } catch (e) {
+      setReply({ ok: false, reason: String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (plan === null) return <Spinner />;
+  if (!plan.ok) {
+    return (
+      <SectionMessage appearance="warning">
+        <Text>{plan.reason}</Text>
+      </SectionMessage>
+    );
+  }
+  const { requests, approvals, demo } = plan;
+  const allSet = requests.state === 'done' && approvals.state === 'done' && demo.state === 'done';
+  const warnings = reply?.ok ? (reply.seed?.ok ? (reply.seed.warnings ?? []) : []) : [];
+  return (
+    <Box xcss={cardStyle}>
+      <Stack space="space.150">
+        <Heading as="h2" size="medium">
+          {allSet ? 'Ready to ask' : 'Set up in one click'}
+        </Heading>
+        {allSet ? (
+          <Text>Steps 1 to 3 are done. Open Tool Passport from the sidebar (Apps → Tool Passport), pick KS-DEV and ask the first suggested question.</Text>
+        ) : (
+          <Text>One click does steps 1 to 3 below for you. Here is exactly what it will set; change any of it later in its own step.</Text>
+        )}
+        <Stack space="space.075">
+          <PlanRow
+            state={requests.state === 'done' ? 'done' : requests.state === 'will_set' ? 'will' : 'stop'}
+            text={
+              requests.state === 'blocked'
+                ? (requests.reason ?? 'Choose a service desk under 1. Requests.')
+                : `Requests ${requests.state === 'done' ? 'go' : 'will go'} to ${requests.desk} as “${requests.requestType}”.`
+            }
+          />
+          <PlanRow
+            state={approvals.state === 'done' ? 'done' : approvals.state === 'will_set' ? 'will' : 'stop'}
+            text={
+              approvals.state === 'manual'
+                ? (approvals.reason ?? 'Choose which outcome approves under 2. Approvals.')
+                : `Resolution ${quoted(approvals.approve)} ${approvals.state === 'done' ? 'approves' : 'will approve'}${approvals.decline.length ? ` and ${quoted(approvals.decline)} ${approvals.state === 'done' ? 'declines' : 'will decline'}` : ''}. Any other outcome leaves an approval pending.`
+            }
+          />
+          <PlanRow
+            state={demo.state === 'done' ? 'done' : 'will'}
+            text={
+              demo.state === 'done'
+                ? 'Kestrel Studio is loaded.'
+                : 'Load Kestrel Studio: the tool, its verified facts, policy rules and access, two Assets records and two groups. You become its owner.'
+            }
+          />
+        </Stack>
+        {!allSet ? (
+          <Inline space="space.100" alignBlock="center" shouldWrap>
+            <Button appearance="primary" onClick={() => void apply('assets')} isDisabled={busy || !plan.ready}>
+              Set it all up
+            </Button>
+            {demo.state === 'will_load' ? (
+              <Button appearance="subtle" onClick={() => void apply('registry')} isDisabled={busy || !plan.ready}>
+                No Assets? Set up in registry mode
+              </Button>
+            ) : null}
+          </Inline>
+        ) : null}
+        {busy ? (
+          <Inline space="space.100" alignBlock="center">
+            <Spinner size="small" />
+            <Text color="color.text.subtle">Setting up. Loading the demo takes up to a minute…</Text>
+          </Inline>
+        ) : null}
+        {reply && !reply.ok ? (
+          <SectionMessage appearance="warning">
+            <Text>{reply.reason}</Text>
+          </SectionMessage>
+        ) : null}
+        {warnings.length ? (
+          <SectionMessage appearance="warning" title="One more step">
+            {warnings.map((w) => (
+              <Text key={w}>{w}</Text>
+            ))}
+          </SectionMessage>
+        ) : null}
+      </Stack>
+    </Box>
+  );
+};
+
 const SetupPage = () => {
   const [status, setStatus] = useState<StatusReply | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<SeedResult | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  // Bumped after one-click setup, so the step sections below read what it saved.
+  const [version, setVersion] = useState(0);
+  // Bumped after any step saves, so the one-click plan reads it again.
+  const [planKey, setPlanKey] = useState(0);
 
-  const reload = () => {
+  const readStatus = () => {
     void call<StatusReply>('setupStatus')
       .then(setStatus)
       .catch((e: unknown) => setStatus({ ok: false, reason: String(e) }));
   };
-  useEffect(reload, []);
+  useEffect(readStatus, []);
+  const reload = () => {
+    readStatus();
+    setPlanKey((k) => k + 1);
+  };
 
   const run = async (resolver: 'loadDemo' | 'resetDemo', payload?: { mode: 'assets' | 'registry' }) => {
     setBusy(true);
@@ -831,7 +1073,14 @@ const SetupPage = () => {
   const load = (mode: 'assets' | 'registry') => run('loadDemo', { mode });
   return (
     <Stack space="space.300">
-      <Text>Work through the steps in order. Each one shows Done once it is set; you can come back and change any of them.</Text>
+      <QuickSetup
+        refreshKey={planKey}
+        onDone={() => {
+          reload();
+          setVersion((v) => v + 1);
+        }}
+      />
+      <Text>Or work through the steps in order. Each one shows Done once it is set; you can come back and change any of them.</Text>
       {status === null ? <Spinner /> : null}
       {status?.ok ? <Checklist status={status} /> : null}
       {status && !status.ok ? (
@@ -840,8 +1089,8 @@ const SetupPage = () => {
         </SectionMessage>
       ) : null}
       <BeforeYouStart />
-      <RequestSetupSection onSaved={reload} />
-      <ApprovalSetupSection onSaved={reload} />
+      <RequestSetupSection key={`requests-${version}`} onSaved={reload} />
+      <ApprovalSetupSection key={`approvals-${version}`} onSaved={reload} />
       <Stack space="space.150">
         <Heading as="h2">3. Demo data</Heading>
         <Text>

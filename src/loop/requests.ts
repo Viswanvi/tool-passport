@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { answerRequirement, type Answer } from '../engine/answer';
-import { buildCard, type Card } from '../engine/card';
+import { buildCard, requestedStep, type Card } from '../engine/card';
 import type { CatalogChoice } from '../engine/catalog';
 import type { Catalog, CheckResult, EngineRepo, Environment, EnvironmentReader, Groups, Tool } from '../engine/model';
 import { approvalOutcome, type ResolutionMap } from './resolution';
@@ -405,9 +405,12 @@ export function attachOpenRequests(card: Card, targets: string[], rows: RequestR
   if (!a || !requestable(a.kind) || targets.length === 0) return card;
   const want = REQUESTED[a.kind];
   const byTarget = new Map(rows.filter((r) => r.kind === want.kind && (r.status === 'raising' || r.status === 'open')).map((r) => [r.target, r]));
-  if (!targets.every((t) => byTarget.has(t))) return card;
+  // Each step on the path shows its own open request, even while another piece still has none.
+  const path = card.path.map((s) => (s.kind === want.kind && s.state === 'todo' && byTarget.has(s.id) ? requestedStep(s, byTarget.get(s.id)!.requestKey) : s));
+  const marked = path.some((s, i) => s !== card.path[i]) ? { ...card, path } : card;
+  if (!targets.every((t) => byTarget.has(t))) return marked;
   const requests = targets.map((t) => byTarget.get(t)!).map((r) => ({ key: r.requestKey, url: r.portalUrl, ownerAccountId: r.ownerAccountId }));
-  return { ...card, action: { kind: want.becomes, label: want.label, requests } };
+  return { ...marked, action: { kind: want.becomes, label: want.label, requests } };
 }
 
 export async function cardWithRequests(now: Pick<Rechecked, 'answer' | 'card' | 'environment'>, asker: string, requests: Pick<RequestRepo, 'openFor'>): Promise<Card> {

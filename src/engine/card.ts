@@ -45,6 +45,40 @@ export interface CardCheck {
   chip: Chip;
 }
 
+/** The four kinds of check a passport stamp stands for; `unlinked` capability checks sit under capability. */
+export type StampDimension = 'capability' | 'policy' | 'environment' | 'access';
+
+/** A check status, or: no check of this kind ran because only the capability was asked about ("Any environment"),
+ *  or because nothing of this kind applies (no setup keys linked). Neither is ever drawn as a pass. */
+export type StampState = CheckStatus | 'not_checked' | 'none';
+
+/**
+ * One stamp per kind of check (spec section 15's "I checked" made visible). Its state is the worst status among
+ * the checks under it, so a stamp reads Yes only when every one of them passed. The chip is that check's
+ * evidence label.
+ */
+export interface Stamp {
+  dimension: StampDimension;
+  title: string;
+  state: StampState;
+  statusText: string;
+  /** What the deciding check was about, where the title doesn't already say it. */
+  detail: string | null;
+  chip: Chip | null;
+  /** How many other checks sit under this stamp. */
+  more: number;
+}
+
+/** One step on the way from the answer to Yes, from the outcome and the open requests only. */
+export interface PathStep {
+  /** 'asked', 'yes', or the request target this step needs (`ready:…`, `access:…`, `approval:…`). */
+  id: string;
+  kind: 'asked' | 'fix' | 'approval' | 'yes';
+  label: string;
+  state: 'done' | 'todo' | 'requested';
+  requestKey?: string | null;
+}
+
 export interface Card {
   kind: 'verdict' | 'try_again' | 'refused';
   verdict: Verdict | null;
@@ -60,6 +94,10 @@ export interface Card {
   /** "I checked: …", in plain words from the catalog and records. */
   checked: string[];
   checks: CardCheck[];
+  /** Four stamps (capability, policy, setup, access) when anything was checked; otherwise none. */
+  stamps: Stamp[];
+  /** Not ready and Yes, with approval only: what is left before Yes. */
+  path: PathStep[];
   banner: string | null;
 }
 
@@ -232,6 +270,63 @@ function chipsFor(o: Outcome): Chip[] {
   return out;
 }
 
+// ---- passport stamps ------------------------------------------------------------------------------------
+
+const STAMPS: Array<{ dimension: StampDimension; title: string }> = [
+  { dimension: 'capability', title: 'Tool can do it' },
+  { dimension: 'policy', title: 'Policy allows it' },
+  { dimension: 'environment', title: 'Set up here' },
+  { dimension: 'access', title: 'You have access' },
+];
+
+// Worst first, in the order combine() lets them decide a verdict: No, then Not verified, Missing, approval.
+const SEVERITY: CheckStatus[] = ['fail', 'unknown', 'missing', 'approval', 'pass'];
+
+const under = (d: StampDimension, r: CheckResult) => (d === 'capability' ? r.check.dimension === 'capability' || r.check.dimension === 'unlinked' : r.check.dimension === d);
+
+function stampsFor(o: Outcome, ctx: CardContext, anyEnvironment: boolean): Stamp[] {
+  if (o.results.length === 0) return [];
+  return STAMPS.map(({ dimension, title }) => {
+    const rs = o.results.filter((r) => under(dimension, r));
+    if (rs.length === 0) {
+      const state: StampState = anyEnvironment && dimension !== 'capability' ? 'not_checked' : 'none';
+      return { dimension, title, state, statusText: state === 'not_checked' ? 'Not checked' : 'Nothing to check', detail: null, chip: null, more: 0 };
+    }
+    const worst = SEVERITY.find((s) => rs.some((r) => r.status === s))!;
+    const deciding = rs.find((r) => r.status === worst)!;
+    // Setup always names the piece; the tool stamp names the capability only when it didn't pass (the question says it).
+    const detail = dimension === 'environment' || (dimension === 'capability' && worst !== 'pass') ? subjectOf(deciding, ctx.catalog) : null;
+    return { dimension, title, state: worst, statusText: STATUS_TEXT[worst], detail, chip: chipOf(deciding.label), more: rs.length - 1 };
+  });
+}
+
+// ---- the path to Yes ------------------------------------------------------------------------------------
+
+/** The step's label once its request is open: "Set up frontend build · TPD-1" (or "· requested" while raising). */
+export function requestedStep(step: PathStep, requestKey: string | null): PathStep {
+  return { ...step, label: `${step.label} · ${requestKey ?? 'requested'}`, state: 'requested', requestKey };
+}
+
+function fixStep(r: CheckResult, ctx: CardContext): PathStep[] {
+  if (r.status !== 'missing') return [];
+  // Ids match the request targets in loop/requests.ts, so open requests can be shown on their step.
+  if (r.check.dimension === 'environment') return [{ id: `ready:${r.check.key}`, kind: 'fix', label: `Set up ${lowerFirst(subjectOf(r, ctx.catalog))}`, state: 'todo' }];
+  if (r.check.dimension === 'access') return [{ id: `access:${r.check.action}`, kind: 'fix', label: 'Get access', state: 'todo' }];
+  return [];
+}
+
+function approvalStep(r: CheckResult): PathStep[] {
+  if (r.status !== 'approval' || r.check.dimension !== 'policy') return [];
+  const step: PathStep = { id: `approval:${r.check.action}`, kind: 'approval', label: 'Get approval', state: 'todo' };
+  return [r.pending ? requestedStep(step, r.pending.requestKey) : step];
+}
+
+function pathFor(o: Outcome, ctx: CardContext, anyEnvironment: boolean): PathStep[] {
+  if (anyEnvironment || (o.verdict !== 'not_ready' && o.verdict !== 'yes_with_approval')) return [];
+  const middle = o.verdict === 'not_ready' ? [...o.fixes.flatMap((r) => fixStep(r, ctx)), ...o.next.flatMap(approvalStep)] : o.approvals.flatMap(approvalStep);
+  return [{ id: 'asked', kind: 'asked', label: 'Asked', state: 'done' }, ...middle, { id: 'yes', kind: 'yes', label: 'Yes', state: 'todo' }];
+}
+
 const empty = (kind: Card['kind'], title: string, reason: string, action: CardAction | null, verdict: Verdict | null = null, lozenge: LozengeAppearance = 'default'): Card => ({
   kind,
   verdict,
@@ -244,6 +339,8 @@ const empty = (kind: Card['kind'], title: string, reason: string, action: CardAc
   next: [],
   checked: [],
   checks: [],
+  stamps: [],
+  path: [],
   banner: null,
 });
 
@@ -274,6 +371,8 @@ export function buildCard(answer: Answer, ctx: CardContext): Card {
         next: o.verdict === 'not_ready' ? o.next.map((r) => (r.label.kind === 'policy_rule' && r.label.reason ? r.label.reason : subjectOf(r, ctx.catalog))) : [],
         checked: o.results.map((r) => subjectOf(r, ctx.catalog)),
         checks: o.results.map((r) => ({ subject: subjectOf(r, ctx.catalog), dimension: r.check.dimension, status: r.status, statusText: STATUS_TEXT[r.status], chip: chipOf(r.label) })),
+        stamps: stampsFor(o, ctx, answer.anyEnvironment),
+        path: pathFor(o, ctx, answer.anyEnvironment),
         banner: answer.anyEnvironment ? ANY_ENVIRONMENT_BANNER : null,
       };
     }

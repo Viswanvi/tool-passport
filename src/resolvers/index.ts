@@ -11,6 +11,7 @@ import { sqlTranslationStore } from '../db/translations-sql';
 import { forgeModelDeps, labelChat, translationChat } from '../llm/client';
 import { handleChooseModel, handleSetupStatus, type SetupStatusDeps } from './setup-handlers';
 import { handleRunSafety } from './safety-handlers';
+import { handleQuickSetup, handleQuickSetupPlan, type QuickSetupDeps } from './quick-setup';
 import { runSafetySuite } from '../safety/run';
 import { sqlLabelStore } from '../db/labels';
 import { loopDeps, noteEnvironmentVersion, readRequestSetup, readResolutionMap, saveRequestSetup, saveResolutionMap } from '../loop/forge';
@@ -260,5 +261,27 @@ const setupStatusDeps: SetupStatusDeps = {
 resolver.define('setupStatus', ({ context }) => handleSetupStatus(ctxOf(context), setupStatusDeps));
 
 resolver.define('chooseModel', ({ payload, context }) => handleChooseModel(payload, ctxOf(context), setupStatusDeps));
+
+// ---- one-click setup: steps 1 to 3 as one proposal, applied only on an administrator's click ----
+
+const quickSetupDeps: QuickSetupDeps = {
+  check: writeCheck,
+  desks: listDesks,
+  usableRequestTypes,
+  getSetup: readRequestSetup,
+  saveSetup: saveRequestSetup,
+  decisionNames: (serviceDeskId) => listDecisionNames(serviceDeskId),
+  getMap: readResolutionMap,
+  saveMap: saveResolutionMap,
+  demoTool: () => sqlResetStore.demoTool(),
+  seed: async (actor, mode) => {
+    await runMigrations();
+    return loadDemoAs(actor, mode);
+  },
+};
+
+resolver.define('quickSetupPlan', ({ context }) => handleQuickSetupPlan(ctxOf(context), quickSetupDeps));
+
+resolver.define('quickSetup', ({ payload, context }) => handleQuickSetup(payload, ctxOf(context), quickSetupDeps));
 
 export const uiResolver = resolver.getDefinitions();

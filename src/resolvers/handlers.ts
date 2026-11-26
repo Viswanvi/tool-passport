@@ -59,6 +59,8 @@ const TRY_AGAIN: Card = {
   next: [],
   checked: [],
   checks: [],
+  stamps: [],
+  path: [],
   banner: null,
 };
 
@@ -149,8 +151,15 @@ export async function handleEnvironments(
   const groups: Groups = all.some((e) => e.audienceGroup) ? await deps.readGroups(ctx.accountId) : { ok: false };
   const environments = all.filter((e) => canPick(e, groups).ok).map((e) => ({ id: e.id, name: e.name }));
   const catalog = await deps.loadCatalog(tool);
+  // A fixed order, not the rows' order (a reset gives new ids): questions that run the most checks first, so a
+  // suggestion shows the whole passport, then by key.
+  const checksFor = (key: string) => {
+    const l = catalog.links.get(key);
+    return l ? (l.actions?.length ?? 0) + (l.readinessKeys?.length ?? 0) : -1;
+  };
   const suggestions = [...catalog.keys.values()]
     .filter((k) => k.kind === 'capability' && !k.requiresValue)
+    .sort((a, b) => checksFor(b.key) - checksFor(a.key) || a.key.localeCompare(b.key))
     .slice(0, 3)
     .map((k) => `Can I ${lowerFirst(k.label)}?`);
   return { environments, suggestions };

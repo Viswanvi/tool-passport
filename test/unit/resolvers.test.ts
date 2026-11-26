@@ -100,6 +100,10 @@ describe('environments resolver', () => {
     expect(r.environments.map((e) => e.name)).toEqual(['KS-DEV', 'KS-PROD']);
     expect(r.suggestions[0]).toBe('Can I build a custom web front end or dashboard?');
     expect((await handleEnvironments({ toolId: 1 }, {}, deps)).environments).toEqual([]);
+    // The same three, in the same order, however the catalog rows come back (a reset gives new row ids).
+    const reversed = { ...w.catalog, keys: new Map([...w.catalog.keys].reverse()), links: new Map([...w.catalog.links].reverse()) };
+    const again = await handleEnvironments({ toolId: 1 }, { accountId: PRIYA }, { ...deps, loadCatalog: async () => reversed });
+    expect(again.suggestions).toEqual(r.suggestions);
   });
 });
 

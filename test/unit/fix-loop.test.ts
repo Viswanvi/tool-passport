@@ -156,9 +156,11 @@ describe('open requests on the card', () => {
     next: [],
     checked: [],
     checks: [],
+    stamps: [],
+    path: [],
     banner: null,
   });
-  const row = (target: string, key: string | null): RequestRow => ({
+  const row =(target: string, key: string | null): RequestRow => ({
     id: 1,
     kind: 'fix',
     askId: 1,
@@ -177,6 +179,30 @@ describe('open requests on the card', () => {
     expect(attachOpenRequests(notReady(), targets, [row('ready:frontend_build', 'TPD-1')]).action?.kind).toBe('request_fix');
     const both = attachOpenRequests(notReady(), targets, [row('ready:frontend_build', 'TPD-1'), row('access:custom_ui', 'TPD-2')]);
     expect(both.action).toMatchObject({ kind: 'fix_requested', label: 'Fix requested', requests: [{ key: 'TPD-1' }, { key: 'TPD-2' }] });
+  });
+
+  it('marks each step on the path to Yes that has an open request, even before all of them do', () => {
+    const withPath = (): Card => ({
+      ...notReady(),
+      path: [
+        { id: 'asked', kind: 'asked', label: 'Asked', state: 'done' },
+        { id: 'ready:frontend_build', kind: 'fix', label: 'Set up frontend build', state: 'todo' },
+        { id: 'access:custom_ui', kind: 'fix', label: 'Get access', state: 'todo' },
+        { id: 'yes', kind: 'yes', label: 'Yes', state: 'todo' },
+      ],
+    });
+    const targets = ['ready:frontend_build', 'access:custom_ui'];
+    const one = attachOpenRequests(withPath(), targets, [row('ready:frontend_build', 'TPD-1')]);
+    expect(one.action?.kind).toBe('request_fix');
+    expect(one.path.map((s) => [s.label, s.state])).toEqual([
+      ['Asked', 'done'],
+      ['Set up frontend build · TPD-1', 'requested'],
+      ['Get access', 'todo'],
+      ['Yes', 'todo'],
+    ]);
+    const raising = attachOpenRequests(withPath(), targets, [row('ready:frontend_build', null), row('access:custom_ui', 'TPD-2')]);
+    expect(raising.path.map((s) => s.label)).toEqual(['Asked', 'Set up frontend build · requested', 'Get access · TPD-2', 'Yes']);
+    expect(raising.action?.kind).toBe('fix_requested');
   });
 
   it('leaves any other action alone', () => {
