@@ -1223,3 +1223,30 @@ Verified:
 
 Untested: the one-click **Set it all up** click itself (the demo site is already set up; it needs a fresh site), the
 change note during a real resolution, and the path step showing a request key live. Production is still 2.1.0.
+
+### Changes catches up by itself; Records folded, 2026-11-26 (human: "Yes, carry on")
+
+What changed (DECISIONS D50): opening My tools → Changes first reads each environment's record and builds any
+waiting re-verify list (the sweep's own steps, for that tool only); the section then looks again every 30 seconds
+for up to 15 minutes and shows "Records checked … · looks again every 30 seconds". Records starts folded under an
+"Advanced" label (Show records / Hide records) and loads only when opened. Judge guide: no more "wait up to 5 minutes
+and click Refresh"; registry steps say Show records; moment 2 step 3 mentions the card turning by itself.
+
+Verified:
+
+- Tests first: the 4 new tests in `test/unit/changes.test.ts` failed (`Tests 3 failed | 18 passed (21)`), then
+  passed. `npm test`: `Test Files 32 passed (32)`, `Tests 461 passed (461)`; `npx tsc --noEmit -p .` and
+  `npx eslint src test` exit 0; `forge lint`: `No issues found.`
+- `forge deploy -e development`: 5.13.0, "eligible for the Runs on Atlassian program".
+- Live on the demo site: My tools showed "Records checked Nov 26, 03:34 PM · looks again every 30 seconds", "No
+  version changes yet", and Records folded. In a second tab, KS-DEV's Version set to 14.0 in Assets. Back on the
+  untouched My tools tab, within 30 seconds and with no click and no question asked: "KS-DEV: 13.2 → 14.0 · Found
+  in Assets record", "Facts to re-verify on 14.0:" with the 4 version-sensitive facts, and "Other environments
+  untouched: KS-PROD (13.2)". KS-DEV set back to 13.2: the screen then also showed "KS-DEV: 14.0 → 13.2 · Every
+  version-dependent fact is verified on 13.2". Show records opened the environments list and form; Hide records
+  folds it. `forge logs -e development --since 10m`: no errors. LLM calls: 0.
+- Left on the demo site: the two change rows above (13.2 → 14.0 → 13.2), KS-DEV back on 13.2. Reset demo before
+  recording clears them.
+
+Still untested: the one-click Set it all up click, the change note during a real resolution, and a path step
+showing a request key live (all for the fresh-site run). Production is still 2.1.0.

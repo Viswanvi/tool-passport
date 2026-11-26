@@ -31,6 +31,10 @@ const SUGGESTION: Record<LabelKind, { text: string; appearance: 'success' | 'mov
   cant_tell: { text: "Notes don't say", appearance: 'default' },
 };
 
+const POLL_MS = 30_000;
+/** 15 minutes, then the Refresh button. */
+const POLL_LIMIT = 30;
+
 /** The labeller's limit (MAX_NOTES_CHARS in change/release-notes.ts; not imported, it pulls server code in). */
 const MAX_NOTES = 20000;
 
@@ -77,8 +81,26 @@ export const ChangesSection = ({ toolId, refreshKey }: { toolId: number; refresh
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [labelling, setLabelling] = useState<number | null>(null);
-  const load = () => void call<ChangesReply>('changes', { toolId }).then(setData);
+  const [checkedAt, setCheckedAt] = useState<string | null>(null);
+  // Each load also reads the environments' records and builds waiting lists on the server (handleChanges).
+  const load = () =>
+    void call<ChangesReply>('changes', { toolId }).then((r) => {
+      setData(r);
+      setCheckedAt(new Date().toISOString());
+    });
   useEffect(load, [toolId, refreshKey]);
+  // While the screen is open it looks again by itself, so a version changed in another tab shows up here.
+  useEffect(() => {
+    let polls = 0;
+    const timer = setInterval(() => {
+      polls += 1;
+      if (polls > POLL_LIMIT) clearInterval(timer);
+      else load();
+    }, POLL_MS);
+    return () => clearInterval(timer);
+    // load reads toolId, which is in the list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toolId]);
 
   const suggest = async (changeId: number) => {
     setLabelling(changeId);
@@ -111,7 +133,10 @@ export const ChangesSection = ({ toolId, refreshKey }: { toolId: number; refresh
   if (!data.ok) return null;
   return (
     <Stack space="space.150">
-      <Heading as="h2">Changes</Heading>
+      <Inline space="space.150" alignBlock="baseline" shouldWrap>
+        <Heading as="h2">Changes</Heading>
+        {checkedAt ? <Text size="small" color="color.text.subtlest">{`Records checked ${day(checkedAt)} · looks again every 30 seconds`}</Text> : null}
+      </Inline>
       {data.changes.length === 0 ? <Text>No version changes yet.</Text> : null}
       {message ? (
         <SectionMessage appearance={message.ok ? 'success' : 'warning'}>

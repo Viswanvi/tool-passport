@@ -89,7 +89,8 @@ Try your own wording too. A question outside the tool's catalog gets **Don't kno
 2. Make the fix in Assets: sidebar → **Assets** → **Schemas** → **Tool Passport Environments** → **Tool
    Environment** → **KS-DEV**. On the object, click **3 more attributes** to see them all, click the **Build
    environments** value, add **frontend** next to *standard*, and confirm with ✓.
-   - **No Assets?** In Tool Passport, open **My tools** → **Records**, pick **Environments**, and under *Add or
+   - **No Assets?** In Tool Passport, open **My tools**, click **Show records** (under *Records · Advanced*), pick
+     **Environments**, and under *Add or
      change* enter Name `KS-DEV`, Values come from **Recorded by the owner**, and these three lines, then **Save**:
 
      ```
@@ -99,8 +100,9 @@ Try your own wording too. A question outside the tool's catalog gets **Don't kno
      ```
 3. Resolve the request: click **view request** on the card and then **Resolve this issue** (and confirm). This works
    from the request's portal page straight away, even on a desk you created minutes ago. Within seconds the app
-   comments on the request with the new answer ("Answer now: Yes, with approval…"), and the card turns **Yes, with
-   approval** (click **Ask again** under *Your recent questions*, or **Re-check**).
+   comments on the request with the new answer ("Answer now: Yes, with approval…"). If the Ask page is still open,
+   the card turns **Yes, with approval** by itself within about 10 seconds, with a note *Not ready → Yes, with
+   approval*; otherwise click **Ask again** under *Your recent questions*, or **Re-check**.
 4. Click **Request approval**, open that request the same way and **Resolve this issue**. On our test site this set
    the resolution **Done**, the outcome you mapped to Approved, and the app answered "Answer now: Yes." The card turns
    **Yes**, with the evidence line *Approved · TPD-…*. If the app instead says the approval is still pending, resolve
@@ -121,15 +123,16 @@ An approval counts only when the approver resolves it. In this demo the approver
 ## 6. Moment 3: a version change
 
 1. In KS-DEV, ask **Can I upload a 3 GB file?** Expected: **No**, the limit is 2 GB on version 13.2.
-2. In Assets, set KS-DEV's **Version** to **14.0**. (**No Assets?** Save KS-DEV again under My tools → Records with
-   all three lines, the first one now `Version: 14.0`: the form replaces every value.)
+2. In Assets, set KS-DEV's **Version** to **14.0**. (**No Assets?** Save KS-DEV again under My tools → **Show
+   records** with all three lines, the first one now `Version: 14.0`: the form replaces every value.)
 3. Ask the 3 GB question in KS-DEV again: **Don't know yet**. The upload limit was verified on 13.2 and KS-DEV now
    runs 14.0, so the app no longer vouches for it. KS-PROD still answers No.
-4. Open **My tools** → **Changes** (click **Refresh** if you were already on My tools): *KS-DEV: 13.2 → 14.0 · Found
-   in Assets record* (*Recorded by owner* in registry mode), and a note of what was not
-   touched (facts that don't depend on the version, policy rules, KS-PROD). The list of facts to re-verify is built in
-   the background: if it says *Building the list…*, wait up to 5 minutes and click **Refresh**. For *Build a custom web front end
-   or dashboard*, click **Still true on 14.0**. For the upload limit, click **Changed**, enter **5** and **Save**.
+4. Open **My tools** → **Changes**: *KS-DEV: 13.2 → 14.0 · Found in Assets record* (*Recorded by owner* in registry
+   mode), the facts to re-verify, and a note of what was not touched (facts that don't depend on the version, policy
+   rules, KS-PROD). Opening the screen reads the records and builds the list right away, and while it is open it
+   looks again every 30 seconds, so you can even skip step 3 and watch the change appear. For *Build a custom web
+   front end or dashboard*, click **Still true on 14.0**. For the upload limit, click **Changed**, enter **5** and
+   **Save**.
 5. Ask the 3 GB question in KS-DEV once more: **Yes**. Your recent questions mark the earlier answers *May have
    changed* until you ask again.
 

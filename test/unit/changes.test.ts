@@ -294,6 +294,69 @@ describe('the Changes screen and "Still true"', () => {
     expect(await handleChanges({ toolId: 1 }, { accountId: SAM }, deps)).toMatchObject({ ok: false });
   });
 
+  /** The owner's screen with the change noted but its list not built yet, or not even noticed yet. */
+  async function waiting(noticed: boolean) {
+    const x = loopWorld();
+    const m = memoryChanges(x.w);
+    x.w.records.get(DEV)!.Version = ['14.0'];
+    if (noticed) await noteVersion(snapshot(x.w, DEV), '14.0', m.detect);
+    const reads: number[] = [];
+    const deps: ChangeDeps = {
+      loop: {
+        ...x.deps,
+        environments: { read: async (e) => (reads.push(e.id), x.deps.environments.read(e)) },
+        noteVersion: (tool, e, v) => noteVersion({ ...snapshot(x.w, e.id), granularity: tool.versionGranularity }, v, m.detect),
+      },
+      changes: m.repo,
+      writer: memoryWriter(x.w),
+      check: { isJiraAdmin: async () => false },
+      listEnvironments: async () => x.w.environments,
+      loadRegistry: async () => ({
+        facts: x.w.facts.map((f) => ({ ...f, versions: x.w.factVersions.filter((v) => v.factId === f.id) })),
+        rules: x.w.rules,
+        readinessKeys: x.w.readiness,
+        accessMappings: x.w.access,
+      }),
+    };
+    return { x, m, deps, reads };
+  }
+
+  it('opening the screen builds a waiting list straight away, so nobody waits for the sweep', async () => {
+    const { m, deps } = await waiting(true);
+    expect(m.changes[0]!.status).toBe('open');
+    const view = await handleChanges({ toolId: 1 }, { accountId: MARCO }, deps);
+    expect(view).toMatchObject({ ok: true, changes: [{ environment: 'KS-DEV', from: '13.2', to: '14.0', status: 'listed' }] });
+    if (view.ok) expect(view.changes[0]!.toRecheck).toHaveLength(4);
+  });
+
+  it('opening the screen reads each environment, so a new version shows even if nobody has asked since', async () => {
+    const { m, deps, reads } = await waiting(false);
+    expect(m.changes).toEqual([]);
+    const view = await handleChanges({ toolId: 1 }, { accountId: MARCO }, deps);
+    expect(view).toMatchObject({ ok: true, changes: [{ environment: 'KS-DEV', from: '13.2', to: '14.0', found: 'Found in Assets record', status: 'listed' }] });
+    expect(reads.sort()).toEqual([DEV, PROD].sort());
+    // A second look finds the same one change, not another.
+    await handleChanges({ toolId: 1 }, { accountId: MARCO }, deps);
+    expect(m.changes).toHaveLength(1);
+  });
+
+  it('an unreadable record or a list that fails once still shows the screen; the list is tried again later', async () => {
+    const { x, m, deps } = await waiting(true);
+    x.w.readFailures.set(PROD, 'unreachable');
+    m.failNextScope(1);
+    const view = await handleChanges({ toolId: 1 }, { accountId: MARCO }, deps);
+    expect(view).toMatchObject({ ok: true, changes: [{ to: '14.0', status: 'open' }] });
+    expect(m.changes[0]!.attempts).toBe(1);
+    expect(await handleChanges({ toolId: 1 }, { accountId: MARCO }, deps)).toMatchObject({ ok: true, changes: [{ status: 'listed' }] });
+  });
+
+  it('someone who is not the owner reads nothing and changes nothing', async () => {
+    const { m, deps, reads } = await waiting(false);
+    expect(await handleChanges({ toolId: 1 }, { accountId: SAM }, deps)).toMatchObject({ ok: false });
+    expect(reads).toEqual([]);
+    expect(m.changes).toEqual([]);
+  });
+
   it('"Still true on 14.0" adds the verification in one click; the answer in KS-DEV comes back, KS-PROD untouched', async () => {
     const { x, m, deps } = await owner();
     const runtime = factId(x.w, 'runtime_3_9');

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Button, Checkbox, Heading, Inline, SectionMessage, Select, Spinner, Stack, Text, TextArea, Textfield, User, xcss } from '@forge/react';
+import { Box, Button, Checkbox, Heading, Inline, Lozenge, SectionMessage, Select, Spinner, Stack, Text, TextArea, Textfield, User, xcss } from '@forge/react';
 import type { ToolDetails } from '../resolvers/edit-handlers';
 import { call, cardStyle, type Option } from './common';
 
@@ -476,8 +476,14 @@ export const ToolRecords = ({ toolId, refreshKey }: { toolId: number; refreshKey
   const [d, setD] = useState<DetailsReply | null>(null);
   const [view, setView] = useState('environment');
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  // Folded by default: most owners never need it, and the page reads it only once opened.
+  const [open, setOpen] = useState(false);
   const load = () => void call<DetailsReply>('toolDetails', { toolId }).then(setD);
-  useEffect(load, [toolId, refreshKey]);
+  useEffect(() => {
+    if (open) load();
+    // load reads toolId, which is in the list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toolId, refreshKey, open]);
 
   const save: Save = async (payload) => {
     try {
@@ -491,6 +497,23 @@ export const ToolRecords = ({ toolId, refreshKey }: { toolId: number; refreshKey
     }
   };
 
+  const header = (
+    <Inline space="space.150" alignBlock="center" shouldWrap>
+      <Heading as="h2">Records</Heading>
+      <Lozenge>Advanced</Lozenge>
+      <Button appearance="subtle" onClick={() => setOpen(!open)}>
+        {open ? 'Hide records' : 'Show records'}
+      </Button>
+    </Inline>
+  );
+  if (!open) {
+    return (
+      <Stack space="space.100">
+        {header}
+        <Text>The facts, policy rules, setup checks and access groups behind every answer. Open it to add or change one.</Text>
+      </Stack>
+    );
+  }
   if (!d) return <Spinner />;
   if (!d.ok) {
     return (
@@ -502,7 +525,7 @@ export const ToolRecords = ({ toolId, refreshKey }: { toolId: number; refreshKey
   const Form = FORMS[view]!;
   return (
     <Stack space="space.200">
-      <Heading as="h2">Records</Heading>
+      {header}
       <Text>What {d.tool.name} can do, what policy allows, what proves readiness and which groups grant access. Every change is saved under your name.</Text>
       <Box xcss={w(240)}>
         <Pick

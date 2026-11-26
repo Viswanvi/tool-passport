@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { stillTrue, type ChangeRecord, type ChangeRepo } from '../change/changes';
+import { buildRecheckList, detectVersions, stillTrue, type ChangeRecord, type ChangeRepo } from '../change/changes';
 import { labelReleaseNotes, MAX_NOTES_CHARS, type LabelKind, type LabelStore } from '../change/release-notes';
-import type { Environment } from '../engine/model';
+import type { Environment, Tool } from '../engine/model';
 import type { ChatFn } from '../engine/translate';
 import { settleOpenQuestions, type AnswerWriter } from '../loop/questions';
 import type { LoopDeps } from '../loop/requests';
@@ -62,6 +62,23 @@ const StillTrue = z.object({ changeId: z.number().int().positive(), factId: z.nu
 // A little over the labeller's own limit, so a long paste gets its plain message instead of "bad request".
 const ReleaseNotes = z.object({ changeId: z.number().int().positive(), notes: z.string().max(MAX_NOTES_CHARS * 2) });
 
+/**
+ * What the sweep would do for this tool, done now for the owner looking: read each environment's record and note
+ * its version (detectVersions), then build every list still waiting (buildRecheckList). Both are the sweep's own
+ * steps and safe to repeat, so the screen is current without "wait up to 5 minutes". A read or a list that fails
+ * here is left for the next look or the sweep; the screen still shows.
+ */
+async function catchUp(tool: Tool, deps: ChangeDeps): Promise<void> {
+  try {
+    if (deps.loop.noteVersion) await detectVersions([{ tool, environments: await deps.listEnvironments(tool.id) }], deps.loop.environments, deps.loop.noteVersion);
+    for (const change of (await deps.changes.openChanges(OPEN_LIMIT)).filter((c) => c.toolId === tool.id)) await buildRecheckList(change, deps.changes);
+  } catch (e) {
+    console.error(`[changes] catch-up failed: ${String(e).slice(0, 300)}`);
+  }
+}
+
+const OPEN_LIMIT = 20;
+
 export async function handleChanges(payload: unknown, ctx: ResolverContext, deps: ChangeDeps): Promise<{ ok: true; changes: ChangeView[] } | Refusal> {
   const p = ToolRef.safeParse(payload);
   if (!p.success) return { ok: false, reason: 'Pick a tool' };
@@ -69,6 +86,7 @@ export async function handleChanges(payload: unknown, ctx: ResolverContext, deps
   if (!tool) return { ok: false, reason: 'That tool no longer exists' };
   const allowed = await mayWriteTool(ctx.accountId, tool, deps.check);
   if (!allowed.ok) return allowed;
+  await catchUp(tool, deps);
   const [catalog, environments, registry, changes] = await Promise.all([
     deps.loop.loadCatalog(tool),
     deps.listEnvironments(tool.id),
