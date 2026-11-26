@@ -13,6 +13,15 @@ Kestrel Studio in KS-DEV?"* Tool Passport answers from recorded evidence and nam
   private Jira Service Management request raised for the person asking. When it's resolved, the answer updates by
   itself, and the card says what changed.
 
+Three more ways in:
+
+- **Passport:** one screen with every capability of a tool against every environment, each cell the answer Ask would
+  give, checked as you (no model call). Click a cell for its card.
+- **Check this story:** a panel on any Jira work item. It reads the story as you, suggests the environment the story
+  names, and answers before the sprint starts, with Request the fix right there.
+- **What if we upgrade?:** before an environment moves to a new version, the owner sees which facts would need
+  re-verifying and how many recent answers rely on them. Nothing is saved.
+
 Setup is one click after you create a service desk: the setup page proposes the desk, request type, approval
 outcomes and demo data, and sets them when you click.
 
@@ -37,9 +46,9 @@ the demo with and without Assets, and the optional Rovo agent.
 
 ## Never a false Yes
 
-The **false-Yes suite** holds 48 cases. Each takes away one piece of evidence from a question whose answer is Yes
+The **false-Yes suite** holds 49 cases. Each takes away one piece of evidence from a question whose answer is Yes
 (an access mapping, a policy rule, a group lookup, a readable record, a verified fact), or adds pressure such as
-"my manager approved this", and the answer must then be anything but Yes. One more checks that no passport stamp shows Yes over a check that did not pass. The build runs it
+"my manager approved this", and the answer must then be anything but Yes. Two more check the screens: no passport stamp shows Yes over a check that did not pass, and no cell of the Passport grid says Yes where Ask would not. The build runs it
 (`test/safety/false-yes.test.ts`), and so can any Jira administrator, from Setup → Tests. Both run the same case
 list in [src/safety/cases.ts](src/safety/cases.ts).
 
@@ -47,7 +56,7 @@ list in [src/safety/cases.ts](src/safety/cases.ts).
 
 | Part | What it does |
 | --- | --- |
-| Forge UI Kit: `jira:globalPage`, `jira:adminPage` | The Ask page and My tools; the setup page with its checklist |
+| Forge UI Kit: `jira:globalPage`, `jira:adminPage`, `jira:issuePanel` | Ask, Passport and My tools; the setup page with its checklist; Check this story on a work item |
 | Forge resolvers | Every action; the signed-in person always comes from the Forge context, never from the request |
 | Forge SQL with migrations | Tools, catalog, facts and their versions, rules, mappings, asks, requests, changes, audit log |
 | Forge LLM | Question translation and optional release-note labels; the model is picked from the site's live list |

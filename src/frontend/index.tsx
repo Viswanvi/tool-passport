@@ -3,12 +3,14 @@ import ForgeReconciler, {
   Box,
   Button,
   Checkbox,
+  DynamicTable,
   EmptyState,
   Heading,
   Icon,
   Inline,
   Link,
   Lozenge,
+  Pressable,
   ProgressTracker,
   SectionMessage,
   Select,
@@ -40,6 +42,8 @@ import type { SeedResult } from '../seed/demo';
 import { PREFERRED_MODELS } from '../llm/model-choice';
 import type { SetupStatus } from '../resolvers/setup-handlers';
 import type { QuickPlan, QuickSetupReply } from '../resolvers/quick-setup';
+import type { PassportReply, PassportRow } from '../resolvers/passport-handlers';
+import type { StoryContextReply } from '../resolvers/story-handlers';
 import type { SafetyRun } from '../safety/run';
 
 /**
@@ -241,35 +245,29 @@ const VerdictCard = ({ card, busy, onRecheck, onRequest, canRecheck }: { card: C
   );
 };
 
-const AskPage = () => {
-  const [tools, setTools] = useState<Option[] | null>(null);
-  const [tool, setTool] = useState<Option | null>(null);
-  const [envs, setEnvs] = useState<Option[]>([]);
-  const [env, setEnv] = useState<Option | null>(null);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [question, setQuestion] = useState('');
+type Failure = Extract<AskReply, { ok: false }>['error'];
+type Changed = { from: Card; to: Card; at: string; byItself: boolean };
+
+/**
+ * One answer on screen and everything its card can do: check again, raise a request, and, while a request is
+ * open, check again by itself every 10 seconds (spec section 15). Ask, a Passport cell and the story panel share
+ * it, so a card behaves the same wherever it was asked.
+ */
+function useAnswer(onAnswered?: () => void) {
   const [busy, setBusy] = useState(false);
-  const [card, setCard] = useState<Card | null>(null);
-  const [askId, setAskId] = useState<number | null>(null);
-  const [failed, setFailed] = useState<Extract<AskReply, { ok: false }>['error'] | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [asked, setAsked] = useState<{ toolId: number; environmentId: number | null; question: string } | null>(null);
-  const [asksMade, setAsksMade] = useState(0);
   // What the spinner is waiting for, in plain words.
   const [working, setWorking] = useState('');
+  const [card, setCard] = useState<Card | null>(null);
+  const [askId, setAskId] = useState<number | null>(null);
+  const [failed, setFailed] = useState<Failure | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   // The answer before the last re-check, when the re-check changed it: shown as "Not ready → Yes, with approval".
-  const [changed, setChanged] = useState<{ from: Card; to: Card; at: string; byItself: boolean } | null>(null);
+  const [changed, setChanged] = useState<Changed | null>(null);
   // The poller's re-check runs from an interval, so it reads the card on screen through this ref.
   const shown = useRef<Card | null>(null);
   shown.current = card;
-
-  useEffect(() => {
-    void call<{ tools: Array<{ id: number; name: string }> }>('tools').then((r) => {
-      const list = r.tools.map((t) => ({ label: t.name, value: String(t.id) }));
-      setTools(list);
-      if (list.length === 1) setTool(list[0]!);
-    });
-  }, []);
+  // How to get this answer again when there is no stored ask to re-check.
+  const again = useRef<(() => Promise<void>) | null>(null);
 
   const clear = () => {
     setCard(null);
@@ -279,25 +277,14 @@ const AskPage = () => {
     setChanged(null);
   };
 
-  useEffect(() => {
-    if (!tool) return;
-    setEnv(null);
-    clear();
-    void call<{ environments: Array<{ id: number; name: string }>; suggestions: string[] }>('environments', { toolId: Number(tool.value) }).then((r) => {
-      const list = [...r.environments.map((e) => ({ label: e.name, value: String(e.id) })), { label: 'Any environment', value: ANY }];
-      setEnvs(list);
-      setEnv(list[0] ?? null);
-      setSuggestions(r.suggestions);
-    });
-  }, [tool]);
-
-  const run = async (payload: { toolId: number; environmentId: number | null; question: string }) => {
+  /** Shows the answer `get` returns; `label` says what the spinner is waiting for. */
+  const show = async (label: string, get: () => Promise<AskReply>): Promise<void> => {
     setBusy(true);
-    setWorking('Reading your question, then checking the tool, policy, setup and access…');
-    setAsked(payload);
+    setWorking(label);
     clear();
+    again.current = () => show(label, get);
     try {
-      const r = await call<AskReply>('ask', payload);
+      const r = await get();
       setCard(r.card);
       setAskId(r.ok ? r.askId : null);
       setFailed(r.ok ? null : r.error);
@@ -305,14 +292,33 @@ const AskPage = () => {
       setFailed('try_again');
     } finally {
       setBusy(false);
-      setAsksMade((n) => n + 1);
+      onAnswered?.();
     }
   };
 
-  /** Evaluates the stored ask again (no model call). Without a stored ask, the question is asked again. */
+  /** A stored ask, checked again with its keys (no model call); clears "may have changed". */
+  const open = async (id: number) => {
+    setBusy(true);
+    setWorking('Checking again…');
+    clear();
+    try {
+      const r = await call<RecheckReply>('recheck', { askId: id });
+      if (r.ok) {
+        setCard(r.card);
+        setAskId(id);
+      } else setNotice('That question can no longer be checked. Ask it again.');
+    } catch {
+      setNotice('Could not check again just now. Try again.');
+    } finally {
+      setBusy(false);
+      onAnswered?.();
+    }
+  };
+
+  /** Evaluates the stored ask again (no model call). Without a stored ask, the answer is fetched again. */
   const recheck = async (quiet = false) => {
     if (askId === null) {
-      if (asked && !quiet) await run(asked);
+      if (!quiet && again.current) await again.current();
       return;
     }
     if (!quiet) {
@@ -333,26 +339,7 @@ const AskPage = () => {
     }
   };
 
-  /** A recent question, checked again with its stored keys (no model call); clears "may have changed". */
-  const askAgain = async (id: number) => {
-    setBusy(true);
-    setWorking('Checking again…');
-    clear();
-    try {
-      const r = await call<RecheckReply>('recheck', { askId: id });
-      if (r.ok) {
-        setCard(r.card);
-        setAskId(id);
-      } else setNotice('That question can no longer be checked. Ask it again.');
-    } catch {
-      setNotice('Could not check again just now. Try again.');
-    } finally {
-      setBusy(false);
-      setAsksMade((n) => n + 1);
-    }
-  };
-
-  /** Request the fix or Request approval: the payload names only the ask; the server builds the request. */
+  /** Request the fix, Request approval or Ask the owner: the payload names only the ask; the server builds the request. */
   const request = async (kind: 'fix' | 'approval' | 'question') => {
     if (askId === null) {
       setNotice('Ask the question again, then try once more.');
@@ -387,20 +374,100 @@ const AskPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [polling, askId]);
 
+  return { busy, working, card, askId, failed, notice, changed, show, open, recheck, request, clear };
+}
+
+type AnswerState = ReturnType<typeof useAnswer>;
+
+/** The spinner, the "changed by itself" note, any notice, and the card. */
+const AnswerView = ({ a }: { a: AnswerState }) => (
+  <Stack space="space.150">
+    {a.busy ? (
+      <Inline space="space.100" alignBlock="center">
+        <Spinner size="small" />
+        <Text color="color.text.subtle">{a.working}</Text>
+      </Inline>
+    ) : null}
+    {a.changed && a.card ? (
+      <SectionMessage appearance={a.changed.to.verdict === 'yes' || a.changed.to.verdict === 'yes_with_approval' ? 'success' : 'information'}>
+        <Inline space="space.100" alignBlock="center" shouldWrap>
+          <Text>{a.changed.byItself ? `The answer changed by itself at ${time(a.changed.at)}:` : `Checked again at ${time(a.changed.at)}:`}</Text>
+          <Lozenge appearance={a.changed.from.lozenge}>{a.changed.from.title}</Lozenge>
+          <Text>→</Text>
+          <Lozenge appearance={a.changed.to.lozenge} isBold>
+            {a.changed.to.title}
+          </Lozenge>
+        </Inline>
+      </SectionMessage>
+    ) : null}
+    {a.notice ? (
+      <SectionMessage appearance="warning">
+        <Text>{a.notice}</Text>
+      </SectionMessage>
+    ) : null}
+    {a.card ? (
+      <VerdictCard card={a.card} busy={a.busy} canRecheck={a.askId !== null} onRecheck={() => void a.recheck()} onRequest={(kind) => void a.request(kind)} />
+    ) : null}
+    {a.failed && !a.card ? (
+      <SectionMessage appearance="warning">
+        <Text>{a.failed === 'not_found' ? 'That tool or environment no longer exists.' : 'Something went wrong. Try again.'}</Text>
+      </SectionMessage>
+    ) : null}
+  </Stack>
+);
+
+const NoTools = () => (
+  <EmptyState
+    header="No tools yet"
+    description="A Jira administrator can load the demo data under Jira settings → Marketplace apps → Tool Passport setup. Then ask things like “Can I build a dashboard in KS-DEV?”"
+  />
+);
+
+/** The tools anyone may ask about; the only one is picked for you. */
+function useTools() {
+  const [tools, setTools] = useState<Option[] | null>(null);
+  const [tool, setTool] = useState<Option | null>(null);
+  useEffect(() => {
+    void call<{ tools: Array<{ id: number; name: string }> }>('tools').then((r) => {
+      const list = r.tools.map((t) => ({ label: t.name, value: String(t.id) }));
+      setTools(list);
+      if (list.length) setTool(list[0]!);
+    });
+  }, []);
+  return { tools, tool, setTool };
+}
+
+const AskPage = () => {
+  const { tools, tool, setTool } = useTools();
+  const [envs, setEnvs] = useState<Option[]>([]);
+  const [env, setEnv] = useState<Option | null>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [question, setQuestion] = useState('');
+  const [asksMade, setAsksMade] = useState(0);
+  const a = useAnswer(() => setAsksMade((n) => n + 1));
+
+  useEffect(() => {
+    if (!tool) return;
+    setEnv(null);
+    a.clear();
+    void call<{ environments: Array<{ id: number; name: string }>; suggestions: string[] }>('environments', { toolId: Number(tool.value) }).then((r) => {
+      const list = [...r.environments.map((e) => ({ label: e.name, value: String(e.id) })), { label: 'Any environment', value: ANY }];
+      setEnvs(list);
+      setEnv(list[0] ?? null);
+      setSuggestions(r.suggestions);
+    });
+    // a.clear only resets the answer on screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool]);
+
   const ask = (q: string) => {
     if (!tool || !env || !q.trim()) return;
-    void run({ toolId: Number(tool.value), environmentId: env.value === ANY ? null : Number(env.value), question: q });
+    const payload = { toolId: Number(tool.value), environmentId: env.value === ANY ? null : Number(env.value), question: q };
+    void a.show('Reading your question, then checking the tool, policy, setup and access…', () => call<AskReply>('ask', payload));
   };
 
   if (tools === null) return <Spinner />;
-  if (tools.length === 0) {
-    return (
-      <EmptyState
-        header="No tools yet"
-        description="A Jira administrator can load the demo data under Jira settings → Marketplace apps → Tool Passport setup. Then ask things like “Can I build a dashboard in KS-DEV?”"
-      />
-    );
-  }
+  if (tools.length === 0) return <NoTools />;
 
   return (
     <Stack space="space.200">
@@ -416,7 +483,7 @@ const AskPage = () => {
         <Box xcss={xcss({ width: '480px' })}>
           <Textfield placeholder="Can I … ?" value={question} maxLength={500} onChange={(e) => setQuestion(String(e.target.value ?? ''))} />
         </Box>
-        <Button appearance="primary" onClick={() => ask(question)} isDisabled={busy || !question.trim() || !env}>
+        <Button appearance="primary" onClick={() => ask(question)} isDisabled={a.busy || !question.trim() || !env}>
           Ask
         </Button>
       </Inline>
@@ -430,45 +497,135 @@ const AskPage = () => {
                 setQuestion(s);
                 ask(s);
               }}
-              isDisabled={busy || !env}
+              isDisabled={a.busy || !env}
             >
               {s}
             </Button>
           ))}
         </Inline>
       ) : null}
-      {busy ? (
+      <AnswerView a={a} />
+      <RecentQuestions refreshKey={asksMade} onAskAgain={(id) => void a.open(id)} />
+    </Stack>
+  );
+};
+
+// ---- the Passport overview: every capability in every environment, for the person looking ----------------
+
+const cellStyle = xcss({ padding: 'space.050', borderRadius: 'radius.small', ':hover': { backgroundColor: 'color.background.neutral.subtle.hovered' } });
+
+type OpenCell = (row: PassportRow, cell: PassportRow['cells'][number], environment: string) => void;
+
+/** Capabilities down the side, environments across the top; each cell opens its card. */
+const PassportTable = ({ data, rows, picked, onOpen, label }: { data: Extract<PassportReply, { ok: true }>; rows: PassportRow[]; picked: string | null; onOpen: OpenCell; label: string }) => (
+  <DynamicTable
+    label={label}
+    head={{
+      cells: [
+        { key: 'capability', content: 'Capability', width: 40 },
+        ...data.environments.map((e) => ({ key: String(e.id), content: e.version ? `${e.name} · ${e.version}` : e.name })),
+      ],
+    }}
+    rows={rows.map((row) => ({
+      key: row.key,
+      isHighlighted: picked === row.key,
+      cells: [
+        { key: 'capability', content: <Text>{row.label}</Text> },
+        ...row.cells.map((cell) => {
+          const environment = data.environments.find((e) => e.id === cell.environmentId)?.name ?? '';
+          return {
+            key: String(cell.environmentId),
+            content: (
+              <Pressable xcss={cellStyle} onClick={() => onOpen(row, cell, environment)}>
+                <Lozenge appearance={cell.lozenge} isBold>
+                  {cell.title}
+                </Lozenge>
+              </Pressable>
+            ),
+          };
+        }),
+      ],
+    }))}
+  />
+);
+
+const PassportPage = ({ refreshKey }: { refreshKey: number }) => {
+  const { tools, tool, setTool } = useTools();
+  const [data, setData] = useState<PassportReply | null>(null);
+  const [picked, setPicked] = useState<{ key: string; label: string; environment: string } | null>(null);
+  // Bumped by "Check again".
+  const [round, setRound] = useState(0);
+  const [showUnknown, setShowUnknown] = useState(false);
+  const a = useAnswer();
+
+  useEffect(() => {
+    if (!tool) return;
+    setData(null);
+    void call<PassportReply>('passport', { toolId: Number(tool.value) })
+      .then(setData)
+      .catch((e: unknown) => setData({ ok: false, reason: String(e) }));
+  }, [tool, refreshKey, round]);
+
+  if (tools === null) return <Spinner />;
+  if (tools.length === 0) return <NoTools />;
+
+  // Rows nobody has verified anywhere are folded away, so the grid leads with what is known.
+  const rows = data?.ok ? data.rows : [];
+  const unknown = rows.filter((r) => r.cells.length > 0 && r.cells.every((c) => c.verdict === 'dont_know'));
+  const known = rows.filter((r) => !unknown.includes(r));
+
+  const openCell = (row: PassportRow, cell: PassportRow['cells'][number], environment: string) => {
+    if (!tool) return;
+    setPicked({ key: row.key, label: row.label, environment });
+    void a.show('Checking the tool, policy, setup and access…', () => call<AskReply>('askKey', { toolId: Number(tool.value), environmentId: cell.environmentId, key: row.key }));
+  };
+
+  return (
+    <Stack space="space.200">
+      <Inline space="space.200" alignBlock="center" shouldWrap>
+        {tools.length > 1 ? (
+          <Box xcss={xcss({ width: '240px' })}>
+            <Select options={tools} value={tool} onChange={(o: Option) => setTool(o)} placeholder="Tool" />
+          </Box>
+        ) : null}
+        <Button appearance="subtle" onClick={() => setRound((n) => n + 1)} isDisabled={data === null}>
+          Check again
+        </Button>
+      </Inline>
+      {data === null ? (
         <Inline space="space.100" alignBlock="center">
           <Spinner size="small" />
-          <Text color="color.text.subtle">{working}</Text>
+          <Text color="color.text.subtle">Checking every capability in every environment, as you…</Text>
         </Inline>
-      ) : null}
-      {changed && card ? (
-        <SectionMessage appearance={changed.to.verdict === 'yes' || changed.to.verdict === 'yes_with_approval' ? 'success' : 'information'}>
-          <Inline space="space.100" alignBlock="center" shouldWrap>
-            <Text>{changed.byItself ? `The answer changed by itself at ${time(changed.at)}:` : `Checked again at ${time(changed.at)}:`}</Text>
-            <Lozenge appearance={changed.from.lozenge}>{changed.from.title}</Lozenge>
-            <Text>→</Text>
-            <Lozenge appearance={changed.to.lozenge} isBold>
-              {changed.to.title}
-            </Lozenge>
-          </Inline>
-        </SectionMessage>
-      ) : null}
-      {notice ? (
+      ) : !data.ok ? (
         <SectionMessage appearance="warning">
-          <Text>{notice}</Text>
+          <Text>{data.reason}</Text>
         </SectionMessage>
-      ) : null}
-      {card ? (
-        <VerdictCard card={card} busy={busy} canRecheck={askId !== null} onRecheck={() => void recheck()} onRequest={(kind) => void request(kind)} />
-      ) : null}
-      {failed && !card ? (
-        <SectionMessage appearance="warning">
-          <Text>{failed === 'not_found' ? 'That tool or environment no longer exists.' : 'Something went wrong. Try again.'}</Text>
-        </SectionMessage>
-      ) : null}
-      <RecentQuestions refreshKey={asksMade} onAskAgain={(id) => void askAgain(id)} />
+      ) : (
+        <Stack space="space.150">
+          <Heading as="h2" size="medium">{`Your passport for ${data.tool}`}</Heading>
+          <Text color="color.text.subtle">
+            {`What you can do, everywhere, checked as you at ${time(data.checkedAt)}. Each cell is the answer Ask would give, from the same checks and records. Click one to see why and what to do next.`}
+          </Text>
+          <PassportTable data={data} rows={known} picked={picked?.key ?? null} onOpen={openCell} label={`What you can do with ${data.tool}, by environment`} />
+          {unknown.length ? (
+            <Stack space="space.100">
+              <Inline space="space.100" alignBlock="center" shouldWrap>
+                <Lozenge appearance="new">{`Not verified yet · ${unknown.length}`}</Lozenge>
+                <Text color="color.text.subtle">
+                  {`Nobody has verified ${unknown.length === 1 ? 'this capability' : 'these capabilities'} for ${data.tool} yet, so every environment says Don't know yet. Open one to ask the owner.`}
+                </Text>
+                <Button appearance="subtle" onClick={() => setShowUnknown(!showUnknown)}>
+                  {showUnknown ? 'Hide them' : 'Show them'}
+                </Button>
+              </Inline>
+              {showUnknown ? <PassportTable data={data} rows={unknown} picked={picked?.key ?? null} onOpen={openCell} label={`Capabilities of ${data.tool} nobody has verified yet`} /> : null}
+            </Stack>
+          ) : null}
+        </Stack>
+      )}
+      {picked ? <Heading as="h3" size="small">{`${picked.label} · ${picked.environment}`}</Heading> : null}
+      <AnswerView a={a} />
     </Stack>
   );
 };
@@ -1329,28 +1486,126 @@ const MyToolsPage = ({ tools, refreshKey }: { tools: Option[]; refreshKey: numbe
   );
 };
 
-/** The global page: Ask for everyone, My tools for tool owners and Jira administrators. */
+// ---- "Check this story": the panel on a Jira work item --------------------------------------------------------
+
+/** The work item comes from the panel's Forge context on the server; the page sends only the tool and environment. */
+const StoryPanel = () => {
+  const [ctx, setCtx] = useState<StoryContextReply | null>(null);
+  const [tool, setTool] = useState<Option | null>(null);
+  const [env, setEnv] = useState<Option | null>(null);
+  const a = useAnswer();
+
+  useEffect(() => {
+    void call<StoryContextReply>('storyContext')
+      .then((r) => {
+        setCtx(r);
+        if (!r.ok || !r.tools.length) return;
+        const suggested = r.environments.find((e) => e.id === r.suggestedEnvironmentId);
+        const t = r.tools.find((x) => x.id === (suggested?.toolId ?? r.tools[0]!.id))!;
+        setTool({ label: t.name, value: String(t.id) });
+        setEnv(suggested ? { label: suggested.name, value: String(suggested.id) } : null);
+      })
+      .catch((e: unknown) => setCtx({ ok: false, reason: String(e) }));
+  }, []);
+
+  if (ctx === null) return <Spinner />;
+  if (!ctx.ok) {
+    return (
+      <SectionMessage appearance="warning">
+        <Text>{ctx.reason}</Text>
+      </SectionMessage>
+    );
+  }
+  if (!ctx.tools.length) return <Text>No tools are set up in Tool Passport yet.</Text>;
+  const toolOptions = ctx.tools.map((t) => ({ label: t.name, value: String(t.id) }));
+  const envOptions = [...ctx.environments.filter((e) => String(e.toolId) === tool?.value).map((e) => ({ label: e.name, value: String(e.id) })), { label: 'Any environment', value: ANY }];
+  const named = ctx.environments.find((e) => e.id === ctx.suggestedEnvironmentId);
+  const check = () => {
+    if (!tool || !env) return;
+    const payload = { toolId: Number(tool.value), environmentId: env.value === ANY ? null : Number(env.value) };
+    void a.show('Reading the story, then checking the tool, policy, setup and access…', () => call<AskReply>('storyCheck', payload));
+  };
+
+  return (
+    <Stack space="space.150">
+      <Text>Can this story be built where it will run? Tool Passport reads it, matches it to the tool&apos;s catalog and checks it as you, before the work starts.</Text>
+      <Inline space="space.100" alignBlock="center" shouldWrap>
+        {toolOptions.length > 1 ? (
+          <Box xcss={xcss({ width: '180px' })}>
+            <Select
+              options={toolOptions}
+              value={tool}
+              onChange={(o: Option) => {
+                setTool(o);
+                setEnv(null);
+              }}
+              placeholder="Tool"
+            />
+          </Box>
+        ) : null}
+        <Box xcss={xcss({ width: '180px' })}>
+          <Select options={envOptions} value={env} onChange={(o: Option) => setEnv(o)} placeholder="Environment" />
+        </Box>
+        <Button appearance="primary" onClick={check} isDisabled={a.busy || !tool || !env}>
+          Check this story
+        </Button>
+      </Inline>
+      {named && env?.value === String(named.id) ? <Text size="small" color="color.text.subtlest">{`${named.name} is named in the story.`}</Text> : null}
+      <AnswerView a={a} />
+    </Stack>
+  );
+};
+
+const tabBody = xcss({ paddingTop: 'space.200' });
+
+/** The global page: Ask and Passport for everyone, My tools for tool owners and Jira administrators. */
 const HomePage = () => {
   const [mine, setMine] = useState<Option[]>([]);
-  const [opened, setOpened] = useState(0);
+  // Opening a tab reads it again: Passport is tab 1, My tools tab 2.
+  const [opened, setOpened] = useState({ passport: 0, mine: 0 });
   useEffect(() => {
     void call<{ tools: Array<{ id: number; name: string }> }>('myTools').then((r) => setMine(r.tools.map((t) => ({ label: t.name, value: String(t.id) }))));
   }, []);
-  if (mine.length === 0) return <AskPage />;
+  const onChange = (index: number) =>
+    setOpened((o) => (index === 1 ? { ...o, passport: o.passport + 1 } : index === 2 ? { ...o, mine: o.mine + 1 } : o));
+  const ask = (
+    <TabPanel>
+      <Box xcss={tabBody}>
+        <AskPage />
+      </Box>
+    </TabPanel>
+  );
+  const passport = (
+    <TabPanel>
+      <Box xcss={tabBody}>
+        <PassportPage refreshKey={opened.passport} />
+      </Box>
+    </TabPanel>
+  );
+  if (mine.length === 0) {
+    return (
+      <Tabs id="passport-tabs" onChange={onChange}>
+        <TabList>
+          <Tab>Ask</Tab>
+          <Tab>Passport</Tab>
+        </TabList>
+        {ask}
+        {passport}
+      </Tabs>
+    );
+  }
   return (
-    <Tabs id="passport-tabs" onChange={(index: number) => index === 1 && setOpened((n) => n + 1)}>
+    <Tabs id="passport-tabs" onChange={onChange}>
       <TabList>
         <Tab>Ask</Tab>
+        <Tab>Passport</Tab>
         <Tab>My tools</Tab>
       </TabList>
+      {ask}
+      {passport}
       <TabPanel>
-        <Box xcss={xcss({ paddingTop: 'space.200' })}>
-          <AskPage />
-        </Box>
-      </TabPanel>
-      <TabPanel>
-        <Box xcss={xcss({ paddingTop: 'space.200' })}>
-          <MyToolsPage tools={mine} refreshKey={opened} />
+        <Box xcss={tabBody}>
+          <MyToolsPage tools={mine} refreshKey={opened.mine} />
         </Box>
       </TabPanel>
     </Tabs>
@@ -1361,7 +1616,9 @@ const App = () => {
   const context = useProductContext();
   if (!context) return <Spinner />;
   // Jira already shows the module title above the page, so the page adds no heading of its own.
-  return context.moduleKey === 'passport-setup' ? <SetupPage /> : <HomePage />;
+  if (context.moduleKey === 'passport-setup') return <SetupPage />;
+  if (context.moduleKey === 'passport-story') return <StoryPanel />;
+  return <HomePage />;
 };
 
 ForgeReconciler.render(

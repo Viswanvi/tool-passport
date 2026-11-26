@@ -60,8 +60,8 @@ or no resolution named Done), do that one step below; the box keeps everything e
      by the owner inside Tool Passport, and answers label them *Recorded by owner*, which is weaker evidence than an
      Assets record.
 4. **Model.** Nothing to do: the app picks an active model on your site by itself.
-5. **Tests.** Click **Run the false-Yes suite**. It runs the app's 48 safety cases on fixed test data inside the
-   app and should show **All 48 cases passed**. It reads nothing from your site and makes no model calls. The
+5. **Tests.** Click **Run the false-Yes suite**. It runs the app's 49 safety cases on fixed test data inside the
+   app and should show **All 49 cases passed**. It reads nothing from your site and makes no model calls. The
    **40-question set** below it is optional: it makes about 40 model calls, so it can run once every 10 minutes.
 
 ## 3. Moment 1: the answer depends on the environment
@@ -79,6 +79,17 @@ then click the suggested question **Can I build a custom web front end or dashbo
 - Pick **Any environment** and ask again: only the tool stamp is checked; the other three say **Not checked**.
 
 Try your own wording too. A question outside the tool's catalog gets **Don't know yet**, never a guess.
+
+**Your whole passport.** Open the **Passport** tab: every capability of Kestrel Studio against KS-DEV and KS-PROD,
+each cell the answer Ask would give, checked as you right now (no model is called). On a fresh demo: *Build a custom
+web front end or dashboard* is **Not ready** in KS-DEV and **No** in KS-PROD, *Use the community app framework* is
+**No** in both, and the version-verified ones are **Yes**. Click any cell to open its full card, with its stamps and
+next step. Capabilities nobody has verified yet are folded under **Not verified yet**.
+
+**Check a story before the sprint.** Open any Jira work item, click the apps button under its title, and choose
+**Tool Passport**. Write or pick a story such as *Build a usage dashboard for the sales team in KS-DEV*: the panel
+suggests **KS-DEV** because the story names it. Click **Check this story**: the same **Not ready** card, with
+**Request the fix**, before anyone starts the work. (One model call per new story.)
 
 ## 4. Moment 2: the guided fix
 
@@ -123,6 +134,9 @@ An approval counts only when the approver resolves it. In this demo the approver
 ## 6. Moment 3: a version change
 
 1. In KS-DEV, ask **Can I upload a 3 GB file?** Expected: **No**, the limit is 2 GB on version 13.2.
+   Before upgrading, preview it: **My tools** → **Changes** → *What if we upgrade?*, pick **KS-DEV**, type **14.0**,
+   click **Preview**. It lists the 4 facts that would need re-verifying and how many recent answers in KS-DEV rely on
+   them, and what stays untouched. Nothing is saved.
 2. In Assets, set KS-DEV's **Version** to **14.0**. (**No Assets?** Save KS-DEV again under My tools → **Show
    records** with all three lines, the first one now `Version: 14.0`: the form replaces every value.)
 3. Ask the 3 GB question in KS-DEV again: **Don't know yet**. The upload limit was verified on 13.2 and KS-DEV now

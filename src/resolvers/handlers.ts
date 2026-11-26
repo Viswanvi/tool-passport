@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import type { SavedAsk } from '../db/asks';
-import { answerQuestion } from '../engine/answer';
+import { answerQuestion, type Answer } from '../engine/answer';
 import { canPick } from '../engine/audience';
 import { buildCard, type Card } from '../engine/card';
+import type { CatalogKey } from '../engine/catalog';
 import type { Catalog, EngineRepo, Environment, EnvironmentReader, Groups, Tool } from '../engine/model';
 import type { ChatFn, TranslationStore } from '../engine/translate';
 import { cardWithRequests, type RequestRepo } from '../loop/requests';
@@ -86,39 +87,64 @@ export async function handleAsk(payload: unknown, ctx: ResolverContext, deps: As
         noteVersion: deps.noteVersion ? (e, v) => deps.noteVersion!(tool, e, v) : undefined,
       },
     );
-    let card = buildCard(answer, { toolName: tool.name, environment, catalog });
-    if (deps.requests) {
-      const built = card;
-      card = await cardWithRequests({ answer, card, environment }, asker, deps.requests).catch(() => built);
-    }
-    // One line per question, for counting model calls (they cost money). No question text, no account id.
-    console.log(
-      `[ask] state=${answer.state}${answer.state === 'checked' ? ` verdict=${answer.verdict} cached=${answer.cached} model=${answer.modelId ?? '-'}` : ''}`,
-    );
-
-    let askId: number | null = null;
-    if (answer.state === 'checked' || answer.state === 'unsupported') {
-      try {
-        askId = await deps.saveAsk({
-          askerAccountId: asker,
-          toolId: tool.id,
-          environmentId: environment?.id ?? null,
-          questionText: p.data.question.trim(),
-          requirement: answer.state === 'checked' ? answer.requirement : null,
-          verdict: answer.state === 'checked' ? answer.verdict : 'unsupported',
-          factVersionIds: answer.state === 'checked' ? answer.outcome.results.flatMap((r) => (r.factVersionId ? [r.factVersionId] : [])) : [],
-          modelId: answer.state === 'checked' ? answer.modelId ?? null : null,
-        });
-      } catch (e) {
-        // The answer stands; it just can't be followed up (no request can be raised from it).
-        console.error(`[ask] could not save the ask: ${String(e).slice(0, 200)}`);
-      }
-    }
-    return { ok: true, askId, card };
+    return await finishAsk(answer, { asker, tool, environment, catalog, question: p.data.question, source: 'ask' }, deps);
   } catch (e) {
     console.error(`[ask] failed: ${String(e).slice(0, 300)}`);
     return { ok: false, error: 'try_again', card: TRY_AGAIN };
   }
+}
+
+/**
+ * The card, with any open requests, and the saved ask behind it, so the card's actions can raise requests.
+ * Shared by Ask, a Passport cell and the story panel: however the keys were found, the answer is kept alike.
+ */
+export async function finishAsk(
+  answer: Answer,
+  x: { asker: string; tool: Tool; environment: Environment | null; catalog: Catalog; question: string; source: 'ask' | 'passport' | 'story' },
+  deps: Pick<AskHandlerDeps, 'saveAsk' | 'requests'>,
+): Promise<AskReply> {
+  const { asker, tool, environment, catalog } = x;
+  let card = buildCard(answer, { toolName: tool.name, environment, catalog });
+  if (deps.requests) {
+    const built = card;
+    card = await cardWithRequests({ answer, card, environment }, asker, deps.requests).catch(() => built);
+  }
+  // One line per question, for counting model calls (they cost money). No question text, no account id.
+  console.log(
+    `[${x.source}] state=${answer.state}${answer.state === 'checked' ? ` verdict=${answer.verdict} cached=${answer.cached} model=${answer.modelId ?? '-'}` : ''}`,
+  );
+
+  let askId: number | null = null;
+  if (answer.state === 'checked' || answer.state === 'unsupported') {
+    try {
+      askId = await deps.saveAsk({
+        askerAccountId: asker,
+        toolId: tool.id,
+        environmentId: environment?.id ?? null,
+        questionText: x.question.trim(),
+        requirement: answer.state === 'checked' ? answer.requirement : null,
+        verdict: answer.state === 'checked' ? answer.verdict : 'unsupported',
+        factVersionIds: answer.state === 'checked' ? answer.outcome.results.flatMap((r) => (r.factVersionId ? [r.factVersionId] : [])) : [],
+        modelId: answer.state === 'checked' ? (answer.modelId ?? null) : null,
+      });
+    } catch (e) {
+      // The answer stands; it just can't be followed up (no request can be raised from it).
+      console.error(`[${x.source}] could not save the ask: ${String(e).slice(0, 200)}`);
+    }
+  }
+  return { ok: true, askId, card };
+}
+
+/**
+ * A tool's plain capabilities (no value needed) in a fixed order, not the rows' order (a reset gives new ids):
+ * those that run the most checks first, so they show the whole passport, then by key.
+ */
+export function orderedCapabilities(catalog: Catalog): CatalogKey[] {
+  const checksFor = (key: string) => {
+    const l = catalog.links.get(key);
+    return l ? (l.actions?.length ?? 0) + (l.readinessKeys?.length ?? 0) : -1;
+  };
+  return [...catalog.keys.values()].filter((k) => k.kind === 'capability' && !k.requiresValue).sort((a, b) => checksFor(b.key) - checksFor(a.key) || a.key.localeCompare(b.key));
 }
 
 export interface ListDeps {
@@ -151,15 +177,7 @@ export async function handleEnvironments(
   const groups: Groups = all.some((e) => e.audienceGroup) ? await deps.readGroups(ctx.accountId) : { ok: false };
   const environments = all.filter((e) => canPick(e, groups).ok).map((e) => ({ id: e.id, name: e.name }));
   const catalog = await deps.loadCatalog(tool);
-  // A fixed order, not the rows' order (a reset gives new ids): questions that run the most checks first, so a
-  // suggestion shows the whole passport, then by key.
-  const checksFor = (key: string) => {
-    const l = catalog.links.get(key);
-    return l ? (l.actions?.length ?? 0) + (l.readinessKeys?.length ?? 0) : -1;
-  };
-  const suggestions = [...catalog.keys.values()]
-    .filter((k) => k.kind === 'capability' && !k.requiresValue)
-    .sort((a, b) => checksFor(b.key) - checksFor(a.key) || a.key.localeCompare(b.key))
+  const suggestions = orderedCapabilities(catalog)
     .slice(0, 3)
     .map((k) => `Can I ${lowerFirst(k.label)}?`);
   return { environments, suggestions };

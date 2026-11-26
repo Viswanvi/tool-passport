@@ -1269,3 +1269,41 @@ showing a request key live (all for the fresh-site run). Production is still 2.1
   help”", "Resolution “Done” approves and “Declined” declines", "Kestrel Studio is loaded"; checklist unchanged.
   LLM calls: 0.
 - The installation link is unchanged; new installs get 2.2.0.
+
+### Passport overview, Check this story, What if we upgrade?, 2026-11-26 (human: "go ahead and do")
+
+What changed (DECISIONS D51): a **Passport** tab for everyone (every plain capability × every environment the
+person may pick, each cell the Ask verdict from the catalog key, no model; clicking a cell asks that key and opens
+its working card; rows nobody has verified are folded under "Not verified yet"); a **Check this story** panel on
+Jira work items (`jira:issuePanel`, work item from the Forge context, read as the user, environment suggested by
+name, story text through the normal translate path, saved as an ask); **What if we upgrade?** on Changes (the
+re-verify list and affected recent answers for a typed version, writing nothing). The Ask page's card logic is now
+a shared hook. New safety case `passport`; the case's blockers now produce every verdict.
+
+Verified:
+
+- Tests first: `test/unit/passport.test.ts` (8), `test/unit/story.test.ts` (8) and 2 new tests in
+  `test/unit/changes.test.ts`. `npm test`: `Test Files 34 passed (34)`, `Tests 480 passed (480)`; `npx tsc --noEmit
+  -p .` and `npx eslint src test` exit 0; `forge lint`: `No issues found.` (it first required an `icon` for the issue
+  panel: now `resource:icons;passport.svg`, shipped in `static/icons`).
+- False-Yes suite 49 of 49. Mutation checks on the new `passport` case: the first try (Not ready drawn as Yes) was
+  **not** caught, because every blocker then led to Don't know yet; blockers added for Not ready, Yes with approval
+  and No; then both mutations (Not ready → Yes, Yes with approval → Yes) failed the case
+  (`Tests 1 failed | 48 passed (49)`), and the code was restored.
+- `forge deploy -e development`: 5.14.0 (minor: the new module needs no new permission), then 5.15.0, each eligible
+  for Runs on Atlassian; `forge eligibility -e development`: 5.15.0 eligible.
+- Live on the demo site (5.14.0/5.15.0): tabs Ask · Passport · My tools. Passport: "Your passport for Kestrel
+  Studio … checked as you at 04:54 PM", columns "KS-DEV · 13.2" and "KS-PROD · 13.2"; Build a custom web front end
+  or dashboard **Not ready** / **No**; Use the community app framework **No** / **No**; runtime 3.9, scheduled jobs,
+  single sign-on, websockets **Yes** / **Yes** (websockets was published Yes on this site in the privacy test); the
+  13 never-verified capabilities **Don't know yet** (folded in 5.15.0). Clicking KS-DEV · Not ready opened the full
+  card under the grid: four stamps, path Asked → Set up frontend build → Get approval → Yes, **Request the fix**.
+  What if we upgrade?, KS-DEV → 14.0: "4 facts would need re-verifying" (community app framework, upload size 2,
+  runtime 3.9, web front end), "6 recent answers in KS-DEV would be marked May have changed", "Already verified on
+  14.0: 0. Not affected: 3 facts …, 8 policy rules, KS-PROD (13.2)"; nothing saved (KS-DEV still 13.2, the change
+  list unchanged). Work item MSD-1: the apps menu under the title lists **Tool Passport** (closed without adding it,
+  so MSD-1 is unchanged). LLM calls: 0.
+
+Untested: **Check this story** end to end on a real work item (needs a work item to add the panel to; 1 model
+call), plus the earlier list (Set it all up, the change note during a real resolution, a path step with its
+request key). Production is still 2.2.0.

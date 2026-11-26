@@ -12,6 +12,9 @@ import { forgeModelDeps, labelChat, translationChat } from '../llm/client';
 import { handleChooseModel, handleSetupStatus, type SetupStatusDeps } from './setup-handlers';
 import { handleRunSafety } from './safety-handlers';
 import { handleQuickSetup, handleQuickSetupPlan, type QuickSetupDeps } from './quick-setup';
+import { handleAskKey, handlePassport, type PassportDeps } from './passport-handlers';
+import { handleStoryCheck, handleStoryContext, type StoryContext, type StoryDeps } from './story-handlers';
+import { readIssueAsUser } from '../providers/issues-forge';
 import { runSafetySuite } from '../safety/run';
 import { sqlLabelStore } from '../db/labels';
 import { loopDeps, noteEnvironmentVersion, readRequestSetup, readResolutionMap, saveRequestSetup, saveResolutionMap } from '../loop/forge';
@@ -27,7 +30,7 @@ import type { WriteCheck } from '../registry/authorise';
 import { sqlRegistryWriter } from '../registry/write';
 import { seedDemo } from '../seed/demo';
 import { handleAsk, handleEnvironments, handleLoadDemo, handleResetDemo, handleTools, type AskHandlerDeps, type ResolverContext } from './handlers';
-import { handleChanges, handleRecentAsks, handleReleaseNotes, handleStillTrue, type ChangeDeps } from './change-handlers';
+import { handleChanges, handleRecentAsks, handleReleaseNotes, handleStillTrue, handleUpgradePreview, type ChangeDeps } from './change-handlers';
 import { handleCreateTool, handleEdit, handleToolDetails, type EditDeps } from './edit-handlers';
 import { handleRunEval, type EvalDeps } from './eval-handlers';
 import { handleMyTools, handleOpenQuestions, handlePublishAnswer, type OwnerDeps } from './owner-handlers';
@@ -84,6 +87,24 @@ resolver.define('health', async () => ({ ok: true }));
 resolver.define('ask', ({ payload, context }) => handleAsk(payload, ctxOf(context), askDeps));
 
 resolver.define('tools', ({ context }) => handleTools(ctxOf(context), { listTools }));
+
+// The Passport overview and its cells: catalog keys evaluated as the signed-in person, no model calls.
+const passportDeps: PassportDeps = { ...askDeps, listEnvironments };
+
+resolver.define('passport', ({ payload, context }) => handlePassport(payload, ctxOf(context), passportDeps));
+
+resolver.define('askKey', ({ payload, context }) => handleAskKey(payload, ctxOf(context), passportDeps));
+
+// "Check this story": the work item comes from the issue panel's Forge context, never the payload.
+const storyDeps: StoryDeps = { ...askDeps, listTools, listEnvironments, readIssue: readIssueAsUser };
+const storyCtx = (context: { accountId?: string; extension?: { issue?: { key?: unknown } } } | undefined): StoryContext => ({
+  accountId: context?.accountId,
+  issueKey: typeof context?.extension?.issue?.key === 'string' ? context.extension.issue.key : undefined,
+});
+
+resolver.define('storyContext', ({ context }) => handleStoryContext(storyCtx(context), storyDeps));
+
+resolver.define('storyCheck', ({ payload, context }) => handleStoryCheck(payload, storyCtx(context), storyDeps));
 
 resolver.define('environments', ({ payload, context }) =>
   handleEnvironments(payload, ctxOf(context), { listTools, loadTool, listEnvironments, loadCatalog, readGroups }),
@@ -184,6 +205,9 @@ const changeDeps: ChangeDeps = {
 resolver.define('changes', ({ payload, context }) => handleChanges(payload, ctxOf(context), changeDeps));
 
 resolver.define('stillTrue', ({ payload, context }) => handleStillTrue(payload, ctxOf(context), changeDeps));
+
+// "What if we upgrade?": the re-verify list before the version changes; writes nothing. Owner or Jira administrator.
+resolver.define('upgradePreview', ({ payload, context }) => handleUpgradePreview(payload, ctxOf(context), changeDeps));
 
 // Release-note labels (spec F9): one model call per paste, owner or Jira administrator only.
 resolver.define('releaseNotes', ({ payload, context }) => handleReleaseNotes(payload, ctxOf(context), changeDeps));

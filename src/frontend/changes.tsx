@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Button, Heading, Inline, Lozenge, SectionMessage, Select, Spinner, Stack, Text, TextArea, Textfield, xcss } from '@forge/react';
 import type { LabelKind } from '../change/release-notes';
-import type { ChangeView, RecentAsk } from '../resolvers/change-handlers';
+import type { ChangeView, RecentAsk, UpgradePreview } from '../resolvers/change-handlers';
 import { call, cardStyle, type Option } from './common';
 
 /**
@@ -9,7 +9,8 @@ import { call, cardStyle, type Option } from './common';
  * opening the fact form; and the asker's recent questions with "May have changed: ask again".
  */
 
-type ChangesReply = { ok: true; changes: ChangeView[] } | { ok: false; reason: string };
+type EnvView = { id: number; name: string; version: string | null };
+type ChangesReply = { ok: true; changes: ChangeView[]; environments: EnvView[] } | { ok: false; reason: string };
 type Reply = { ok: true; settled?: string[] } | { ok: false; reason: string };
 
 const show = (v: unknown) => (v === true ? 'Yes' : v === false ? 'No' : v === null || v === undefined ? 'nothing' : String(v));
@@ -75,6 +76,73 @@ const ChangedForm = ({ toolId, to, fact, onDone }: { toolId: number; to: string;
   );
 };
 
+/** "What if we upgrade?": what the Changes screen would list if this environment moved to that version. Saves nothing. */
+const UpgradePreviewForm = ({ toolId, environments }: { toolId: number; environments: EnvView[] }) => {
+  const options: Option[] = environments.map((e) => ({ label: `${e.name} (now ${e.version ?? 'not seen yet'})`, value: String(e.id) }));
+  const [env, setEnv] = useState<Option | null>(options[0] ?? null);
+  const [version, setVersion] = useState('');
+  const [r, setR] = useState<UpgradePreview | null>(null);
+  const [busy, setBusy] = useState(false);
+  const preview = async () => {
+    if (!env) return;
+    setBusy(true);
+    try {
+      setR(await call<UpgradePreview>('upgradePreview', { toolId, environmentId: Number(env.value), toVersion: version.trim() }));
+    } catch (e) {
+      setR({ ok: false, reason: String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  return (
+    <Box xcss={cardStyle}>
+      <Stack space="space.100">
+        <Text weight="bold">What if we upgrade?</Text>
+        <Text size="small">See what a new version would change before it happens: which facts would need re-verifying and whose answers rely on them. Nothing is saved.</Text>
+        <Inline space="space.100" alignBlock="center" shouldWrap>
+          <Box xcss={xcss({ width: '240px' })}>
+            <Select options={options} value={env} onChange={(o: Option) => setEnv(o)} placeholder="Environment" />
+          </Box>
+          <Box xcss={xcss({ width: '120px' })}>
+            <Textfield value={version} placeholder="14.0" maxLength={40} onChange={(e) => setVersion(String(e.target.value ?? ''))} />
+          </Box>
+          <Button onClick={() => void preview()} isDisabled={busy || !env || !version.trim()}>
+            Preview
+          </Button>
+          {busy ? <Spinner size="small" /> : null}
+        </Inline>
+        {r && !r.ok ? (
+          <SectionMessage appearance="warning">
+            <Text>{r.reason}</Text>
+          </SectionMessage>
+        ) : null}
+        {r?.ok && r.same ? (
+          <SectionMessage appearance="information">
+            <Text>{`${r.environment} already counts as ${r.to} (the tool's versions are compared at that level): nothing would change.`}</Text>
+          </SectionMessage>
+        ) : null}
+        {r?.ok && !r.same ? (
+          <SectionMessage appearance={r.toRecheck.length ? 'warning' : 'success'} title={`If ${r.environment} moves from ${r.from ?? 'an unseen version'} to ${r.to}`}>
+            <Text>
+              {r.toRecheck.length
+                ? `${plural(r.toRecheck.length, 'fact', 'facts')} would need re-verifying. Until the owner does, answers that rely on them say Don't know yet instead of vouching for the old version.`
+                : `Every version-dependent fact is already verified on ${r.to}: answers would not change.`}
+            </Text>
+            {r.toRecheck.map((f) => (
+              <Text key={`${f.key}|${f.scope}`}>{`• ${f.label} · ${f.scope} · now ${show(f.was)}${f.unit && typeof f.was === 'number' ? ` (${f.unit})` : ''}`}</Text>
+            ))}
+            <Text>{`${plural(r.recentAnswers, 'recent answer', 'recent answers')} in ${r.environment} would be marked "May have changed" for the people who asked.`}</Text>
+            <Text size="small">
+              {`Already verified on ${r.to}: ${r.alreadyVerified}. Not affected: ${plural(r.notListed, 'fact that doesn’t', 'facts that don’t')} depend on the version, ${plural(r.rulesUntouched, 'policy rule', 'policy rules')}, ${r.otherEnvironments.join(', ') || 'no other environments'}.`}
+            </Text>
+          </SectionMessage>
+        ) : null}
+      </Stack>
+    </Box>
+  );
+};
+
 export const ChangesSection = ({ toolId, refreshKey }: { toolId: number; refreshKey: number }) => {
   const [data, setData] = useState<ChangesReply | null>(null);
   const [changing, setChanging] = useState<string | null>(null);
@@ -137,6 +205,7 @@ export const ChangesSection = ({ toolId, refreshKey }: { toolId: number; refresh
         <Heading as="h2">Changes</Heading>
         {checkedAt ? <Text size="small" color="color.text.subtlest">{`Records checked ${day(checkedAt)} · looks again every 30 seconds`}</Text> : null}
       </Inline>
+      {data.environments?.length ? <UpgradePreviewForm toolId={toolId} environments={data.environments} /> : null}
       {data.changes.length === 0 ? <Text>No version changes yet.</Text> : null}
       {message ? (
         <SectionMessage appearance={message.ok ? 'success' : 'warning'}>

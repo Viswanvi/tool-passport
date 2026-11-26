@@ -1,5 +1,6 @@
 import { answerQuestion, type Answer } from '../engine/answer';
 import { buildCard, type Card } from '../engine/card';
+import { handlePassport, type PassportDeps } from '../resolvers/passport-handlers';
 import type { CheckResult, Groups } from '../engine/model';
 import { combine } from '../engine/verdict';
 import { handleIssueEvent } from '../loop/events';
@@ -725,9 +726,8 @@ export const SAFETY_CASES: readonly SafetyCase[] = [
     group: G16,
     title: 'a passport stamp shows Yes only when every check under it passed',
     async run() {
-      const removals: Array<(w: World) => void> = [(w) => (w.access = []), (w) => (w.readiness = []), (w) => (w.rules = []), (w) => w.readFailures.set(DEV, 'unreachable'), () => undefined];
       const cards = [];
-      for (const remove of removals) {
+      for (const remove of [...BLOCKERS, () => undefined]) {
         const w = yesWorld();
         remove(w);
         cards.push(cardOf(w, await ask(w)));
@@ -748,4 +748,56 @@ export const SAFETY_CASES: readonly SafetyCase[] = [
       }
     },
   },
+  {
+    id: 'passport',
+    group: G16,
+    title: 'a Passport cell never says Yes where the same question on Ask would not',
+    async run() {
+      const cell = async (w: World) => {
+        const r = await handlePassport({ toolId: w.tool.id }, { accountId: PRIYA }, passportDeps(w));
+        if (!r.ok) throw new Error(`passport refused: ${r.reason}`);
+        return r.rows.find((x) => x.key === 'web_frontend')?.cells.find((c) => c.environmentId === DEV);
+      };
+      // The starting point is Yes, so the case can't pass just because something else already blocked.
+      same((await cell(yesWorld()))?.verdict, 'yes', 'starting cell');
+      for (const remove of BLOCKERS) {
+        const w = yesWorld();
+        remove(w);
+        const c = await cell(w);
+        const asked = verdictOf(await ask(w));
+        same(c?.verdict, asked, 'cell against Ask');
+        ok(asked === 'yes' || c?.title !== 'Yes', `cell says Yes where Ask says ${asked}`);
+      }
+    },
+  },
 ];
+
+/**
+ * One change to a world whose dashboard answer in KS-DEV is Yes, covering every other verdict: Don't know yet
+ * (no access mapping, no readiness key, no rule, an unreadable record), Not ready (the record lacks the frontend
+ * build), Yes, with approval (no approval granted) and No (the rule denies).
+ */
+const BLOCKERS: Array<(w: World) => void> = [
+  (w) => (w.access = []),
+  (w) => (w.readiness = []),
+  (w) => (w.rules = []),
+  (w) => w.readFailures.set(DEV, 'unreachable'),
+  (w) => (w.records.get(DEV)!['Build environments'] = ['standard']),
+  (w) => (w.grants = []),
+  (w) => (w.rules = w.rules.map((r) => ({ ...r, effect: 'deny' as const }))),
+];
+
+/** The Passport screen's reads, on the in-memory world (no model: its cells come from catalog keys). */
+function passportDeps(w: World): PassportDeps {
+  const base = depsFor(w, modelThrowing());
+  return {
+    loadTool: async (id) => (id === w.tool.id ? w.tool : null),
+    loadEnvironment: async (id) => w.environments.find((e) => e.id === id) ?? null,
+    listEnvironments: async () => w.environments,
+    loadCatalog: async () => w.catalog,
+    readGroups: async (a) => w.groups.get(a) ?? { ok: false },
+    repo: base.repo,
+    environments: base.environments,
+    saveAsk: async () => null,
+  };
+}

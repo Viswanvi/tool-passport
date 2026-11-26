@@ -4,7 +4,7 @@ import { noteVersion, type ChangeRow, type DetectRepo } from '../../src/change/d
 import { answerQuestion } from '../../src/engine/answer';
 import type { Environment } from '../../src/engine/model';
 import type { SavedLabel } from '../../src/change/release-notes';
-import { handleChanges, handleRecentAsks, handleReleaseNotes, handleStillTrue, type ChangeDeps, type RecentAsk } from '../../src/resolvers/change-handlers';
+import { handleChanges, handleRecentAsks, handleReleaseNotes, handleStillTrue, handleUpgradePreview, type ChangeDeps, type RecentAsk } from '../../src/resolvers/change-handlers';
 import { handleEdit, type EditDeps } from '../../src/resolvers/edit-handlers';
 import { askInput, demoWorld, depsFor, DEV, MARCO, modelReplying, picks, PRIYA, PROD, SAM, type World } from '../support/demo-world';
 import { loopWorld, memoryWriter } from '../support/fix-world';
@@ -355,6 +355,42 @@ describe('the Changes screen and "Still true"', () => {
     expect(await handleChanges({ toolId: 1 }, { accountId: SAM }, deps)).toMatchObject({ ok: false });
     expect(reads).toEqual([]);
     expect(m.changes).toEqual([]);
+  });
+
+  it('previews an upgrade before it happens: what would need re-verifying, which recent answers rely on it, and writes nothing', async () => {
+    const w = demoWorld();
+    const m = memoryChanges(w, [
+      { id: 501, environmentId: DEV, factVersionIds: w.factVersions.filter((v) => v.factId === factId(w, 'max_upload_gb')).map((v) => v.id), daysAgo: 2, mayHaveChanged: false },
+      { id: 502, environmentId: DEV, factVersionIds: [], daysAgo: 2, mayHaveChanged: false },
+      { id: 503, environmentId: PROD, factVersionIds: w.factVersions.map((v) => v.id), daysAgo: 2, mayHaveChanged: false },
+    ]);
+    const x = loopWorld();
+    const deps: ChangeDeps = {
+      loop: { ...x.deps, loadTool: async () => w.tool, loadCatalog: async () => w.catalog },
+      changes: m.repo,
+      writer: memoryWriter(w),
+      check: { isJiraAdmin: async () => false },
+      listEnvironments: async () => w.environments,
+      loadRegistry: async () => ({ facts: w.facts.map((f) => ({ ...f, versions: w.factVersions.filter((v) => v.factId === f.id) })), rules: w.rules, readinessKeys: w.readiness, accessMappings: w.access }),
+    };
+    const before = JSON.stringify({ facts: w.factVersions, changes: m.changes, items: m.items, asks: m.asks });
+    const r = await handleUpgradePreview({ toolId: 1, environmentId: DEV, toVersion: '14.0.3' }, { accountId: MARCO }, deps);
+    expect(r).toMatchObject({ ok: true, environment: 'KS-DEV', from: '13.2', to: '14.0', same: false, notListed: 2, rulesUntouched: 8, otherEnvironments: ['KS-PROD (13.2)'], recentAnswers: 1 });
+    if (r.ok) {
+      expect(r.toRecheck).toHaveLength(4);
+      expect(r.toRecheck).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'max_upload_gb', label: 'Upload a file of a given size', was: 2 })]));
+    }
+    expect(JSON.stringify({ facts: w.factVersions, changes: m.changes, items: m.items, asks: m.asks })).toBe(before);
+    // The answers themselves are untouched: KS-DEV still runs 13.2 and still says No to 3 GB.
+    expect(await verdict(w, DEV)).toBe('no');
+  });
+
+  it('the same version at the tool\'s granularity changes nothing; a bad version or a non-owner is refused', async () => {
+    const { deps } = await owner();
+    expect(await handleUpgradePreview({ toolId: 1, environmentId: PROD, toVersion: '13.2.9' }, { accountId: MARCO }, deps)).toMatchObject({ ok: true, same: true, toRecheck: [], recentAnswers: 0 });
+    expect(await handleUpgradePreview({ toolId: 1, environmentId: PROD, toVersion: 'latest' }, { accountId: MARCO }, deps)).toMatchObject({ ok: false });
+    expect(await handleUpgradePreview({ toolId: 1, environmentId: PROD, toVersion: '14.0' }, { accountId: SAM }, deps)).toMatchObject({ ok: false });
+    expect(await handleUpgradePreview({ toolId: 1, environmentId: 999, toVersion: '14.0' }, { accountId: MARCO }, deps)).toMatchObject({ ok: false });
   });
 
   it('"Still true on 14.0" adds the verification in one click; the answer in KS-DEV comes back, KS-PROD untouched', async () => {

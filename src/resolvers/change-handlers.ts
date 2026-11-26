@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { buildRecheckList, detectVersions, stillTrue, type ChangeRecord, type ChangeRepo } from '../change/changes';
+import { affectedFacts, buildRecheckList, detectVersions, RECENT_DAYS, staleVerifications, stillTrue, type ChangeRecord, type ChangeRepo } from '../change/changes';
+import { normaliseVersion } from '../engine/version';
 import { labelReleaseNotes, MAX_NOTES_CHARS, type LabelKind, type LabelStore } from '../change/release-notes';
 import type { Environment, Tool } from '../engine/model';
 import type { ChatFn } from '../engine/translate';
@@ -79,7 +80,11 @@ async function catchUp(tool: Tool, deps: ChangeDeps): Promise<void> {
 
 const OPEN_LIMIT = 20;
 
-export async function handleChanges(payload: unknown, ctx: ResolverContext, deps: ChangeDeps): Promise<{ ok: true; changes: ChangeView[] } | Refusal> {
+export async function handleChanges(
+  payload: unknown,
+  ctx: ResolverContext,
+  deps: ChangeDeps,
+): Promise<{ ok: true; changes: ChangeView[]; environments: Array<{ id: number; name: string; version: string | null }> } | Refusal> {
   const p = ToolRef.safeParse(payload);
   if (!p.success) return { ok: false, reason: 'Pick a tool' };
   const tool = await deps.loop.loadTool(p.data.toolId);
@@ -134,7 +139,73 @@ export async function handleChanges(payload: unknown, ctx: ResolverContext, deps
       otherEnvironments: environments.filter((e) => e.id !== c.environmentId).map((e) => `${e.name} (${e.lastSeenVersion ?? 'version not seen yet'})`),
     });
   }
-  return { ok: true, changes: views };
+  return { ok: true, changes: views, environments: environments.map((e) => ({ id: e.id, name: e.name, version: e.lastSeenVersion })) };
+}
+
+// ---- "What if we upgrade?": the re-verify list before the version changes -----------------------------------
+
+export type UpgradePreview =
+  | {
+      ok: true;
+      environment: string;
+      from: string | null;
+      /** The version as the app will count it (the tool's granularity: 14.0.3 is 14.0 at minor). */
+      to: string;
+      /** The same version at that granularity: nothing would change. */
+      same: boolean;
+      toRecheck: Array<{ key: string; label: string; scope: string; was: unknown; unit: string | null }>;
+      /** Version-dependent facts already verified on the new version. */
+      alreadyVerified: number;
+      notListed: number;
+      /** Recent answers in this environment (30 days) that rely on a verification the new version wouldn't keep. */
+      recentAnswers: number;
+      rulesUntouched: number;
+      otherEnvironments: string[];
+    }
+  | { ok: false; reason: string };
+
+const Preview = z.object({ toolId: z.number().int().positive(), environmentId: z.number().int().positive(), toVersion: z.string().min(1).max(40) });
+
+/**
+ * The owner types the version an environment is about to move to and sees, before anything changes, what the
+ * Changes screen would then list: the facts to re-verify, the recent answers that relied on them, and what stays
+ * untouched. The same functions as a real change (affectedFacts, staleVerifications); it writes nothing.
+ */
+export async function handleUpgradePreview(payload: unknown, ctx: ResolverContext, deps: ChangeDeps): Promise<UpgradePreview> {
+  const p = Preview.safeParse(payload);
+  if (!p.success) return { ok: false, reason: 'Pick an environment and enter a version' };
+  const tool = await deps.loop.loadTool(p.data.toolId);
+  if (!tool) return { ok: false, reason: 'That tool no longer exists' };
+  const allowed = await mayWriteTool(ctx.accountId, tool, deps.check);
+  if (!allowed.ok) return allowed;
+  const environments = await deps.listEnvironments(tool.id);
+  const env = environments.find((e) => e.id === p.data.environmentId);
+  if (!env) return { ok: false, reason: 'That environment is not one of this tool' };
+  const to = normaliseVersion(p.data.toVersion, tool.versionGranularity);
+  if (!to) return { ok: false, reason: 'Enter a version number, such as 14.0' };
+  const from = env.lastSeenVersion;
+  const [catalog, registry, inScope] = await Promise.all([deps.loop.loadCatalog(tool), deps.loadRegistry(tool.id), deps.changes.factsInScope(tool.id, env.id)]);
+  const others = environments.filter((e) => e.id !== env.id).map((e) => `${e.name} (${e.lastSeenVersion ?? 'version not seen yet'})`);
+  const common = { environment: env.name, from, to, notListed: inScope.filter((f) => !f.versionSensitive).length, rulesUntouched: registry.rules.filter((r) => r.status === 'active').length, otherEnvironments: others };
+  if (from === to) return { ok: true, ...common, same: true, toRecheck: [], alreadyVerified: 0, recentAnswers: 0 };
+
+  const envName = (id: number | null) => (id === null ? 'all environments' : (environments.find((e) => e.id === id)?.name ?? `environment ${id}`));
+  const affected = affectedFacts(inScope, to);
+  const stale = staleVerifications(inScope, to);
+  const recent = (await deps.changes.recentAsks(env.id, RECENT_DAYS)).filter((a) => a.factVersionIds.some((id) => stale.has(id)));
+  return {
+    ok: true,
+    ...common,
+    same: false,
+    toRecheck: affected.map((f) => {
+      const k = catalog.keys.get(f.factKey);
+      const active = f.versions.filter((v) => v.status === 'active');
+      const was = (from ? active.find((v) => v.version === from) : undefined) ?? active.at(-1);
+      return { key: f.factKey, label: k?.label ?? f.factKey, scope: `${envName(f.environmentId)}${f.audienceGroup ? ` · ${f.audienceGroup}` : ''}`, was: was?.value ?? null, unit: k?.unit ?? null };
+    }),
+    alreadyVerified: inScope.filter((f) => f.status === 'active' && f.versionSensitive).length - affected.length,
+    recentAnswers: recent.length,
+  };
 }
 
 export interface RecentAsk {

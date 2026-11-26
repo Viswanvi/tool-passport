@@ -1,6 +1,6 @@
 # Tool Passport privacy policy
 
-Last updated: 25 November 2026
+Last updated: 26 November 2026
 
 Tool Passport is an Atlassian Forge app for Jira and Jira Service Management. It runs entirely on Atlassian's
 platform (the Runs on Atlassian program): it makes no calls outside Atlassian, and its data stays in Atlassian's
@@ -21,6 +21,8 @@ In Forge SQL, Atlassian's hosted database for the app, separately for each site:
   stores no names, email addresses or avatars; screens show those live from Atlassian.
 - **Questions people ask.** The text is deleted automatically after 30 days. What the app keeps longer is its
   reading of the question as catalog keys (for example `web_frontend`), the verdict, and which records it used.
+  When someone checks a work item with **Check this story**, its summary is kept the same way, as that person's
+  question.
 - **Tool records** that tool owners and Jira administrators enter: capabilities, facts and the versions they were
   verified on, policy rules, readiness requirements, group mappings and environments.
 - **Request records:** the keys of the Jira requests it raised, their kind and status.
@@ -28,15 +30,18 @@ In Forge SQL, Atlassian's hosted database for the app, separately for each site:
 
 ## What the app reads but does not keep
 
-Assets environment records, a person's Jira group membership, and the status of the requests it raised. These are
+Assets environment records, a person's Jira group membership, the status of the requests it raised, and, when
+someone clicks **Check this story** on a work item, that work item's summary and description, read as that person
+so only what they may see is read. These are
 read when needed and are not copied into the app's storage, except that the app notes the tool version each
 environment was last seen on.
 
 ## Model use
 
 To understand a question, the app sends its text, with the tool's catalog of capabilities, to an Atlassian-hosted
-model through Forge LLM. The model never receives facts, policy rules, environment values, group names or anyone's
-identity, and its reply can only name catalog keys. If a tool owner pastes release notes on the Changes screen, the
+model through Forge LLM. For **Check this story**, that text is the work item's summary and the start of its
+description, up to 500 characters. The model never receives facts, policy rules, environment values, group names or
+anyone's identity, and its reply can only name catalog keys. The **Passport** screen calls no model. If a tool owner pastes release notes on the Changes screen, the
 notes are sent the same way to suggest labels. Atlassian applies its usual moderation to these requests.
 
 ## Requests in Jira Service Management

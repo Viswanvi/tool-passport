@@ -6,6 +6,14 @@ modules:
         function: ui-resolver
       render: native
       title: Tool Passport
+  jira:issuePanel:
+    - key: passport-story           # "Check this story": is what this work item needs possible where it will run?
+      resource: ui
+      resolver:
+        function: ui-resolver
+      render: native
+      title: Tool Passport
+      icon: resource:icons;passport.svg
   jira:adminPage:
     - key: passport-setup           # setup wizard, demo seed and reset, test runs (Phase 4)
       resource: ui
@@ -114,6 +122,8 @@ modules:
 resources:
   - key: ui
     path: src/frontend/index.tsx
+  - key: icons                      # the story panel's icon, shipped with the app (nothing loads from outside)
+    path: static/icons
 permissions:
   # Assets and groups are read as the app (DECISIONS D25), so no scope allows impersonation.
   scopes:

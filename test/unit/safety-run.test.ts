@@ -55,7 +55,7 @@ describe('assertion helpers', () => {
 
 describe('the case list', () => {
   it('holds every case of the build suite, with unique ids, covering spec cases 1 to 13', () => {
-    expect(SAFETY_CASES.length).toBe(48);
+    expect(SAFETY_CASES.length).toBe(49);
     expect(new Set(SAFETY_CASES.map((c) => c.id)).size).toBe(SAFETY_CASES.length);
     for (let n = 1; n <= 13; n++) expect(SAFETY_CASES.some((c) => c.group.startsWith(`${n}. `)), `case ${n}`).toBe(true);
   });
@@ -65,8 +65,8 @@ describe('runSafetySuite', () => {
   it('runs every case against the engine and reports each result', async () => {
     const run = await runSafetySuite();
     expect(run.failed).toEqual([]);
-    expect(run).toMatchObject({ total: 48, passed: 48 });
-    expect(run.groups.reduce((n, g) => n + g.total, 0)).toBe(48);
+    expect(run).toMatchObject({ total: 49, passed: 49 });
+    expect(run.groups.reduce((n, g) => n + g.total, 0)).toBe(49);
     expect(run.groups[0]).toMatchObject({ group: SAFETY_CASES[0]!.group });
   });
 
