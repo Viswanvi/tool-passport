@@ -1470,3 +1470,14 @@ Ask page passes the callback, so Passport and the story panel are unchanged.
   reload. (A click of mine opened TPD-13's title for editing when the page shifted; I cancelled it with ✗ without
   typing, and the title is unchanged.)
 - Demo site left as before this check: KS-DEV with standard, frontend. Production still 2.4.0.
+
+### Production 2.5.0, 2026-11-26 (human: "Yes, deploy")
+
+- Before: working tree clean at 2943cc6; `npx vitest run`: `Tests 508 passed (508)`; `npx tsc --noEmit -p .` and
+  `npx eslint src test` exit 0; `forge lint`: `No issues found.`
+- `forge deploy -e production --non-interactive` (19:04 UTC): "[2.5.0] … eligible for the Runs on Atlassian program".
+  `forge install list`: tp-judge-1 and tp-judge-2 production, major 2, Up-to-date (no new permission, no migration,
+  no re-approval).
+- tp-judge-2 after the deploy: Ask loads with Kestrel Studio and KS-DEV, "Your recent questions: Can I build a custom
+  web front end or dashboard? · KS-DEV · Yes" (the verdict the run saved); `[passport] rows=19 environments=2`; no
+  errors in the production log. LLM calls: 0.
