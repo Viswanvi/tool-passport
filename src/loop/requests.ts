@@ -4,6 +4,7 @@ import { buildCard, requestedStep, ruleReason, type Card } from '../engine/card'
 import type { CatalogChoice } from '../engine/catalog';
 import type { Catalog, CheckResult, EngineRepo, Environment, EnvironmentReader, Groups, Tool } from '../engine/model';
 import { approvalOutcome, type ResolutionMap } from './resolution';
+import type { StoryLinks } from './stories';
 
 /**
  * The request loop (spec section 11, F4), without Forge. Request the fix re-evaluates the stored ask for the
@@ -167,6 +168,8 @@ export interface LoopDeps extends RecheckDeps {
   approvals: ApprovalStore;
   /** Set in setup: which resolution names approve or decline. */
   resolutionMap(): Promise<ResolutionMap | null>;
+  /** "Add to story": stories an ask's answer was posted on, told when a re-check changes it. */
+  stories?: StoryLinks;
   log?(line: string): void;
 }
 

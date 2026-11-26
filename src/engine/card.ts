@@ -126,6 +126,11 @@ const TITLE: Record<Verdict, string> = {
   dont_know: "Don't know yet",
 };
 
+/** A stored verdict in the card's fixed words; null for anything that isn't one. */
+export function verdictTitle(v: string | null | undefined): string | null {
+  return v && Object.hasOwn(TITLE, v) ? TITLE[v as Verdict] : null;
+}
+
 // Each verdict has its own colour; Not ready (yellow) and Don't know yet (purple) never look like No (red).
 const LOZENGE: Record<Verdict, LozengeAppearance> = {
   yes: 'success',

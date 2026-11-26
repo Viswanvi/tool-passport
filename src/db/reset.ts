@@ -16,6 +16,7 @@ const CLEAR: Array<[table: string, query: string]> = [
   ['release_labels', 'DELETE FROM release_labels WHERE change_id IN (SELECT id FROM changes WHERE tool_id = ?)'],
   ['recheck_items', 'DELETE FROM recheck_items WHERE change_id IN (SELECT id FROM changes WHERE tool_id = ?)'],
   ['changes', 'DELETE FROM changes WHERE tool_id = ?'],
+  ['story_shares', 'DELETE FROM story_shares WHERE tool_id = ?'],
   ['approval_grants', 'DELETE FROM approval_grants WHERE tool_id = ?'],
   ['requests', 'DELETE FROM requests WHERE tool_id = ?'],
   ['asks', 'DELETE FROM asks WHERE tool_id = ?'],

@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import { answerQuestion } from '../engine/answer';
 import { canPick } from '../engine/audience';
+import type { Card } from '../engine/card';
 import type { Environment } from '../engine/model';
+import { cardWithRequests, recheckAsk, saveResult, type LoopDeps } from '../loop/requests';
+import { storyComment, StoryCommentError, type StoryLinks } from '../loop/stories';
 import { finishAsk, type AskHandlerDeps, type AskReply } from './handlers';
 
 /**
@@ -119,5 +122,71 @@ export async function handleStoryCheck(payload: unknown, ctx: StoryContext, deps
   } catch (e) {
     console.error(`[story] failed: ${String(e).slice(0, 300)}`);
     return { ok: false, error: 'try_again', card: null };
+  }
+}
+
+// ---- Add to story ---------------------------------------------------------------------------------------
+
+export interface StoryShareDeps {
+  loop: LoopDeps;
+  stories: StoryLinks;
+  /** Brings the tables up to date first (a minor upgrade fires no lifecycle event, D27). */
+  prepare?(): Promise<unknown>;
+}
+
+export type StoryShareError = 'not_signed_in' | 'bad_request' | 'not_found' | 'nothing_to_share' | 'not_allowed' | 'try_again';
+
+export type StoryShareReply =
+  | { ok: true; card: Card; verdict: string; /** False if the story couldn't be remembered: no update will follow. */ following: boolean }
+  | { ok: false; error: StoryShareError; message: string };
+
+const SHARE_MESSAGES: Record<StoryShareError, string> = {
+  not_signed_in: 'Sign in to add the answer.',
+  bad_request: 'Open this from a work item, then try again.',
+  not_found: 'That answer is no longer available. Check the story again.',
+  nothing_to_share: 'There is no answer to add yet. Check the story first.',
+  not_allowed: "You can't comment on this work item, so the answer wasn't added.",
+  try_again: "The answer couldn't be added just now. Try again.",
+};
+
+const shareFailure = (error: StoryShareError): StoryShareReply => ({ ok: false, error, message: SHARE_MESSAGES[error] });
+
+const StoryShare = z.object({ askId: z.number().int().positive() });
+
+/**
+ * Add to story: the person's own stored ask, checked again now, posted on the work item from the Forge context as
+ * their comment. The payload names only the ask; the comment is built here from the card (CLAUDE.md rule 3). The
+ * story is remembered with the verdict it was told, so a later change is added there once (loop/stories.ts).
+ */
+export async function handleStoryShare(payload: unknown, ctx: StoryContext, deps: StoryShareDeps): Promise<StoryShareReply> {
+  const asker = ctx.accountId;
+  if (!asker) return shareFailure('not_signed_in');
+  const p = StoryShare.safeParse(payload);
+  const issueKey = ctx.issueKey;
+  if (!p.success || !issueKey) return shareFailure('bad_request');
+  try {
+    await deps.prepare?.();
+    const ask = await deps.loop.loadAsk(p.data.askId);
+    if (!ask || ask.askerAccountId !== asker) return shareFailure('not_found');
+    const now = await recheckAsk(ask, deps.loop);
+    if (!now) return shareFailure('not_found');
+    await saveResult(deps.loop, ask.id, now.answer);
+    const card = await cardWithRequests(now, asker, deps.loop.requests);
+    if (card.kind !== 'verdict' || !card.verdict) return shareFailure('nothing_to_share');
+    // The comment first: a story is only remembered once it has the answer, so an update never comes out of nowhere.
+    await deps.stories.comments.asUser(issueKey, storyComment(card, { toolName: now.tool.name, asker }));
+    let following = true;
+    try {
+      await deps.stories.shares.save({ askId: ask.id, toolId: now.tool.id, issueKey, verdict: card.verdict });
+    } catch (e) {
+      following = false;
+      console.error(`[story] the share was posted but not remembered: ${String(e).slice(0, 200)}`);
+    }
+    console.log(`[story] added verdict=${card.verdict}`);
+    return { ok: true, card, verdict: card.verdict, following };
+  } catch (e) {
+    if (e instanceof StoryCommentError && e.code === 'not_allowed') return shareFailure('not_allowed');
+    console.error(`[story] add failed: ${String(e).slice(0, 300)}`);
+    return shareFailure('try_again');
   }
 }

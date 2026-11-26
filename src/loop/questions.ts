@@ -2,6 +2,7 @@ import type { Catalog, Environment, Tool } from '../engine/model';
 import { normaliseVersion } from '../engine/version';
 import type { RegistryWriter } from '../registry/write';
 import { recheckAsk, saveResult, type LoopDeps, type Rechecked, type RequestRow } from './requests';
+import { tellStoriesSafely } from './stories';
 
 /**
  * Ask the owner, the owner's side (spec F5, section 11 `publishAnswer`). The owner answers once: the answer
@@ -110,6 +111,7 @@ async function settleOne(row: RequestRow, deps: LoopDeps): Promise<'settled' | '
   // Someone else (another publish, or the owner resolving it by hand) may be settling it right now.
   if (!(await deps.requests.markResolved(row.id))) return 'open';
   await saveResult(deps, ask.id, now.answer);
+  await tellStoriesSafely({ askId: ask.id, asker: ask.askerAccountId, now, trigger: row.requestKey }, deps);
   try {
     await deps.jsm.comment(row.requestKey, answeredComment(now));
   } catch (e) {

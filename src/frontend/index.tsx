@@ -43,7 +43,7 @@ import { PREFERRED_MODELS } from '../llm/model-choice';
 import type { SetupStatus } from '../resolvers/setup-handlers';
 import type { QuickPlan, QuickSetupReply } from '../resolvers/quick-setup';
 import type { PassportReply, PassportRow } from '../resolvers/passport-handlers';
-import type { StoryContextReply } from '../resolvers/story-handlers';
+import type { StoryContextReply, StoryShareReply } from '../resolvers/story-handlers';
 import type { SafetyRun } from '../safety/run';
 
 /**
@@ -1492,6 +1492,54 @@ const MyToolsPage = ({ tools, refreshKey }: { tools: Option[]; refreshKey: numbe
 // ---- "Check this story": the panel on a Jira work item --------------------------------------------------------
 
 /** The work item comes from the panel's Forge context on the server; the page sends only the tool and environment. */
+/**
+ * "Add to story" under a story's answer: posts it as the person's comment, built on the server from the stored ask.
+ * One click per answer shown; a changed answer can be added again.
+ */
+const AddToStory = ({ a }: { a: AnswerState }) => {
+  const [sending, setSending] = useState(false);
+  const [added, setAdded] = useState<string | null>(null);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const card = a.card;
+  if (!card || card.kind !== 'verdict' || !card.verdict || a.askId === null) return null;
+  const key = `${a.askId}:${card.title}`;
+  const add = async () => {
+    setSending(true);
+    setNote(null);
+    try {
+      const r = await call<StoryShareReply>('storyShare', { askId: a.askId });
+      if (r.ok) {
+        setAdded(key);
+        setNote({
+          ok: true,
+          text: r.following
+            ? 'Added to this work item as your comment. When a request for it is resolved, Tool Passport adds the new answer there too.'
+            : 'Added to this work item as your comment.',
+        });
+      } else setNote({ ok: false, text: r.message });
+    } catch {
+      setNote({ ok: false, text: "The answer couldn't be added just now. Try again." });
+    } finally {
+      setSending(false);
+    }
+  };
+  return (
+    <Stack space="space.100">
+      <Inline space="space.100" alignBlock="center" shouldWrap>
+        <Button onClick={() => void add()} isDisabled={a.busy || sending || added === key}>
+          {added === key ? 'Added to story' : 'Add to story'}
+        </Button>
+        {added === key ? null : <Text size="small" color="color.text.subtlest">Posts this answer, its stamps and the path to Yes as your comment, so the team sees it.</Text>}
+      </Inline>
+      {note ? (
+        <SectionMessage appearance={note.ok ? 'success' : 'warning'}>
+          <Text>{note.text}</Text>
+        </SectionMessage>
+      ) : null}
+    </Stack>
+  );
+};
+
 const StoryPanel = () => {
   const [ctx, setCtx] = useState<StoryContextReply | null>(null);
   const [tool, setTool] = useState<Option | null>(null);
@@ -1555,6 +1603,7 @@ const StoryPanel = () => {
       </Inline>
       {named && env?.value === String(named.id) ? <Text size="small" color="color.text.subtlest">{`${named.name} is named in the story.`}</Text> : null}
       <AnswerView a={a} />
+      <AddToStory a={a} />
     </Stack>
   );
 };

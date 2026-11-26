@@ -11,6 +11,7 @@ import {
   type ResolutionRead,
 } from './requests';
 import { approvalOutcome, type ResolutionMap } from './resolution';
+import { tellStoriesSafely } from './stories';
 
 /**
  * avi:jira:updated:issue and the sweep (spec section 11, F4). An issue the app didn't raise is ignored. A
@@ -116,6 +117,7 @@ export async function finishRecheck(row: RequestRow, deps: LoopDeps): Promise<'r
   const ask = await deps.loadAsk(row.askId);
   const now = ask ? await recheckAsk(ask, deps) : null;
   if (ask && now) await saveResult(deps, ask.id, now.answer);
+  await tellStoriesSafely({ askId: row.askId, asker: row.askerAccountId, now, trigger: row.requestKey }, deps);
   try {
     await deps.jsm.comment(row.requestKey!, recheckComment(row, now));
   } catch (e) {

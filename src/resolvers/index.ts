@@ -13,7 +13,7 @@ import { handleChooseModel, handleSetupStatus, type SetupStatusDeps } from './se
 import { handleRunSafety } from './safety-handlers';
 import { handleQuickSetup, handleQuickSetupPlan, type QuickSetupDeps } from './quick-setup';
 import { handleAskKey, handlePassport, type PassportDeps } from './passport-handlers';
-import { handleStoryCheck, handleStoryContext, type StoryContext, type StoryDeps } from './story-handlers';
+import { handleStoryCheck, handleStoryContext, handleStoryShare, type StoryContext, type StoryDeps } from './story-handlers';
 import { readIssueAsUser } from '../providers/issues-forge';
 import { runSafetySuite } from '../safety/run';
 import { sqlLabelStore } from '../db/labels';
@@ -105,6 +105,11 @@ const storyCtx = (context: { accountId?: string; extension?: { issue?: { key?: u
 resolver.define('storyContext', ({ context }) => handleStoryContext(storyCtx(context), storyDeps));
 
 resolver.define('storyCheck', ({ payload, context }) => handleStoryCheck(payload, storyCtx(context), storyDeps));
+
+// "Add to story": the person's own answer as their comment on this work item; the work item is the context's.
+resolver.define('storyShare', ({ payload, context }) =>
+  handleStoryShare(payload, storyCtx(context), { loop: loopDeps, stories: loopDeps.stories!, prepare: runMigrations }),
+);
 
 resolver.define('environments', ({ payload, context }) =>
   handleEnvironments(payload, ctxOf(context), { listTools, loadTool, listEnvironments, loadCatalog, readGroups }),

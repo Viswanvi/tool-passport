@@ -6,6 +6,8 @@ import { loadAsk, saveAskResult } from '../db/asks';
 import { loadCatalog, loadEnvironment, loadTool, sqlEngineRepo } from '../db/repo';
 import { sqlRequestRepo } from '../db/requests';
 import { getSetting, setSetting } from '../db/store';
+import { sqlStoryShares } from '../db/story-shares';
+import { forgeStoryComments } from '../providers/issues-forge';
 import type { Environment, Tool } from '../engine/model';
 import { forgeEnvironmentReader, readGroups } from '../providers/forge';
 import { handleIssueEvent } from './events';
@@ -71,6 +73,7 @@ export const loopDeps: LoopDeps = {
   setup: readRequestSetup,
   approvals: sqlApprovalStore,
   resolutionMap: readResolutionMap,
+  stories: { shares: sqlStoryShares, comments: forgeStoryComments },
   log: (line) => console.log(line),
 };
 

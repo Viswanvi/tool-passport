@@ -233,6 +233,7 @@ describe('version changes', () => {
     expect(order('release_labels')).toBeLessThan(order('changes'));
     expect(order('recheck_items')).toBeLessThan(order('changes'));
     expect(order('fact_versions')).toBeLessThan(order('facts'));
+    expect(order('story_shares')).toBeLessThan(order('asks'));
     for (const t of ['asks', 'requests', 'approval_grants', 'rules', 'readiness_keys', 'access_mappings', 'capability_links', 'catalog_keys', 'translations', 'environments']) {
       expect(order(t)).toBeGreaterThanOrEqual(0);
     }
