@@ -111,7 +111,7 @@ async function settleOne(row: RequestRow, deps: LoopDeps): Promise<'settled' | '
   // Someone else (another publish, or the owner resolving it by hand) may be settling it right now.
   if (!(await deps.requests.markResolved(row.id))) return 'open';
   await saveResult(deps, ask.id, now.answer);
-  await tellStoriesSafely({ askId: ask.id, asker: ask.askerAccountId, now, trigger: row.requestKey }, deps);
+  await tellStoriesSafely({ now, trigger: row.requestKey }, deps);
   try {
     await deps.jsm.comment(row.requestKey, answeredComment(now));
   } catch (e) {

@@ -1,12 +1,14 @@
 import { verdictTitle, type Card, type Chip } from '../engine/card';
-import { cardWithRequests, type LoopDeps, type Rechecked } from './requests';
+import type { CatalogChoice } from '../engine/catalog';
+import { cardWithRequests, requirementHash, type LoopDeps, type Rechecked, type StoredAsk } from './requests';
 
 /**
  * "Add to story" (D53), without Forge. The person posts the answer to the work item as their own comment, built by
  * code from the stored ask checked again now: the card's fixed words, its stamps and their evidence, the path to Yes.
- * The story is remembered with the verdict it was told. When a later re-check of that ask (a request resolved, a
- * question answered) gives a different verdict, the app adds the new answer to the story once: compare-and-set on
- * the remembered verdict, so an event and the sweep arriving together post one update.
+ * The story is remembered with the verdict it was told. When a later re-check of the same question (the same person,
+ * tool, environment and catalog keys, whichever of their asks it is: checking the story again makes a new one) gives
+ * a different verdict, the app adds the new answer to the story once: compare-and-set on the remembered verdict, so an
+ * event and the sweep arriving together post one update, and one story hears once however many times it was added.
  */
 
 export interface StoryShare {
@@ -19,9 +21,15 @@ export interface StoryShare {
 export interface StoryShareStore {
   /** Remember (or update) the story an ask's answer was posted on; safe to repeat. */
   save(s: { askId: number; toolId: number; issueKey: string; verdict: string }): Promise<void>;
-  forAsk(askId: number): Promise<StoryShare[]>;
+  /** Stories told an answer to the same question as this ask: same person, tool, environment and requirement. */
+  related(ask: StoredAsk): Promise<StoryShare[]>;
   /** Move the remembered verdict from `from` to `to`; true if this call made the move. */
   moveVerdict(id: number, from: string, to: string): Promise<boolean>;
+}
+
+/** Whether two stored requirements are the same question (order of keys doesn't matter). */
+export function sameRequirement(a: CatalogChoice[] | null, b: CatalogChoice[] | null): boolean {
+  return a !== null && b !== null && a.length > 0 && requirementHash(a) === requirementHash(b);
 }
 
 export type Adf = { type: 'doc'; version: 1; content: AdfNode[] };
@@ -110,29 +118,34 @@ export function storyUpdate(card: Card, x: { toolName: string; asker: string; wa
 // ---- the follow-up -------------------------------------------------------------------------------------
 
 /**
- * After a re-check of an ask: tell each story it was added to, once, if the verdict changed. A failure here never
- * stops the request loop (the caller catches); a comment that fails after the move is logged, not retried, so a
- * story never gets the same update twice.
+ * After a re-check of an ask: tell each story the same question was added to, once, if the verdict changed. Each
+ * story gets at most one update per change, even if the person added it twice. A failure here never stops the request
+ * loop (the caller catches); a comment that fails after the move is logged, not retried, so a story never gets the
+ * same update twice.
  */
-export async function tellStories(
-  x: { askId: number; asker: string; now: Rechecked | null; trigger: string | null },
-  deps: Pick<LoopDeps, 'stories' | 'requests' | 'log'>,
-): Promise<number> {
+export async function tellStories(x: { now: Rechecked | null; trigger: string | null }, deps: Pick<LoopDeps, 'stories' | 'requests' | 'log'>): Promise<number> {
   const links = deps.stories;
   const now = x.now;
-  if (!links || !now || now.card.kind !== 'verdict' || !now.card.verdict) return 0;
+  if (!links || !now || now.card.kind !== 'verdict' || !now.card.verdict || !now.ask.requirement) return 0;
   const verdict = now.card.verdict;
-  const changed = (await links.shares.forAsk(x.askId)).filter((s) => s.verdict !== verdict);
-  if (!changed.length) return 0;
-  const card = await cardWithRequests(now, x.asker, deps.requests);
+  const asker = now.ask.askerAccountId;
+  const byStory = new Map<string, StoryShare[]>();
+  for (const s of await links.shares.related(now.ask)) {
+    if (s.verdict !== verdict) byStory.set(s.issueKey, [...(byStory.get(s.issueKey) ?? []), s]);
+  }
+  if (!byStory.size) return 0;
+  const card = await cardWithRequests(now, asker, deps.requests);
   let told = 0;
-  for (const share of changed) {
-    if (!(await links.shares.moveVerdict(share.id, share.verdict, verdict))) continue;
+  for (const [issueKey, shares] of byStory) {
+    // Every remembered row for this story moves; the story hears once if this call moved any of them.
+    let won: StoryShare | null = null;
+    for (const s of shares) if ((await links.shares.moveVerdict(s.id, s.verdict, verdict)) && !won) won = s;
+    if (!won) continue;
     try {
-      await links.comments.asApp(share.issueKey, storyUpdate(card, { toolName: now.tool.name, asker: x.asker, was: share.verdict, trigger: x.trigger }));
+      await links.comments.asApp(issueKey, storyUpdate(card, { toolName: now.tool.name, asker, was: won.verdict, trigger: x.trigger }));
       told += 1;
     } catch (e) {
-      deps.log?.(`[story] update on ${share.issueKey} failed: ${String(e).slice(0, 200)}`);
+      deps.log?.(`[story] update on ${issueKey} failed: ${String(e).slice(0, 200)}`);
     }
   }
   if (told) deps.log?.(`[story] updated ${told} ${told === 1 ? 'story' : 'stories'} verdict=${verdict}`);
@@ -144,6 +157,6 @@ export async function tellStoriesSafely(x: Parameters<typeof tellStories>[0], de
   try {
     await tellStories(x, deps);
   } catch (e) {
-    deps.log?.(`[story] could not check the stories for ask ${x.askId}: ${String(e).slice(0, 200)}`);
+    deps.log?.(`[story] could not check the stories for ask ${x.now?.ask.id ?? '?'}: ${String(e).slice(0, 200)}`);
   }
 }

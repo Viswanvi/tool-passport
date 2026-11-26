@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { handleIssueEvent, sweepRequests } from '../../src/loop/events';
 import { raiseFix, recheckAsk } from '../../src/loop/requests';
-import { storyComment, StoryCommentError, type Adf, type StoryLinks } from '../../src/loop/stories';
+import { sameRequirement, storyComment, StoryCommentError, type Adf, type StoryLinks } from '../../src/loop/stories';
+import type { StoredAsk } from '../../src/loop/requests';
 import { adfText, handleStoryShare } from '../../src/resolvers/story-handlers';
 import { DEV, PRIYA, SAM } from '../support/demo-world';
 import { loopWorld, resolvedEvent } from '../support/fix-world';
@@ -13,7 +14,7 @@ import { loopWorld, resolvedEvent } from '../support/fix-world';
 
 const STORY = 'KAN-7';
 
-function memoryStories() {
+function memoryStories(asks: Map<number, StoredAsk>) {
   const shares: Array<{ id: number; askId: number; toolId: number; issueKey: string; verdict: string }> = [];
   const posted: Array<{ as: 'user' | 'app'; issueKey: string; body: Adf }> = [];
   const fail = { user: null as StoryCommentError | null, app: false, save: false, read: false };
@@ -25,9 +26,14 @@ function memoryStories() {
         if (held) held.verdict = s.verdict;
         else shares.push({ id: 900 + shares.length, ...s });
       },
-      async forAsk(askId) {
+      async related(ask) {
         if (fail.read) throw new Error("Table 'story_shares' doesn't exist");
-        return shares.filter((s) => s.askId === askId).map(({ id, issueKey, verdict }) => ({ id, issueKey, verdict }));
+        return shares
+          .filter((s) => {
+            const a = asks.get(s.askId);
+            return a && a.askerAccountId === ask.askerAccountId && a.toolId === ask.toolId && a.environmentId === ask.environmentId && sameRequirement(a.requirement, ask.requirement);
+          })
+          .map(({ id, issueKey, verdict }) => ({ id, issueKey, verdict }));
       },
       async moveVerdict(id, from, to) {
         const s = shares.find((x) => x.id === id);
@@ -52,7 +58,7 @@ function memoryStories() {
 
 function world() {
   const x = loopWorld();
-  const s = memoryStories();
+  const s = memoryStories(x.asks);
   x.deps.stories = s.links;
   // null: opened outside a work item (no issue in the Forge context).
   const share = (askId: number, accountId = PRIYA, issueKey: string | null = STORY) =>
@@ -153,6 +159,44 @@ describe('the update after a request is resolved', () => {
     await handleIssueEvent(resolvedEvent('TPD-1'), x.deps);
     await sweepRequests(x.deps, 25);
     expect(s.posted.filter((p) => p.as === 'app')).toHaveLength(1);
+  });
+
+  it('the story hears about the same question asked again: checking the story again makes a new ask (found live)', async () => {
+    const { x, s, share } = world();
+    await share(x.addAsk(DEV));
+    // The panel checked the story again, and the fix was requested from that newer answer.
+    const again = x.addAsk(DEV);
+    expect(await raiseFix(again, PRIYA, x.deps)).toMatchObject({ ok: true, raised: ['TPD-1'] });
+    // The same story added twice, from both answers: it still hears once.
+    await share(again);
+    expect(s.shares).toHaveLength(2);
+    x.w.records.get(DEV)!['Build environments'] = ['standard', 'frontend'];
+    x.jsm.resolutions.set('TPD-1', 'Done');
+    expect(await handleIssueEvent(resolvedEvent('TPD-1'), x.deps)).toBe('rechecked');
+    expect(s.posted.filter((p) => p.as === 'app')).toHaveLength(1);
+    expect(s.shares.map((r) => r.verdict)).toEqual(['yes_with_approval', 'yes_with_approval']);
+  });
+
+  it("never tells a story about someone else's question, another environment or other keys", async () => {
+    const { x, s, share } = world();
+    await share(x.addAsk(DEV, PRIYA, [{ key: 'max_upload_gb', value: 3 }])); // another question
+    await share(x.addAsk(null)); // Any environment
+    const sams = x.addAsk(DEV, SAM);
+    x.asks.set(sams, { ...x.asks.get(sams)!, askerAccountId: SAM });
+    s.shares.push({ id: 990, askId: sams, toolId: 1, issueKey: 'KAN-9', verdict: 'not_ready' }); // Sam's own share
+    const priyas = x.addAsk(DEV);
+    expect(await raiseFix(priyas, PRIYA, x.deps)).toMatchObject({ ok: true, raised: ['TPD-1'] });
+    x.w.records.get(DEV)!['Build environments'] = ['standard', 'frontend'];
+    x.jsm.resolutions.set('TPD-1', 'Done');
+    expect(await handleIssueEvent(resolvedEvent('TPD-1'), x.deps)).toBe('rechecked');
+    expect(s.posted.filter((p) => p.as === 'app')).toEqual([]);
+  });
+
+  it('the same question means the same keys and values, in any order', () => {
+    expect(sameRequirement([{ key: 'web_frontend' }, { key: 'max_upload_gb', value: 3 }], [{ key: 'max_upload_gb', value: 3 }, { key: 'web_frontend' }])).toBe(true);
+    expect(sameRequirement([{ key: 'max_upload_gb', value: 3 }], [{ key: 'max_upload_gb', value: 5 }])).toBe(false);
+    expect(sameRequirement(null, null)).toBe(false);
+    expect(sameRequirement([], [])).toBe(false);
   });
 
   it('no update when the verdict did not change', async () => {

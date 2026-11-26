@@ -47,6 +47,12 @@ const StoredRequirement = z.object({
   requirement: z.array(z.object({ key: z.string().min(1).max(128), value: z.union([z.string(), z.number(), z.boolean()]).optional() })).min(1).max(8),
 });
 
+/** An ask's stored requirement_json as catalog choices; null if it is missing or doesn't read cleanly. */
+export function requirementOf(json: unknown): CatalogChoice[] | null {
+  const parsed = StoredRequirement.safeParse(fromJsonColumn(json));
+  return parsed.success ? parsed.data.requirement : null;
+}
+
 /**
  * An ask for the request loop and Re-check: who asked, where, and the keys. Not the question text. A stored
  * requirement that doesn't read cleanly comes back as null, which re-checks as Don't know yet.
@@ -58,13 +64,12 @@ export async function loadAsk(askId: number): Promise<StoredAsk | null> {
     .execute();
   const r = (res.rows ?? [])[0] as Record<string, unknown> | undefined;
   if (!r) return null;
-  const parsed = StoredRequirement.safeParse(fromJsonColumn(r.requirement_json));
   return {
     id: id(r.id, 'asks', 'id'),
     askerAccountId: text(r.asker_account_id, 'asks', 'asker_account_id'),
     toolId: id(r.tool_id, 'asks', 'tool_id'),
     environmentId: idOrNull(r.environment_id, 'asks', 'environment_id'),
-    requirement: parsed.success ? parsed.data.requirement : null,
+    requirement: requirementOf(r.requirement_json),
   };
 }
 
