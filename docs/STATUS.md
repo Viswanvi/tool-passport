@@ -1481,3 +1481,27 @@ Ask page passes the callback, so Passport and the story panel are unchanged.
 - tp-judge-2 after the deploy: Ask loads with Kestrel Studio and KS-DEV, "Your recent questions: Can I build a custom
   web front end or dashboard? · KS-DEV · Yes" (the verdict the run saved); `[passport] rows=19 environments=2`; no
   errors in the production log. LLM calls: 0.
+
+### Stories hear when the ground moves; Set it all up before a desk; a 5-minute tour, 2026-11-27 (human: "Lets do this")
+
+Built (D55, D56): a story told an answer is checked again when a version change is noted or the owner re-verifies
+facts, and gets an update only when its verdict changed, saying why. Set it all up loads the demo even with no service
+desk, and says how to finish requests. JUDGE_GUIDE gained a 5-minute tour table near the top.
+
+- `npx vitest run`: `Tests 515 passed (515)`; `npx tsc --noEmit -p .` exit 0; `npx eslint src test` exit 0;
+  `forge lint`: `No issues found.`
+- Dev 5.19.0 ("eligible for the Runs on Atlassian program"). Live on the demo site, with MSD-20 already told "Yes":
+  - KS-DEV Version 13.2 → 14.0 in Assets; My tools showed "KS-DEV: 13.2 → 14.0"; log
+    `[story] updated 1 story verdict=dont_know`; MSD-20 got, from the app: "Tool Passport update: Don't know yet (was
+    Yes) · Kestrel Studio in KS-DEV · 14.0 … Build a custom web front end or dashboard: Verified on 13.2; KS-DEV runs
+    14.0 … Checked again for [the asker] after KS-DEV moved from 13.2 to 14.0."
+  - Still true on 14.0 for "Build a custom web front end or dashboard"; log `[story] updated 1 story verdict=yes`;
+    MSD-20 got "Tool Passport update: Yes (was Don't know yet) … Tool can do it: Yes (Owner-verified · 14.0) …
+    after the tool owner updated its verified facts."
+  - KS-DEV back to 13.2; My tools showed "KS-DEV: 14.0 → 13.2 · Every version-dependent fact is verified on 13.2";
+    no `[story]` line and no new comment (the verdict stayed Yes). MSD-20 has 4 updates in all.
+- Not run live: Set it all up on a site with no service desk (the demo site and both judge sites have one). Unit tests
+  only.
+- LLM calls: 0 (the re-checks reuse the stored translation).
+- Demo site left at KS-DEV 13.2; "Build a custom web front end or dashboard" is now also verified on 14.0, so Reset demo
+  before recording moment 3. Production still 2.5.0.
