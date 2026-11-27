@@ -3,16 +3,18 @@ import type { RequestSetup } from '../loop/requests';
 import { approvalOutcome, type ResolutionMap } from '../loop/resolution';
 import { mayAdminister, type WriteCheck } from '../registry/authorise';
 import type { SeedResult } from '../seed/demo';
+import { helpCenterChoice, type HelpCenterSetting } from './help-handlers';
 import type { ResolverContext } from './handlers';
 import type { Option } from './request-handlers';
 
 /**
- * One-click setup: the Setup page's first panel. It proposes, in words, what it would set for steps 1 to 3
- * (the service desk and request type, which resolutions decide an approval, the demo data) and sets it only
+ * One-click setup: the Setup page's first panel. It proposes, in words, what it would set for steps 1 to 4
+ * (the service desk and request type, which resolutions decide an approval, the demo data, the help center) and sets it only
  * when a Jira administrator clicks. On the click the plan is worked out again here; the page sends only the
  * demo mode. It keeps whatever is already set, never chooses between two desks, and only a resolution named
  * Done can approve (D49): anything else is left to the administrator in step 2, so approvals stay off. With no
- * single desk yet it still loads the demo, so asking works at once, and says how to finish requests (D56).
+ * single desk yet it still loads the demo, so asking works at once, and says how to finish requests (D56). It turns
+ * on "Can I…?" in the help center (step 4, D57) only if no administrator has chosen on or off there yet.
  * No Forge imports.
  */
 
@@ -29,6 +31,9 @@ export interface QuickSetupDeps {
   saveMap(map: Record<string, 'approved' | 'declined'>): Promise<void>;
   demoTool(): Promise<{ id: number; mode: 'assets' | 'registry' } | null>;
   seed(actor: string, mode: 'assets' | 'registry'): Promise<SeedResult>;
+  helpCenter(): Promise<unknown>;
+  saveHelpCenter(v: HelpCenterSetting): Promise<void>;
+  now?(): string;
 }
 
 export interface QuickPlan {
@@ -38,19 +43,23 @@ export interface QuickPlan {
   requests: { state: 'done' | 'will_set' | 'blocked'; desk: string | null; requestType: string | null; reason?: string };
   approvals: { state: 'done' | 'will_set' | 'manual'; approve: string[]; decline: string[]; reason?: string };
   demo: { state: 'done' | 'will_load' };
+  /** `off`: an administrator turned it off; one click keeps that. */
+  helpCenter: { state: 'done' | 'will_set' | 'off' };
 }
 
 type Refusal = { ok: false; reason: string };
 
+type Did = Array<'requests' | 'approvals' | 'helpCenter' | 'demo'>;
+
 export type QuickSetupReply =
   | {
       ok: true;
-      did: Array<'requests' | 'approvals' | 'demo'>;
+      did: Did;
       seed?: SeedResult;
       /** Requests could not be set yet (no single desk): what to do, then click again. The demo loaded anyway. */
       later?: string;
     }
-  | { ok: false; reason: string; did?: Array<'requests' | 'approvals' | 'demo'> };
+  | { ok: false; reason: string; did?: Did };
 
 /** The plan, plus what the click would write. */
 interface Worked {
@@ -67,7 +76,7 @@ const DECLINES = /^declined$/i;
 const blocked = (reason: string): QuickPlan['requests'] => ({ state: 'blocked', desk: null, requestType: null, reason });
 
 async function workOut(deps: QuickSetupDeps): Promise<Worked> {
-  const [current, desks, map, demo] = await Promise.all([deps.getSetup(), deps.desks(), deps.getMap(), deps.demoTool()]);
+  const [current, desks, map, demo, help] = await Promise.all([deps.getSetup(), deps.desks(), deps.getMap(), deps.demoTool(), deps.helpCenter()]);
 
   // Step 1: requests. Keep a saved choice that still works; otherwise only a site's single desk is chosen.
   let requests: QuickPlan['requests'];
@@ -126,13 +135,18 @@ async function workOut(deps: QuickSetupDeps): Promise<Worked> {
     }
   }
 
+  // Step 4: the help center. Never chosen: turn it on. An administrator's own on or off is kept.
+  const choice = helpCenterChoice(help);
+  const helpCenter: QuickPlan['helpCenter'] = { state: choice === true ? 'done' : choice === false ? 'off' : 'will_set' };
+
   const plan: QuickPlan = {
     ok: true,
-    // Requests that can't be set yet don't hold the demo back: a judge can ask before making a service desk (D56).
-    ready: requests.state === 'will_set' || approvals.state === 'will_set' || demo === null,
+    // Requests that can't be set yet don't hold the rest back: a judge can ask before making a service desk (D56).
+    ready: requests.state === 'will_set' || approvals.state === 'will_set' || helpCenter.state === 'will_set' || demo === null,
     requests,
     approvals,
     demo: { state: demo ? 'done' : 'will_load' },
+    helpCenter,
   };
   return { plan, setup, map: newMap };
 }
@@ -155,12 +169,12 @@ export async function handleQuickSetup(payload: unknown, ctx: ResolverContext, d
   if (!allowed.ok || !ctx.accountId) return { ok: false, reason: allowed.ok ? 'Not signed in' : allowed.reason };
   const p = Apply.safeParse(payload ?? {});
   if (!p.success) return { ok: false, reason: 'Choose Assets or registry mode' };
-  const did: Array<'requests' | 'approvals' | 'demo'> = [];
+  const did: Did = [];
   try {
     const { plan, setup, map } = await workOut(deps);
     const later = plan.requests.state === 'blocked' ? (plan.requests.reason ?? 'Set up requests under 1. Requests.') : undefined;
     // Nothing this click could set: say what is missing rather than "done".
-    if (later && plan.demo.state === 'done') return { ok: false, reason: later };
+    if (later && plan.demo.state === 'done' && plan.helpCenter.state !== 'will_set') return { ok: false, reason: later };
     if (setup) {
       await deps.saveSetup(setup);
       did.push('requests');
@@ -169,7 +183,11 @@ export async function handleQuickSetup(payload: unknown, ctx: ResolverContext, d
       await deps.saveMap(map);
       did.push('approvals');
     }
-    if (plan.demo.state === 'done') return { ok: true, did };
+    if (plan.helpCenter.state === 'will_set') {
+      await deps.saveHelpCenter({ on: true, by: ctx.accountId, at: (deps.now ?? (() => new Date().toISOString()))() });
+      did.push('helpCenter');
+    }
+    if (plan.demo.state === 'done') return { ok: true, did, ...(later ? { later } : {}) };
     const seed = await deps.seed(ctx.accountId, p.data.mode);
     if (!seed.ok) return { ok: false, reason: seed.reason, did };
     did.push('demo');

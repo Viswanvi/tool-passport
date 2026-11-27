@@ -1505,3 +1505,35 @@ desk, and says how to finish requests. JUDGE_GUIDE gained a 5-minute tour table 
 - LLM calls: 0 (the re-checks reuse the stored translation).
 - Demo site left at KS-DEV 13.2; "Build a custom web front end or dashboard" is now also verified on 14.0, so Reset demo
   before recording moment 3. Production still 2.5.0.
+
+### "Can I…?" in the help center, 2026-11-27 (human: "Lets do this", idea #2)
+
+Built (D57): a `jiraServiceManagement:portalSubheader` box, *Before you raise a request: can you already do it?*,
+with its own resolver; Setup → 4. Help center (on/off, Jira administrators only), and a fourth line in Set it all up.
+Model and Tests are now steps 5 and 6.
+
+- Docs read first: the portal header/subheader/footer module pages and "Access to Forge apps for unlicensed users"
+  (`render: native` supported; `pages` values; `unlicensedAccess` values `unlicensed`, `customer`, `anonymous`;
+  customers may make `asUser()` calls).
+- `npx vitest run`: `Tests 526 passed (526)`; `npx tsc --noEmit -p .` and `npx eslint src test` exit 0; `forge lint`:
+  `No issues found.` Deploys 5.20.0 to 5.23.0 to development, each "eligible for the Runs on Atlassian program", minor
+  versions (no install upgrade, no new scope).
+- Live on the demo site, as the admin (a licensed user):
+  - Setup showed "4. Help center · To do" and, in Set it all up, "“Can I…?” will show in the help center for
+    signed-in people…". The first wording still said "To raise requests… do what is marked below" with requests
+    already set; fixed (5.21.0). Clicking **Set it all up** turned it on: "Steps 1 to 4 are done."
+  - Help center home (`/servicedesk/customer/portals`, the newer help center): the box rendered below the page's own
+    sections; **Can I build a custom web front end or dashboard?** in KS-DEV → **Yes** with *Owner-verified · 13.2*
+    and *Approved · TPD-12 · until Dec 26*. Log `[help] start page=help_center`, `[ask] state=checked verdict=yes
+    cached=false model=claude-haiku-5-5` (1 model call: the earlier Still true had moved the catalog revision).
+  - Tool Passport Desk's portal (`/portal/14`): the box under the desk's banner, above *Raise a request*; KS-PROD →
+    **No**, "Policy for KS-PROD: Not allowed in production", four stamps (`cached=true`, no model call).
+  - IT Support's portal (`/portal/1`) showed the box too. The context log (`keys=page,type`, `page=help_center` on
+    every page, no portal id) showed why: the server can't tell portals apart. The gate now checks only "on" and
+    "signed in", and Setup says the box shows across the help center (5.23.0).
+  - **Turn off** → the help center showed no box; log `[help] refused=off`. Set it all up then read "Help center:
+    kept off, as an administrator chose" and offered no button. **Turn on** again → the box is back.
+- Not run live: a service desk customer without a Jira licence (needs a second account; the two-person check with Sam
+  is still open), and **Request the fix** from the help center (it would raise a TPD request; the same handler as the
+  Ask page, which is verified).
+- LLM calls: 1. Demo site left with the box on, KS-DEV at 13.2. Production still 2.5.0.

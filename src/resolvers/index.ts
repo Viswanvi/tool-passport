@@ -10,6 +10,7 @@ import { EVAL_QUESTIONS } from '../eval/questions';
 import { sqlTranslationStore } from '../db/translations-sql';
 import { forgeModelDeps, labelChat, translationChat } from '../llm/client';
 import { handleChooseModel, handleSetupStatus, type SetupStatusDeps } from './setup-handlers';
+import { HELP_CENTER_SETTING, handleHelpCenterSetup, handleSaveHelpCenter, inHelpCenter, type HelpDeps, type HelpSetupDeps, type HelpStartReply } from './help-handlers';
 import { handleRunSafety } from './safety-handlers';
 import { handleQuickSetup, handleQuickSetupPlan, type QuickSetupDeps } from './quick-setup';
 import { handleAskKey, handlePassport, type PassportDeps } from './passport-handlers';
@@ -18,6 +19,7 @@ import { readIssueAsUser } from '../providers/issues-forge';
 import { runSafetySuite } from '../safety/run';
 import { sqlLabelStore } from '../db/labels';
 import { loopDeps, noteEnvironmentVersion, readRequestSetup, readResolutionMap, saveRequestSetup, saveResolutionMap } from '../loop/forge';
+import { raiseFailure } from '../loop/requests';
 import { listDecisionNames, listDesks, usableRequestTypes } from '../loop/jsm-forge';
 import { readGroups } from '../providers/forge';
 import { sqlResetStore } from '../db/reset';
@@ -285,6 +287,7 @@ const setupStatusDeps: SetupStatusDeps = {
   listModels: forgeModelDeps.listModels,
   lastTestRun: evalDeps.lastStart,
   saveModel: forgeModelDeps.setSetting,
+  helpCenter: () => getSetting(HELP_CENTER_SETTING),
 };
 
 resolver.define('setupStatus', ({ context }) => handleSetupStatus(ctxOf(context), setupStatusDeps));
@@ -307,10 +310,64 @@ const quickSetupDeps: QuickSetupDeps = {
     await runMigrations();
     return loadDemoAs(actor, mode);
   },
+  helpCenter: () => getSetting(HELP_CENTER_SETTING),
+  saveHelpCenter: (v) => setSetting(HELP_CENTER_SETTING, v),
 };
 
 resolver.define('quickSetupPlan', ({ context }) => handleQuickSetupPlan(ctxOf(context), quickSetupDeps));
 
 resolver.define('quickSetup', ({ payload, context }) => handleQuickSetup(payload, ctxOf(context), quickSetupDeps));
 
+// ---- Setup → 4. Help center: turn "Can I…?" in the help center on or off (D57), Jira administrators only ----
+
+const helpSetupDeps: HelpSetupDeps = {
+  check: writeCheck,
+  setting: () => getSetting(HELP_CENTER_SETTING),
+  save: (v) => setSetting(HELP_CENTER_SETTING, v),
+};
+
+resolver.define('helpCenterSetup', ({ context }) => handleHelpCenterSetup(ctxOf(context), helpSetupDeps));
+
+resolver.define('saveHelpCenter', ({ payload, context }) => handleSaveHelpCenter(payload, ctxOf(context), helpSetupDeps));
+
 export const uiResolver = resolver.getDefinitions();
+
+/**
+ * "Can I…?" in the help center (D57). Its own resolver: the portal module lets JSM customers in, so they reach
+ * only asking and the card's own actions, never the owner, setup or overview calls above. Every call checks again
+ * that the box is on and the person is signed in, then runs the Ask page's handler as the person asking.
+ */
+const helpDeps: HelpDeps = { setting: () => getSetting(HELP_CENTER_SETTING) };
+
+type HelpCall = { accountId?: string; extension?: unknown } | undefined;
+
+const inHelp = <T>(context: HelpCall, refused: T, run: () => Promise<T>): Promise<T> => inHelpCenter(ctxOf(context), helpDeps, refused, run);
+
+const help = new Resolver();
+
+help.define('helpStart', ({ context }) =>
+  inHelp<HelpStartReply>(context, { show: false }, async () => {
+    // Which help-center page opened it (a fixed word from Forge), for counting; nothing personal.
+    const page = (context?.extension as { page?: unknown } | undefined)?.page;
+    console.log(`[help] start page=${typeof page === 'string' && /^[a-z_]{1,40}$/.test(page) ? page : '-'}`);
+    return { show: true, ...(await handleTools(ctxOf(context), { listTools })) };
+  }),
+);
+
+help.define('environments', ({ payload, context }) =>
+  inHelp(context, { environments: [], suggestions: [] }, () =>
+    handleEnvironments(payload, ctxOf(context), { listTools, loadTool, listEnvironments, loadCatalog, readGroups }),
+  ),
+);
+
+help.define('ask', ({ payload, context }) => inHelp(context, { ok: false, error: 'not_signed_in', card: null } as const, () => handleAsk(payload, ctxOf(context), askDeps)));
+
+help.define('recheck', ({ payload, context }) => inHelp(context, { ok: false, error: 'not_signed_in' } as const, () => handleRecheck(payload, ctxOf(context), loopDeps)));
+
+help.define('requestFix', ({ payload, context }) => inHelp(context, raiseFailure('not_signed_in'), () => handleRequestFix(payload, ctxOf(context), loopDeps)));
+
+help.define('requestApproval', ({ payload, context }) => inHelp(context, raiseFailure('not_signed_in'), () => handleRequestApproval(payload, ctxOf(context), loopDeps)));
+
+help.define('askOwner', ({ payload, context }) => inHelp(context, raiseFailure('not_signed_in'), () => handleAskOwner(payload, ctxOf(context), loopDeps)));
+
+export const helpResolver = help.getDefinitions();

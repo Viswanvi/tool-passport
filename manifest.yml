@@ -21,6 +21,18 @@ modules:
         function: ui-resolver
       render: native
       title: Tool Passport setup
+  jiraServiceManagement:portalSubheader:
+    - key: passport-help            # "Can I…?" before raising a request (D57), across the help center
+      resource: ui
+      resolver:
+        function: help-resolver     # its own resolver: service desk customers reach only asking and the card's actions
+      render: native
+      pages:
+        - help_center
+        - portal
+        - create_request
+      unlicensedAccess:             # signed-in customers only; never anonymous visitors. Off until Setup turns it on.
+        - customer
   trigger:
     - key: app-lifecycle            # runs SQL migrations on install and major upgrade
       function: on-lifecycle
@@ -109,6 +121,8 @@ modules:
   function:
     - key: ui-resolver
       handler: index.uiResolver
+    - key: help-resolver
+      handler: index.helpResolver
     - key: on-lifecycle
       handler: index.onLifecycle
     - key: sweep

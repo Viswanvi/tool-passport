@@ -42,6 +42,7 @@ import type { SeedResult } from '../seed/demo';
 import { PREFERRED_MODELS } from '../llm/model-choice';
 import type { SetupStatus } from '../resolvers/setup-handlers';
 import type { QuickPlan, QuickSetupReply } from '../resolvers/quick-setup';
+import type { HelpStartReply } from '../resolvers/help-handlers';
 import type { PassportReply, PassportRow } from '../resolvers/passport-handlers';
 import type { StoryContextReply, StoryShareReply } from '../resolvers/story-handlers';
 import type { SafetyRun } from '../safety/run';
@@ -917,7 +918,7 @@ const TestsSection = ({ onRan }: { onRan?: () => void }) => {
   const s = results.length ? summarise(EVAL_QUESTIONS, results) : null;
   return (
     <Stack space="space.200">
-      <Heading as="h2">5. Tests</Heading>
+      <Heading as="h2">6. Tests</Heading>
       <SafetySuite />
       <Text weight="bold">The 40-question set</Text>
       <Text>
@@ -972,7 +973,7 @@ const StepRow = ({ n, title, done, detail }: { n: number; title: string; done: b
 );
 
 const Checklist = ({ status }: { status: SetupStatus }) => {
-  const { requests, approvals, demo, model, tests } = status;
+  const { requests, approvals, demo, model, tests, helpCenter } = status;
   return (
     <Stack space="space.100">
       <StepRow n={1} title="Requests" done={requests.done} detail={requests.done ? 'Service desk and request type chosen.' : 'Choose the service desk and request type.'} />
@@ -990,12 +991,18 @@ const Checklist = ({ status }: { status: SetupStatus }) => {
       />
       <StepRow
         n={4}
+        title="Help center"
+        done={helpCenter.on}
+        detail={helpCenter.on ? '“Can I…?” shows in the help center.' : 'Optional: show “Can I…?” in the help center.'}
+      />
+      <StepRow
+        n={5}
         title="Model"
         done={model.current !== null}
         detail={model.current ? `${model.current}, ${model.automatic ? 'picked automatically' : 'chosen here'}.` : 'No Claude model could be read from this site. Reload to try again.'}
       />
       <StepRow
-        n={5}
+        n={6}
         title="Tests"
         done={tests.lastRun !== null}
         detail={tests.lastRun ? `40-question set last run ${dayAndTime(tests.lastRun)}.` : 'Run the false-Yes suite and the 40-question set.'}
@@ -1020,6 +1027,67 @@ const BeforeYouStart = () => (
     <Text>The Rovo agent needs Rovo turned on for this site. Everything else works without it.</Text>
   </SectionMessage>
 );
+
+type HelpSetupReply = { ok: true; on: boolean; chosen: boolean } | { ok: false; reason: string };
+
+/** Step 4: "Can I…?" in the help center (D57). Off until an administrator turns it on, here or with Set it all up. */
+const HelpCenterSection = ({ onSaved }: { onSaved: () => void }) => {
+  const [state, setState] = useState<HelpSetupReply | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    void call<HelpSetupReply>('helpCenterSetup')
+      .then(setState)
+      .catch((e: unknown) => setState({ ok: false, reason: String(e) }));
+  }, []);
+  const save = async (on: boolean) => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await call<{ ok: true; on: boolean } | { ok: false; reason: string }>('saveHelpCenter', { on });
+      if (r.ok) {
+        setState({ ok: true, on: r.on, chosen: true });
+        onSaved();
+      } else setNote(r.reason);
+    } catch (e) {
+      setNote(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Stack space="space.150">
+      <Heading as="h2">4. Help center</Heading>
+      <Text>
+        Show “Can I…?” in this site&apos;s help center, on its home page and its portal pages, so people check before they raise a request. They get the same answer as in
+        Tool Passport, checked as them, and can request the fix or approval from there.
+      </Text>
+      <Text>
+        Only signed-in people see it, service desk customers included; anonymous visitors never do. If your help center is open to people outside your company, leave it
+        off: answers name your groups, records and policy.
+      </Text>
+      {state === null ? <Spinner /> : null}
+      {state && !state.ok ? (
+        <SectionMessage appearance="warning">
+          <Text>{state.reason}</Text>
+        </SectionMessage>
+      ) : null}
+      {state?.ok ? (
+        <Inline space="space.100" alignBlock="center">
+          <Lozenge appearance={state.on ? 'success' : 'default'}>{state.on ? 'On' : 'Off'}</Lozenge>
+          <Button onClick={() => void save(!state.on)} isDisabled={busy}>
+            {state.on ? 'Turn off' : 'Turn on'}
+          </Button>
+        </Inline>
+      ) : null}
+      {note ? (
+        <SectionMessage appearance="warning">
+          <Text>{note}</Text>
+        </SectionMessage>
+      ) : null}
+    </Stack>
+  );
+};
 
 type ChooseReply = { ok: true; model: string } | { ok: false; reason: string };
 
@@ -1047,7 +1115,7 @@ const ModelSection = ({ model, onSaved }: { model: SetupStatus['model']; onSaved
 
   return (
     <Stack space="space.150">
-      <Heading as="h2">4. Model</Heading>
+      <Heading as="h2">5. Model</Heading>
       <Text>
         {`The model only reads each question into catalog keys and values. Fixed rules decide the answer, and the model never sees facts, rules or groups. Without a choice here, the app uses the first of ${PREFERRED_MODELS.join(', ')} that is active on this site, and moves to the next one by itself if that model is retired.`}
       </Text>
@@ -1090,7 +1158,7 @@ const PlanRow = ({ state, text }: { state: 'done' | 'will' | 'stop'; text: strin
 
 const quoted = (names: string[]) => names.map((n) => `“${n}”`).join(' or ');
 
-/** Steps 1 to 3 in one click: the server proposes exactly what it would set, and sets it only on the click. */
+/** Steps 1 to 4 in one click: the server proposes exactly what it would set, and sets it only on the click. */
 const QuickSetup = ({ refreshKey, onDone }: { refreshKey: number; onDone: () => void }) => {
   const [plan, setPlan] = useState<PlanReply | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1124,8 +1192,8 @@ const QuickSetup = ({ refreshKey, onDone }: { refreshKey: number; onDone: () => 
       </SectionMessage>
     );
   }
-  const { requests, approvals, demo } = plan;
-  const allSet = requests.state === 'done' && approvals.state === 'done' && demo.state === 'done';
+  const { requests, approvals, demo, helpCenter } = plan;
+  const allSet = requests.state === 'done' && approvals.state === 'done' && demo.state === 'done' && helpCenter.state !== 'will_set';
   // The demo is in: asking works now, even before a service desk exists (D56).
   const canAsk = demo.state === 'done';
   const warnings = reply?.ok ? (reply.seed?.ok ? (reply.seed.warnings ?? []) : []) : [];
@@ -1136,14 +1204,16 @@ const QuickSetup = ({ refreshKey, onDone }: { refreshKey: number; onDone: () => 
           {canAsk ? 'Ready to ask' : 'Set up in one click'}
         </Heading>
         {allSet ? (
-          <Text>Steps 1 to 3 are done. Open Tool Passport from the sidebar (Apps → Tool Passport), pick KS-DEV and ask the first suggested question.</Text>
-        ) : canAsk ? (
+          <Text>Steps 1 to 4 are done. Open Tool Passport from the sidebar (Apps → Tool Passport), pick KS-DEV and ask the first suggested question.</Text>
+        ) : canAsk && requests.state !== 'done' ? (
           <Text>
             Kestrel Studio is loaded, so you can ask now: Apps → Tool Passport, KS-DEV, the first suggested question. To raise requests from its answers, do what is marked
             below, then click Set it all up again.
           </Text>
+        ) : canAsk ? (
+          <Text>Kestrel Studio is loaded, so you can ask now: Apps → Tool Passport, KS-DEV, the first suggested question. One click does what is marked below.</Text>
         ) : (
-          <Text>One click does steps 1 to 3 below for you. Here is exactly what it will set; change any of it later in its own step.</Text>
+          <Text>One click does steps 1 to 4 below for you. Here is exactly what it will set; change any of it later in its own step.</Text>
         )}
         <Stack space="space.075">
           <PlanRow
@@ -1168,6 +1238,14 @@ const QuickSetup = ({ refreshKey, onDone }: { refreshKey: number; onDone: () => 
               demo.state === 'done'
                 ? 'Kestrel Studio is loaded.'
                 : 'Load Kestrel Studio: the tool, its verified facts, policy rules and access, two Assets records and two groups. You become its owner.'
+            }
+          />
+          <PlanRow
+            state={helpCenter.state === 'will_set' ? 'will' : 'done'}
+            text={
+              helpCenter.state === 'off'
+                ? 'Help center: kept off, as an administrator chose under 4. Help center.'
+                : `“Can I…?” ${helpCenter.state === 'done' ? 'shows' : 'will show'} in the help center for signed-in people, so they can check before raising a request.`
             }
           />
         </Stack>
@@ -1329,6 +1407,7 @@ const SetupPage = () => {
           </SectionMessage>
         ) : null}
       </Stack>
+      <HelpCenterSection key={`help-${version}`} onSaved={reload} />
       {status?.ok ? <ModelSection model={status.model} onSaved={reload} /> : null}
       <TestsSection onRan={reload} />
       <AddToolSection />
@@ -1623,6 +1702,99 @@ const StoryPanel = () => {
   );
 };
 
+// ---- "Can I…?" in the help center (D57): check before raising a request ----------------------------------
+
+/**
+ * The help center's box. The server decides whether it may show (turned on in Setup, a signed-in person); otherwise
+ * it draws nothing. Asking, the card and its requests work exactly as on the Ask page, as the person asking.
+ */
+const HelpCenterAsk = () => {
+  const [tools, setTools] = useState<Option[] | null>(null);
+  const [tool, setTool] = useState<Option | null>(null);
+  const [envs, setEnvs] = useState<Option[]>([]);
+  const [env, setEnv] = useState<Option | null>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [question, setQuestion] = useState('');
+  const a = useAnswer();
+
+  useEffect(() => {
+    void call<HelpStartReply>('helpStart')
+      .then((r) => {
+        const list = r.show ? r.tools.map((t) => ({ label: t.name, value: String(t.id) })) : [];
+        setTools(list);
+        if (list.length) setTool(list[0]!);
+      })
+      .catch(() => setTools([]));
+  }, []);
+
+  useEffect(() => {
+    if (!tool) return;
+    setEnv(null);
+    a.clear();
+    void call<{ environments: Array<{ id: number; name: string }>; suggestions: string[] }>('environments', { toolId: Number(tool.value) }).then((r) => {
+      const list = [...r.environments.map((e) => ({ label: e.name, value: String(e.id) })), { label: 'Any environment', value: ANY }];
+      setEnvs(list);
+      setEnv(list[0] ?? null);
+      setSuggestions(r.suggestions);
+    });
+    // a.clear only resets the answer on screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool]);
+
+  const ask = (q: string) => {
+    if (!tool || !env || !q.trim()) return;
+    const payload = { toolId: Number(tool.value), environmentId: env.value === ANY ? null : Number(env.value), question: q };
+    void a.show('Checking the tool, policy, setup and your access…', () => call<AskReply>('ask', payload));
+  };
+
+  // Nothing at all until the server says the box belongs here, so a portal where it is off shows no trace of it.
+  if (!tools || tools.length === 0) return null;
+  return (
+    <Box xcss={cardStyle}>
+      <Stack space="space.150">
+        <Heading as="h3" size="small">
+          Before you raise a request: can you already do it?
+        </Heading>
+        <Text>Ask Tool Passport. It checks the tool, the policy, the setup and your access, names its evidence, and raises the right request for you if something is missing.</Text>
+        <Inline space="space.100" alignBlock="center" shouldWrap>
+          {tools.length > 1 ? (
+            <Box xcss={xcss({ width: '200px' })}>
+              <Select options={tools} value={tool} onChange={(o: Option) => setTool(o)} placeholder="Tool" />
+            </Box>
+          ) : null}
+          <Box xcss={xcss({ width: '200px' })}>
+            <Select options={envs} value={env} onChange={(o: Option) => setEnv(o)} placeholder="Environment" />
+          </Box>
+          <Box xcss={xcss({ width: '360px' })}>
+            <Textfield placeholder={tool ? `Can I … with ${tool.label}?` : 'Can I … ?'} value={question} maxLength={500} onChange={(e) => setQuestion(String(e.target.value ?? ''))} />
+          </Box>
+          <Button appearance="primary" onClick={() => ask(question)} isDisabled={a.busy || !question.trim() || !env}>
+            Check
+          </Button>
+        </Inline>
+        {suggestions.length && !a.card ? (
+          <Inline space="space.100" shouldWrap>
+            {suggestions.map((s) => (
+              <Button
+                key={s}
+                appearance="subtle"
+                onClick={() => {
+                  setQuestion(s);
+                  ask(s);
+                }}
+                isDisabled={a.busy || !env}
+              >
+                {s}
+              </Button>
+            ))}
+          </Inline>
+        ) : null}
+        <AnswerView a={a} />
+      </Stack>
+    </Box>
+  );
+};
+
 const tabBody = xcss({ paddingTop: 'space.200' });
 
 /** The global page: Ask and Passport for everyone, My tools for tool owners and Jira administrators. */
@@ -1685,6 +1857,7 @@ const App = () => {
   // Jira already shows the module title above the page, so the page adds no heading of its own.
   if (context.moduleKey === 'passport-setup') return <SetupPage />;
   if (context.moduleKey === 'passport-story') return <StoryPanel />;
+  if (context.moduleKey === 'passport-help') return <HelpCenterAsk />;
   return <HomePage />;
 };
 

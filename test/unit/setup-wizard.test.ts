@@ -27,6 +27,7 @@ function deps(over: Partial<SetupStatusDeps> = {}) {
     saveModel: async (v) => {
       saved.push(v);
     },
+    helpCenter: async () => ({ on: true, by: 'acct-admin', at: '2026-11-27T10:00:00.000Z' }),
     now: () => '2026-11-24T12:00:00.000Z',
     ...over,
   };
@@ -43,18 +44,20 @@ describe('setup status', () => {
       demo: { done: true, mode: 'assets' },
       model: { current: 'claude-haiku-5-5', automatic: true, choices: ['claude-haiku-5-5', 'claude-sonnet-5-5'] },
       tests: { lastRun: '2026-11-23T11:39:46.000Z' },
+      helpCenter: { on: true },
     });
     // Reading the status stores nothing.
     expect(saved).toEqual([]);
   });
 
   it('a new site shows every step still to do', async () => {
-    const { d } = deps({ requestSetup: async () => null, resolutionMap: async () => null, demoTool: async () => null, lastTestRun: async () => null });
+    const { d } = deps({ requestSetup: async () => null, resolutionMap: async () => null, demoTool: async () => null, lastTestRun: async () => null, helpCenter: async () => null });
     expect(await handleSetupStatus({ accountId: 'acct-admin' }, d)).toMatchObject({
       requests: { done: false },
       approvals: { done: false, approve: [], decline: [] },
       demo: { done: false, mode: null },
       tests: { lastRun: null },
+      helpCenter: { on: false },
     });
   });
 

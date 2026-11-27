@@ -17,7 +17,8 @@ or view and download them, in Atlassian Administration.
 
 In Forge SQL, Atlassian's hosted database for the app, separately for each site:
 
-- **Atlassian account IDs** of the people who ask questions, own tools, approve requests or change records. The app
+- **Atlassian account IDs** of the people who ask questions, own tools, approve requests, change records or turn the
+  help center box on or off. The app
   stores no names, email addresses or avatars; screens show those live from Atlassian.
 - **Questions people ask.** The text is deleted automatically after 30 days. What the app keeps longer is its
   reading of the question as catalog keys (for example `web_frontend`), the verdict, and which records it used.
@@ -58,6 +59,14 @@ for the person asking. They are ordinary Jira data, controlled by the site's set
 who can see the work item can read it. It holds the verdict, the reason, the evidence labels (such as the name of an
 access group) and a mention of that person. When the answer later changes, the app adds one comment with the new
 answer. These comments are ordinary Jira data.
+
+## The help center
+
+When a Jira administrator turns it on, a "Can I…?" box appears in the site's service desk help center for signed-in
+people, including service desk customers without a Jira licence. It answers exactly as the Ask page does, as the
+person asking, so it shows the same evidence labels (such as the name of an access group). Anonymous visitors never
+see it. It is off until an administrator turns it on, because some help centers are open to people outside the
+company.
 
 ## Retention and deletion
 

@@ -17,7 +17,7 @@ the employee asking (Priya in the video) and the tool owner (Marco), with your o
 
 ## The 5-minute tour
 
-Short on time? These four steps show the idea; everything after them is optional. Each answer itself takes a few
+Short on time? These five steps show the idea; everything after them is optional. Each answer itself takes a few
 seconds; the minutes are installing and setting up.
 
 | Step | What to do | About |
@@ -26,6 +26,7 @@ seconds; the minutes are installing and setting up.
 | 2 | Jira settings → Marketplace apps → **Tool Passport setup** → **Set it all up**. No service desk needed yet | 1 min |
 | 3 | Sidebar → Apps → **Tool Passport** → KS-DEV, the first suggested question: **Not ready**, with four stamps. Then KS-PROD: **No** | 1 min |
 | 4 | The **Passport** tab: every capability in every environment, on one screen | 30 s |
+| 5 | Your help center (`https://<your-site>.atlassian.net/servicedesk/customer/portals`): the same check in the box *Before you raise a request* (section 7) | 30 s |
 
 With 10 more minutes: make a service desk (step 1.2), click **Set it all up** again, and try the guided fix (section
 4), where the card turns **Yes** by itself. Then the story panel (section 3) and the version change (section 6).
@@ -55,7 +56,8 @@ With 10 more minutes: make a service desk (step 1.2), click **Set it all up** ag
 Open Jira settings (gear icon) → **Marketplace apps**, then in the sidebar under **Apps**, **Tool Passport setup**.
 
 **The quick way.** The box at the top, **Set up in one click**, lists exactly what it will set: your service desk
-with the request type **Get IT help**, **Done** approves and **Declined** declines, and the demo data. Click **Set it
+with the request type **Get IT help**, **Done** approves and **Declined** declines, the demo data, and the "Can I…?"
+box in your help center. Click **Set it
 all up** (**No Assets?** click **No Assets? Set up in registry mode**). It takes up to a minute. When the box says
 **Ready to ask**, go to section 3. No service desk yet? It loads the demo anyway, so you can ask straight away; make
 the desk later and click **Set it all up** again to turn on requests. If a line has a warning sign (for example, the
@@ -75,8 +77,10 @@ site has two service desks or no resolution named Done), do that one step below;
    - **No Assets?** Click **Load without Assets (registry mode)** instead. The environment values are then recorded
      by the owner inside Tool Passport, and answers label them *Recorded by owner*, which is weaker evidence than an
      Assets record.
-4. **Model.** Nothing to do: the app picks an active model on your site by itself.
-5. **Tests.** Click **Run the false-Yes suite**. It runs the app's 51 safety cases on fixed test data inside the
+4. **Help center.** Click **Turn on** to show the "Can I…?" box in your service desk help center (section 7). Only
+   signed-in people see it. Leave it off on a help center that people outside your company use.
+5. **Model.** Nothing to do: the app picks an active model on your site by itself.
+6. **Tests.** Click **Run the false-Yes suite**. It runs the app's 51 safety cases on fixed test data inside the
    app and should show **All 51 cases passed**. It reads nothing from your site and makes no model calls. The
    **40-question set** below it is optional: it makes about 40 model calls, so it can run once every 10 minutes.
 
@@ -184,7 +188,23 @@ Optional: paste release notes into the box on the change card and click **Sugges
 label for each fact with the line that supports it. Nothing counts as verified until you choose Still true or
 Changed.
 
-## 7. Optional: the Rovo agent (needs Rovo on the site)
+## 7. The help center: check before raising a request
+
+People usually start in the service desk's help center, not in an app. **Set it all up** turned on a box there
+(Setup → **4. Help center** turns it on or off).
+
+1. Open your help center: `https://<your-site>.atlassian.net/servicedesk/customer/portals`, or any of its portals.
+2. Find the box **Before you raise a request: can you already do it?** On the newer help center it sits below the
+   page's own sections, so scroll down if you don't see it.
+3. Pick **KS-DEV** and click **Can I build a custom web front end or dashboard?**. You get the same card as on the
+   Ask page, checked as you. Pick **KS-PROD** for **No**. When something is missing, the card's **Request the fix**
+   raises the request for you from there, already filled in.
+
+Only signed-in people see the box, including service desk customers without a Jira licence; anonymous visitors
+never do. It is off until an administrator turns it on, because some help centers are open to people outside the
+company, and answers name your groups, records and policy.
+
+## 8. Optional: the Rovo agent (needs Rovo on the site)
 
 1. Click **Ask Rovo** in the top bar and choose the agent **Tool Passport**.
 2. Use a conversation starter, such as *Can I build a custom web dashboard with Kestrel Studio in KS-DEV?* The agent
@@ -198,7 +218,7 @@ Rovo isn't part of a free developer site. On two new developer sites we tested, 
 starting a Teamwork Collection trial on one of them. So this part needs a site that already has Rovo; the video shows
 it working on such a site. Everything else in this guide works without Rovo.
 
-## 8. Optional: the check from any MCP client
+## 9. Optional: the check from any MCP client
 
 The same readiness check is available to MCP-compatible AI clients through the Atlassian MCP server.
 

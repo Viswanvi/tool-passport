@@ -14,19 +14,23 @@ Kestrel Studio in KS-DEV?"* Tool Passport answers from recorded evidence and nam
   private Jira Service Management request raised for the person asking. When it's resolved, the answer updates by
   itself, and the card says what changed.
 
-Three more ways in:
+Four more ways in:
 
 - **Passport:** one screen with every capability of a tool against every environment, each cell the answer Ask would
   give, checked as you (no model call). Click a cell for its card.
 - **Check this story:** a panel on any Jira work item. It reads the story as you, suggests the environment the story
   names, and answers before the sprint starts, with Request the fix right there. **Add to story** posts the answer,
-  its stamps and the path to Yes as your comment, and when the fix request is resolved the app adds the new answer
-  to the story by itself.
+  its stamps and the path to Yes as your comment. When the answer changes, the app adds the new one to the story by
+  itself and says why: the fix request was resolved, the environment moved to a new version, or the owner
+  re-verified the facts.
+- **The help center:** where people already go for help, a box asks *Before you raise a request: can you already do
+  it?* It gives the same card, checked as them, so a request that can't be fulfilled is never raised and the right
+  one is raised for them. Service desk customers can use it too. It is off until a Jira administrator turns it on.
 - **What if we upgrade?:** before an environment moves to a new version, the owner sees which facts would need
   re-verifying and how many recent answers rely on them. Nothing is saved.
 
-Setup is one click after you create a service desk: the setup page proposes the desk, request type, approval
-outcomes and demo data, and sets them when you click.
+Setup is one click: the setup page proposes the desk, request type, approval outcomes, the demo data and the help
+center box, and sets them when you click. Without a service desk yet, it loads the demo so you can ask at once.
 
 Facts are verified per tool version. When an environment moves to a new version, Tool Passport stops vouching for
 the facts that depend on the version in that environment only, and the owner re-verifies them on one screen.
@@ -65,6 +69,7 @@ list in [src/safety/cases.ts](src/safety/cases.ts).
 | Part | What it does |
 | --- | --- |
 | Forge UI Kit: `jira:globalPage`, `jira:adminPage`, `jira:issuePanel` | Ask, Passport and My tools; the setup page with its checklist; Check this story and Add to story on a work item |
+| Forge UI Kit: `jiraServiceManagement:portalSubheader` | "Can I…?" in the help center, with its own resolver offering only asking and the card's actions; `unlicensedAccess: customer`, never anonymous |
 | Jira REST: work item comments | Add to story posts the answer as the person's comment; the app adds the new answer when it changes |
 | Forge resolvers | Every action; the signed-in person always comes from the Forge context, never from the request |
 | Forge SQL with migrations | Tools, catalog, facts and their versions, rules, mappings, asks, requests, changes, audit log |
