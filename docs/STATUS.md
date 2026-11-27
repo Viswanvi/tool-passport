@@ -1600,3 +1600,18 @@ Built (D59): the card on Ask, the story panel and the help center is drawn in a 
     as an event; its choice is unit-tested and the page's actions behind it are the ones already verified.
     The check lines name the policy action by its key (*custom ui policy*), since that action has no catalog label.
 - LLM calls: 2 (the first Ask and the story check weren't cached after the catalog changed). Production still 2.5.0.
+
+### Production 2.6.0, 2026-11-27 (human: "Yes, deploy")
+
+Everything since 2.5.0: story warnings (D55), Set it all up before a desk (D56), the help-center box (D57), the visible
+AI reading and Fill in from your docs (D58), and the answer card in a Custom UI frame (D59).
+
+- Before: working tree clean at d8d98fb; `npx vitest run`: `Tests 544 passed (544)`; `npx tsc --noEmit -p .` and
+  `npm run lint` exit 0; `npm run build:card` (built fresh); `forge lint`: `No issues found.`
+- `forge deploy -e production --non-interactive` (12:36 UTC): "[2.6.0] … eligible for the Runs on Atlassian
+  program". `forge install list`: tp-judge-1 and tp-judge-2 production, major 2, Up-to-date (no new permission, no
+  migration, no re-approval; the new portal module and the card resource came in as a minor version).
+- Production log since the deploy: no errors; one `[passport] rows=19 environments=2` at 12:39 UTC.
+- Not checked live on production: tp-judge-2 asked for a sign-in under its own Atlassian account, which is the
+  human's step. The same code runs on the demo site's development install (5.33.0), checked live there.
+- LLM calls: 0.
