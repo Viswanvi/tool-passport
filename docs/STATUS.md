@@ -1738,3 +1738,23 @@ build:card`. Dev 5.45.0, "eligible for the Runs on Atlassian program".
   a half, the grid starting above the fold.
 - Not seen live: the dark theme; the cards after a version change (old → new version on the card is drawn by the
   same code as the grid header, which was seen in 5.42.0).
+
+### Stamps, the change moment, and differences first, 2026-11-27 (human: "Yes, build them")
+
+Built (D65). `npx vitest run`: `Tests 558 passed (558)`; `npx tsc --noEmit -p .` and `npm run lint` exit 0; `npm run
+build:card`. Dev 5.46.0 and 5.47.0 (ink a little more solid, rosette moved clear of Check again), each "eligible for
+the Runs on Atlassian program".
+
+- Live on the demo site (development, 800px wide):
+  - The KS-DEV card with a blue stamp and the KS-PROD card with a crimson one: rings, *TOOL PASSPORT*, *KS-DEV* /
+    *KS-PROD*, *v13.2*, *CHECKED 27 NOV 2026*, turned, with patchy ink. The cover shows the rosette at its right edge.
+  - The grid: *WHERE KS-DEV AND KS-PROD DIFFER* (web front end, API, company database, CSV export, single sign-on),
+    *THE SAME IN BOTH* (community framework, own web address, GPUs: No / No), then *8 more · Yes in both · Show
+    them*, then *Not verified yet · 3* with **Fill them in from your docs**.
+  - Opened the Passport, then in a second tab Assets → TPENV-4679 → Version **14.0**. Back on the Passport, no click,
+    within 30 seconds: KS-DEV's card showed the new *v14.0* stamp over the old *v13.2* one, faded and turned; *8 of 19*
+    (was 12); *8 Yes · 1 Not ready · 3 No · 7 Don't know yet*; the banner *4 answers changed at 11:54 PM*. KS-PROD
+    unchanged. Version set back to **13.2**.
+  - Seen only as the end state in screenshots, not in motion: the stamp landing, the count from 12 to 8, the squares
+    turning over, the rows glowing. Not seen: the dark theme.
+  - LLM calls: 0.

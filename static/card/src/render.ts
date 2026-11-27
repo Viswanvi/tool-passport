@@ -168,9 +168,16 @@ export interface PassportOptions {
   animateCard: boolean;
   detailsOpen: boolean;
   showUnknown: boolean;
+  /** Rows that are Yes in every environment, unfolded. */
+  showSame: boolean;
+  /** Environments whose version change is new in this view: a new stamp lands on their card. */
+  freshEnvs: ReadonlySet<number>;
+  /** An environment's Yes count before this view, where it changed: the card counts to the new one. */
+  countFrom: ReadonlyMap<number, number>;
   onAction(a: FrameAction, cell?: Cell): void;
   onToggleDetails(): void;
   onToggleUnknown(): void;
+  onToggleSame(): void;
 }
 
 // "unsupported" is stored for questions outside the catalog; the card calls it Don't know yet.
@@ -184,11 +191,42 @@ function verdictChip(verdict: string | null, title: string): HTMLElement {
   return c;
 }
 
+type Row = PassportFrameView['rows'][number];
+
 /** Capabilities down the side, environments across the top; each cell is a coloured verdict that opens its card. */
-function grid(p: PassportFrameView, rows: PassportFrameView['rows'], o: PassportOptions, label: string): HTMLElement {
+function grid(p: PassportFrameView, label: string, body: HTMLTableRowElement[]): HTMLElement {
   const wrap = el('div', 'tp-grid-wrap');
   const table = el('table', 'tp-grid');
   table.setAttribute('aria-label', label);
+  const tbody = el('tbody');
+  tbody.append(...body);
+  table.append(gridHead(p), tbody);
+  wrap.append(table);
+  return wrap;
+}
+
+/** A heading across the grid: "Where KS-DEV and KS-PROD differ". */
+function sectionRow(p: PassportFrameView, text: string): HTMLTableRowElement {
+  const tr = el('tr', 'tp-section');
+  const th = el('th', undefined, text);
+  th.colSpan = p.environments.length + 1;
+  th.scope = 'colgroup';
+  tr.append(th);
+  return tr;
+}
+
+/** "8 more · Yes in both · Show them": rows folded inside the grid. */
+function foldRow(p: PassportFrameView, n: number, words: string, open: boolean, onToggle: () => void): HTMLTableRowElement {
+  const tr = el('tr', 'tp-fold-row');
+  const td = el('td');
+  td.colSpan = p.environments.length + 1;
+  const chip = verdictChip('yes', `${n} more`);
+  td.append(chip, el('span', 'tp-fold-words', words), button(open ? 'Hide them' : 'Show them', 'tp-btn tp-btn-link', false, onToggle));
+  tr.append(td);
+  return tr;
+}
+
+function gridHead(p: PassportFrameView): HTMLTableSectionElement {
   const head = el('tr');
   head.append(el('th', 'tp-th-cap', 'Capability'));
   for (const e of p.environments) {
@@ -206,39 +244,39 @@ function grid(p: PassportFrameView, rows: PassportFrameView['rows'], o: Passport
   }
   const thead = el('thead');
   thead.append(head);
-  const body = el('tbody');
-  for (const r of rows) {
-    const tr = el('tr');
-    tr.append(el('td', 'tp-cap', r.label));
-    for (const e of p.environments) {
-      const td = el('td');
-      const c = r.cells.find((x) => x.environmentId === e.id);
-      if (c) {
-        const state = stateOf(c.verdict);
-        const picked = p.picked?.key === r.key && p.picked.environmentId === e.id;
-        const id = cellId(r.key, e.id);
-        const cls = ['tp-cell', `tp-v-${state}`];
-        if (picked) cls.push('tp-cell-picked');
-        if (c.change) cls.push('tp-cell-changed');
-        if (o.flips.has(id)) cls.push('tp-cell-flip');
-        const b = el('button', cls.join(' '));
-        b.type = 'button';
-        b.setAttribute('aria-pressed', String(picked));
-        b.title = c.change
-          ? `${r.label} in ${e.name}: ${c.title}. It was ${c.change.from} until ${time(c.change.at)}. Click to see why.`
-          : `${r.label} in ${e.name}: ${c.title}. Click to see why.`;
-        b.append(icon(STATE_ICON[state]), document.createTextNode(c.title));
-        b.addEventListener('click', () => o.onAction('open-cell', { key: r.key, environmentId: e.id }));
-        td.append(b);
-        if (c.change) td.append(el('span', 'tp-was', `was ${c.change.from}`));
-      }
-      tr.append(td);
+  return thead;
+}
+
+/** One capability: its name, then its answer in each environment as a chip that opens the card. */
+function cellRow(p: PassportFrameView, r: Row, o: PassportOptions): HTMLTableRowElement {
+  const flipped = r.cells.some((c) => o.flips.has(cellId(r.key, c.environmentId)));
+  const tr = el('tr', flipped ? 'tp-row-changed' : undefined);
+  tr.append(el('td', 'tp-cap', r.label));
+  for (const e of p.environments) {
+    const td = el('td');
+    const c = r.cells.find((x) => x.environmentId === e.id);
+    if (c) {
+      const state = stateOf(c.verdict);
+      const picked = p.picked?.key === r.key && p.picked.environmentId === e.id;
+      const id = cellId(r.key, e.id);
+      const cls = ['tp-cell', `tp-v-${state}`];
+      if (picked) cls.push('tp-cell-picked');
+      if (c.change) cls.push('tp-cell-changed');
+      if (o.flips.has(id)) cls.push('tp-cell-flip');
+      const b = el('button', cls.join(' '));
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(picked));
+      b.title = c.change
+        ? `${r.label} in ${e.name}: ${c.title}. It was ${c.change.from} until ${time(c.change.at)}. Click to see why.`
+        : `${r.label} in ${e.name}: ${c.title}. Click to see why.`;
+      b.append(icon(STATE_ICON[state]), document.createTextNode(c.title));
+      b.addEventListener('click', () => o.onAction('open-cell', { key: r.key, environmentId: e.id }));
+      td.append(b);
+      if (c.change) td.append(el('span', 'tp-was', `was ${c.change.from}`));
     }
-    body.append(tr);
+    tr.append(td);
   }
-  table.append(thead, body);
-  wrap.append(table);
-  return wrap;
+  return tr;
 }
 
 /** "Watching KS-DEV and KS-PROD · checks again every 30 seconds", or that the watch has stopped. */
@@ -411,10 +449,75 @@ function guilloche(): SVGSVGElement {
   return svg;
 }
 
+/** An SVG element with its attributes (presentation attributes, not inline styles: the content policy allows them). */
+function svgEl(tag: string, attrs: Record<string, string> = {}, text?: string): SVGElement {
+  const e = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+/** The rosette in a passport's corner: ellipses turned around one centre. */
+function rosette(): SVGSVGElement {
+  const svg = svgEl('svg', { class: 'tp-rosette', viewBox: '0 0 200 200', 'aria-hidden': 'true' }) as SVGSVGElement;
+  for (let k = 0; k < 24; k++) svg.append(svgEl('ellipse', { cx: '100', cy: '100', rx: '92', ry: '30', transform: `rotate(${k * 7.5} 100 100)` }));
+  svg.append(svgEl('circle', { cx: '100', cy: '100', r: '34' }), svgEl('circle', { cx: '100', cy: '100', r: '96' }));
+  return svg;
+}
+
+let stampSeq = 0;
+const stampDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+
+/**
+ * An environment's stamp, as on a passport's visa page: ink that is a little rough and patchy (an SVG filter),
+ * slightly turned, with the environment, its version and when it was checked. `ink` picks the colour per
+ * environment. The words are the page's data; nothing on it is decoration that claims more.
+ */
+function stamp(x: { name: string; version: string | null; bottom: string; ink: number; cls: string }): SVGSVGElement {
+  const uid = `tps${++stampSeq}`;
+  const svg = svgEl('svg', { class: `tp-stampmark tp-ink-${x.ink % 4} ${x.cls}`, viewBox: '0 0 140 140', role: 'img', 'aria-label': `${x.name} stamp: version ${x.version ?? 'unknown'}, ${x.bottom.toLowerCase()}` }) as SVGSVGElement;
+  const filter = svgEl('filter', { id: `${uid}-ink`, x: '-10%', y: '-10%', width: '120%', height: '120%' });
+  filter.append(
+    svgEl('feTurbulence', { type: 'fractalNoise', baseFrequency: '0.9', numOctaves: '2', seed: String(x.ink + 3), result: 'n' }),
+    svgEl('feDisplacementMap', { in: 'SourceGraphic', in2: 'n', scale: '2.4', result: 'rough' }),
+    svgEl('feTurbulence', { type: 'fractalNoise', baseFrequency: '1.3', numOctaves: '1', seed: String(x.ink + 11), result: 's' }),
+    svgEl('feColorMatrix', { in: 's', type: 'matrix', values: '0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -2.6 2.25', result: 'm' }),
+    svgEl('feComposite', { in: 'rough', in2: 'm', operator: 'in' }),
+  );
+  const defs = svgEl('defs');
+  defs.append(filter, svgEl('path', { id: `${uid}-top`, d: 'M 26 70 A 44 44 0 0 1 114 70' }), svgEl('path', { id: `${uid}-bot`, d: 'M 20 70 A 50 50 0 0 0 120 70' }));
+  const g = svgEl('g', { filter: `url(#${uid}-ink)`, transform: `rotate(${x.ink % 2 === 0 ? -9 : 7} 70 70)` });
+  const arc = (id: string, words: string) => {
+    const t = svgEl('text', { class: 'tp-stamp-arc' });
+    t.append(svgEl('textPath', { href: `#${id}`, startOffset: '50%', 'text-anchor': 'middle' }, words));
+    return t;
+  };
+  g.append(
+    svgEl('circle', { cx: '70', cy: '70', r: '64', class: 'tp-stamp-ring' }),
+    svgEl('circle', { cx: '70', cy: '70', r: '57', class: 'tp-stamp-ring tp-stamp-thin' }),
+    arc(`${uid}-top`, 'TOOL PASSPORT'),
+    arc(`${uid}-bot`, x.bottom),
+    svgEl('text', { x: '70', y: '74', 'text-anchor': 'middle', class: x.name.length > 8 ? 'tp-stamp-name tp-stamp-name-sm' : 'tp-stamp-name' }, x.name),
+    svgEl('line', { x1: '38', y1: '82', x2: '102', y2: '82', class: 'tp-stamp-ring tp-stamp-thin' }),
+    svgEl('text', { x: '70', y: '97', 'text-anchor': 'middle', class: 'tp-stamp-ver' }, x.version ? `v${x.version}` : 'NO VERSION'),
+    svgEl('circle', { cx: '25', cy: '70', r: '2.5', class: 'tp-stamp-dot' }),
+    svgEl('circle', { cx: '115', cy: '70', r: '2.5', class: 'tp-stamp-dot' }),
+  );
+  svg.append(defs, g);
+  return svg;
+}
+
+/** Each environment's Yes count and total, as the cards show them: the page's own cells. */
+export function yesCounts(p: PassportFrameView): Map<number, number> {
+  const m = new Map<number, number>();
+  for (const e of p.environments) m.set(e.id, p.rows.filter((r) => r.cells.some((c) => c.environmentId === e.id && c.verdict === 'yes')).length);
+  return m;
+}
+
 /** The passport's cover: whose, for which tool, when it was checked, and that it keeps checking. */
 function cover(p: PassportFrameView, o: PassportOptions): HTMLElement {
   const band = el('div', 'tp-cover');
-  band.append(guilloche());
+  band.append(guilloche(), rosette());
   const seal = el('div', 'tp-seal');
   seal.append(icon('passport'));
   const words = el('div', 'tp-cover-words');
@@ -429,55 +532,71 @@ function cover(p: PassportFrameView, o: PassportOptions): HTMLElement {
   return band;
 }
 
-/** The five answers, in the order a team cares about, with a few words each: how to read every cell below. */
-const KEY: Array<{ verdict: string; title: string; means: string }> = [
-  { verdict: 'yes', title: 'Yes', means: 'go ahead' },
-  { verdict: 'yes_with_approval', title: 'Yes, with approval', means: 'allowed once approved' },
-  { verdict: 'not_ready', title: 'Not ready', means: "something's missing; you can request the fix" },
-  { verdict: 'no', title: 'No', means: "not allowed here, or the tool can't" },
-  { verdict: 'dont_know', title: "Don't know yet", means: 'nobody has verified it; never a guess' },
+/** The five answers, in the order a team cares about, with a few words each (the whole line in the tooltip). */
+const KEY: Array<{ verdict: string; title: string; short: string; means: string }> = [
+  { verdict: 'yes', title: 'Yes', short: 'go ahead', means: 'Every check passed: go ahead.' },
+  { verdict: 'yes_with_approval', title: 'Yes, with approval', short: 'once approved', means: 'Allowed once the approval is given; you can request it.' },
+  { verdict: 'not_ready', title: 'Not ready', short: 'fixable', means: "Something's missing here; you can request the fix." },
+  { verdict: 'no', title: 'No', short: 'not allowed', means: "Not allowed in this environment, or the tool can't do it." },
+  { verdict: 'dont_know', title: "Don't know yet", short: 'not verified', means: 'Nobody has verified it yet. Never a guess.' },
 ];
 
-/** One card per environment: how many things you can do there now, and every answer as one square. */
-function visas(p: PassportFrameView): HTMLElement {
+/**
+ * One card per environment, like a visa page: its stamp (with the version and when it was checked), how many things
+ * you can do there now, and every answer as one square. When the version moved while the tab was open, the old
+ * stamp stays faded underneath and the new one lands on top; when the count moved, the number counts to it.
+ */
+function visas(p: PassportFrameView, o: PassportOptions): HTMLElement {
   const wrap = el('div', 'tp-visas');
-  for (const e of p.environments) {
+  p.environments.forEach((e, ink) => {
     const cells = p.rows.map((r) => r.cells.find((c) => c.environmentId === e.id)).filter((c): c is NonNullable<typeof c> => Boolean(c));
     const count = (v: string) => cells.filter((c) => (c.verdict ?? 'dont_know') === v).length;
-    const card = el('div', 'tp-visa');
-    const top = el('div', 'tp-visa-top');
-    top.append(el('span', 'tp-visa-name', e.name));
-    const ver = el('span', `tp-visa-ver${e.change ? ' tp-env-moved' : ''}`);
-    if (e.change?.from) ver.append(el('s', 'tp-ver-was', e.change.from), document.createTextNode(' → '));
-    ver.append(document.createTextNode(e.version ? `v${e.version}` : 'no version'));
-    top.append(ver);
+    const fresh = o.freshEnvs.has(e.id);
+    const from = o.countFrom.get(e.id);
+    const card = el('div', `tp-visa${fresh ? ' tp-visa-fresh' : ''}`);
+
+    const words = el('div', 'tp-visa-words');
+    words.append(el('div', 'tp-visa-name', e.name));
     const big = el('div', 'tp-visa-big');
-    big.append(el('span', 'tp-visa-n', String(count('yes'))), el('span', 'tp-visa-of', ` of ${cells.length}`));
-    // Each capability is one square, grouped by answer, so the mix shows at a glance.
-    const strip = el('div', 'tp-strip');
+    const n = el('span', 'tp-visa-n', String(from ?? count('yes')));
+    // The frame counts from the old number to the new one (main.ts); without motion it shows the new one at once.
+    if (from !== undefined) {
+      n.dataset.from = String(from);
+      n.dataset.to = String(count('yes'));
+    }
+    big.append(n, el('span', 'tp-visa-of', ` of ${cells.length}`));
+    words.append(big, el('div', 'tp-visa-label', 'you can do now'));
+
+    const slot = el('div', 'tp-stamp-slot');
+    if (e.change?.from) slot.append(stamp({ name: e.name, version: e.change.from, bottom: `REPLACED ${time(e.change.at)}`, ink, cls: `tp-stamp-old${fresh ? ' tp-stamp-fade' : ''}` }));
+    slot.append(stamp({ name: e.name, version: e.version, bottom: `CHECKED ${stampDate(p.checkedAt)}`, ink, cls: fresh ? 'tp-stamp-slam' : '' }));
+
+    // Each capability is one square, grouped by answer, so the mix shows at a glance; they turn over when it changes.
+    const strip = el('div', `tp-strip${fresh || from !== undefined ? ' tp-strip-wave' : ''}`);
     strip.setAttribute('aria-hidden', 'true');
     const counts = el('div', 'tp-visa-counts');
     for (const k of KEY) {
-      const n = count(k.verdict);
-      for (let i = 0; i < n; i++) strip.append(el('span', `tp-sq tp-v-${stateOf(k.verdict)}`));
-      if (n) {
-        const c = el('span', `tp-count tp-v-${stateOf(k.verdict)}`);
-        c.append(el('span', 'tp-dot'), document.createTextNode(`${n} ${k.title}`));
-        counts.append(c);
+      const c = count(k.verdict);
+      for (let i = 0; i < c; i++) strip.append(el('span', `tp-sq tp-v-${stateOf(k.verdict)}`));
+      if (c) {
+        const chip = el('span', `tp-count tp-v-${stateOf(k.verdict)}`);
+        chip.append(el('span', 'tp-dot'), document.createTextNode(`${c} ${k.title}`));
+        counts.append(chip);
       }
     }
-    card.append(top, big, el('div', 'tp-visa-label', 'you can do now'), strip, counts);
+    card.append(words, slot, strip, counts);
     wrap.append(card);
-  }
+  });
   return wrap;
 }
 
 function readingKey(): HTMLElement {
   const k = el('div', 'tp-key');
-  k.append(el('span', 'tp-key-label', 'How to read it'));
+  k.append(el('span', 'tp-key-label', 'Key'));
   for (const x of KEY) {
     const item = el('span', 'tp-key-item');
-    item.append(verdictChip(x.verdict, x.title), el('span', 'tp-key-means', x.means));
+    item.title = x.means;
+    item.append(verdictChip(x.verdict, x.title), el('span', 'tp-key-means', x.short));
     k.append(item);
   }
   return k;
@@ -486,15 +605,34 @@ function readingKey(): HTMLElement {
 export function renderPassport(p: PassportFrameView, o: PassportOptions): HTMLElement {
   const root = el('section', `tp-passport${o.animateGrid ? ' tp-animate-grid' : ''}`);
 
-  root.append(cover(p, o), visas(p), readingKey());
+  root.append(cover(p, o), visas(p, o), readingKey());
   const banner = changesBanner(p, o.flips.size > 0);
   if (banner) root.append(banner);
 
   // Rows nobody has verified anywhere are folded away, so the grid leads with what is known. A row with a change
   // stays in view: the change is the news.
+  const changed = (r: Row) => r.cells.some((c) => c.change);
   const unknown = p.rows.filter((r) => r.cells.length > 0 && r.cells.every((c) => c.verdict === 'dont_know' && !c.change));
   const known = p.rows.filter((r) => !unknown.includes(r));
-  root.append(grid(p, known, o, `What you can do with ${p.tool}, by environment`));
+  // With more than one environment, where they differ comes first: that is what a team needs to see. Rows that are
+  // Yes everywhere fold into one line.
+  const multi = p.environments.length > 1;
+  const same = (r: Row) => r.cells.every((c) => c.verdict === r.cells[0]?.verdict);
+  const differ = multi ? known.filter((r) => !same(r)) : [];
+  const yesEverywhere = multi ? known.filter((r) => same(r) && r.cells[0]?.verdict === 'yes' && !changed(r)) : [];
+  const rest = known.filter((r) => !differ.includes(r) && !yesEverywhere.includes(r));
+  const two = p.environments.length === 2;
+  const body: HTMLTableRowElement[] = [];
+  if (differ.length) body.push(sectionRow(p, two ? `Where ${namesText(p.environments.map((e) => e.name))} differ` : 'Where the environments differ'), ...differ.map((r) => cellRow(p, r, o)));
+  if (rest.length) {
+    if (multi) body.push(sectionRow(p, two ? 'The same in both' : 'The same everywhere'));
+    body.push(...rest.map((r) => cellRow(p, r, o)));
+  }
+  if (yesEverywhere.length) {
+    body.push(foldRow(p, yesEverywhere.length, two ? 'Yes in both' : 'Yes everywhere', o.showSame, o.onToggleSame));
+    if (o.showSame) body.push(...yesEverywhere.map((r) => cellRow(p, r, o)));
+  }
+  root.append(grid(p, `What you can do with ${p.tool}, by environment`, body));
   if (unknown.length) {
     const fold = el('div', 'tp-fold');
     fold.append(
@@ -509,7 +647,14 @@ export function renderPassport(p: PassportFrameView, o: PassportOptions): HTMLEl
       fold.append(b);
     }
     root.append(fold);
-    if (o.showUnknown) root.append(grid(p, unknown, o, `Capabilities of ${p.tool} nobody has verified yet`));
+    if (o.showUnknown)
+      root.append(
+        grid(
+          p,
+          `Capabilities of ${p.tool} nobody has verified yet`,
+          unknown.map((r) => cellRow(p, r, o)),
+        ),
+      );
   }
 
   if (p.picked) {

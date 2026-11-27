@@ -1,6 +1,6 @@
 import { events, view } from '@forge/bridge';
 import { cellId, EVENT, type ActionMessage, type FrameAction, type FrameView, type ReadyMessage, type ViewMessage } from '../../../src/frontend/card-frame';
-import { renderAsk, renderCard, renderPassport } from './render';
+import { renderAsk, renderCard, renderPassport, yesCounts } from './render';
 import './card.css';
 
 /**
@@ -18,8 +18,59 @@ let gridShown = false;
 let detailsOpen = false;
 let showUnknown = false;
 let answered = false;
+let showSame = false;
 // Changes already flipped (cell and time), so a cell flips once per change and not on every redraw.
 const flipped = new Set<string>();
+// Version changes whose new stamp has already landed (environment and time).
+const stamped = new Set<string>();
+// Each environment's Yes count as last shown, so a changed count counts to the new one.
+const lastYes = new Map<number, number>();
+let freshEnvs = new Set<number>();
+let countFrom = new Map<number, number>();
+
+/** What moved in this view: environments with a new version change, and counts that differ from the last view. */
+function takeMoves(v: FrameView | null) {
+  freshEnvs = new Set();
+  countFrom = new Map();
+  if (v?.kind !== 'passport') return;
+  const p = v.passport;
+  for (const e of p.environments) {
+    if (!e.change) continue;
+    const sig = `${e.id}@${e.change.at}`;
+    if (!stamped.has(sig)) {
+      stamped.add(sig);
+      freshEnvs.add(e.id);
+    }
+  }
+  for (const [id, n] of yesCounts(p)) {
+    const before = lastYes.get(id);
+    if (before !== undefined && before !== n) countFrom.set(id, before);
+    lastYes.set(id, n);
+  }
+}
+
+const calm = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+
+/** Counts each changed number from the old value to the new one, after the new stamp has landed. */
+function runCounters() {
+  for (const n of Array.from(root.querySelectorAll<HTMLElement>('.tp-visa-n[data-from]'))) {
+    const from = Number(n.dataset.from);
+    const to = Number(n.dataset.to);
+    delete n.dataset.from;
+    if (calm() || !Number.isFinite(from) || !Number.isFinite(to)) {
+      n.textContent = String(to);
+      continue;
+    }
+    const start = performance.now() + 450;
+    const step = (now: number) => {
+      const t = Math.min(1, Math.max(0, (now - start) / 900));
+      n.textContent = String(Math.round(from + (to - from) * (1 - (1 - t) ** 3)));
+      if (t < 1) requestAnimationFrame(step);
+      else n.classList.add('tp-visa-n-done');
+    };
+    requestAnimationFrame(step);
+  }
+}
 
 /** Cells whose change is new in this view. */
 function newFlips(v: FrameView | null): Set<string> {
@@ -129,6 +180,14 @@ function draw(animateCard: boolean, flips: ReadonlySet<string> = new Set()) {
     renderPassport(current.passport, {
       animateGrid,
       flips,
+      // Set only while drawing the view that brought the move (cleared after it), so a redraw for a click shows it settled.
+      freshEnvs,
+      countFrom,
+      showSame,
+      onToggleSame: () => {
+        showSame = !showSame;
+        draw(false);
+      },
       animateCard,
       detailsOpen,
       showUnknown,
@@ -154,7 +213,11 @@ async function start() {
     current = m.view;
     shownAnswer = key;
     takeAsked(m.view);
+    takeMoves(m.view);
     draw(animate, newFlips(m.view));
+    runCounters();
+    freshEnvs = new Set();
+    countFrom = new Map();
   });
   // The page may start listening after this frame starts, so say ready until it answers (about 15 seconds at most),
   // and again whenever a page asks (it subscribed again after this frame had stopped saying it).
