@@ -193,7 +193,6 @@ function grid(p: PassportFrameView, rows: PassportFrameView['rows'], o: Passport
   head.append(el('th', 'tp-th-cap', 'Capability'));
   for (const e of p.environments) {
     const th = el('th');
-    const yes = rows.filter((r) => r.cells.some((c) => c.environmentId === e.id && c.verdict === 'yes')).length;
     th.append(el('span', 'tp-env-name', e.name));
     if (e.change) {
       // The version moved while the tab was open: old one struck through, new one marked.
@@ -201,8 +200,8 @@ function grid(p: PassportFrameView, rows: PassportFrameView['rows'], o: Passport
       if (e.change.from) v.append(el('s', 'tp-ver-was', e.change.from), document.createTextNode(' → '));
       v.append(el('strong', undefined, e.version ?? 'no version'));
       v.title = `${e.name}'s recorded version changed at ${time(e.change.at)}.`;
-      th.append(v, el('span', 'tp-env-meta', `${yes} of ${rows.length} Yes`));
-    } else th.append(el('span', 'tp-env-meta', `${e.version ? `${e.version} · ` : ''}${yes} of ${rows.length} Yes`));
+      th.append(v);
+    } else if (e.version) th.append(el('span', 'tp-env-meta', `v${e.version}`));
     head.append(th);
   }
   const thead = el('thead');
@@ -389,16 +388,105 @@ export function renderAsk(v: AskFrameView, o: AskOptions): HTMLElement {
   return root;
 }
 
+const SVG = 'http://www.w3.org/2000/svg';
+
+/** The fine wavy lines printed on a passport page: drawn once per redraw, behind the cover's words. */
+function guilloche(): SVGSVGElement {
+  const svg = document.createElementNS(SVG, 'svg');
+  svg.setAttribute('class', 'tp-guilloche');
+  svg.setAttribute('viewBox', '0 0 600 140');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('aria-hidden', 'true');
+  for (let k = 0; k < 11; k++) {
+    let d = '';
+    for (let x = 0; x <= 600; x += 5) {
+      const t = x / 600;
+      const y = 70 + Math.sin(t * Math.PI * 3 + k * 0.55) * (16 + k * 4) + Math.sin(t * Math.PI * 13 + k * 1.3) * 5;
+      d += `${x === 0 ? 'M' : 'L'}${x} ${y.toFixed(1)} `;
+    }
+    const path = document.createElementNS(SVG, 'path');
+    path.setAttribute('d', d);
+    svg.append(path);
+  }
+  return svg;
+}
+
+/** The passport's cover: whose, for which tool, when it was checked, and that it keeps checking. */
+function cover(p: PassportFrameView, o: PassportOptions): HTMLElement {
+  const band = el('div', 'tp-cover');
+  band.append(guilloche());
+  const seal = el('div', 'tp-seal');
+  seal.append(icon('passport'));
+  const words = el('div', 'tp-cover-words');
+  words.append(
+    el('div', 'tp-cover-kicker', 'Your passport'),
+    el('div', 'tp-cover-title', p.tool),
+    el('div', 'tp-cover-sub', `What you can do in each environment, checked as you at ${time(p.checkedAt)}.`),
+    watchLine(p),
+  );
+  const again = button(p.refreshing ? 'Checking…' : 'Check again', 'tp-btn tp-btn-cover', p.refreshing, () => o.onAction('refresh'));
+  band.append(seal, words, again);
+  return band;
+}
+
+/** The five answers, in the order a team cares about, with a few words each: how to read every cell below. */
+const KEY: Array<{ verdict: string; title: string; means: string }> = [
+  { verdict: 'yes', title: 'Yes', means: 'go ahead' },
+  { verdict: 'yes_with_approval', title: 'Yes, with approval', means: 'allowed once approved' },
+  { verdict: 'not_ready', title: 'Not ready', means: "something's missing; you can request the fix" },
+  { verdict: 'no', title: 'No', means: "not allowed here, or the tool can't" },
+  { verdict: 'dont_know', title: "Don't know yet", means: 'nobody has verified it; never a guess' },
+];
+
+/** One card per environment: how many things you can do there now, and every answer as one square. */
+function visas(p: PassportFrameView): HTMLElement {
+  const wrap = el('div', 'tp-visas');
+  for (const e of p.environments) {
+    const cells = p.rows.map((r) => r.cells.find((c) => c.environmentId === e.id)).filter((c): c is NonNullable<typeof c> => Boolean(c));
+    const count = (v: string) => cells.filter((c) => (c.verdict ?? 'dont_know') === v).length;
+    const card = el('div', 'tp-visa');
+    const top = el('div', 'tp-visa-top');
+    top.append(el('span', 'tp-visa-name', e.name));
+    const ver = el('span', `tp-visa-ver${e.change ? ' tp-env-moved' : ''}`);
+    if (e.change?.from) ver.append(el('s', 'tp-ver-was', e.change.from), document.createTextNode(' → '));
+    ver.append(document.createTextNode(e.version ? `v${e.version}` : 'no version'));
+    top.append(ver);
+    const big = el('div', 'tp-visa-big');
+    big.append(el('span', 'tp-visa-n', String(count('yes'))), el('span', 'tp-visa-of', ` of ${cells.length}`));
+    // Each capability is one square, grouped by answer, so the mix shows at a glance.
+    const strip = el('div', 'tp-strip');
+    strip.setAttribute('aria-hidden', 'true');
+    const counts = el('div', 'tp-visa-counts');
+    for (const k of KEY) {
+      const n = count(k.verdict);
+      for (let i = 0; i < n; i++) strip.append(el('span', `tp-sq tp-v-${stateOf(k.verdict)}`));
+      if (n) {
+        const c = el('span', `tp-count tp-v-${stateOf(k.verdict)}`);
+        c.append(el('span', 'tp-dot'), document.createTextNode(`${n} ${k.title}`));
+        counts.append(c);
+      }
+    }
+    card.append(top, big, el('div', 'tp-visa-label', 'you can do now'), strip, counts);
+    wrap.append(card);
+  }
+  return wrap;
+}
+
+function readingKey(): HTMLElement {
+  const k = el('div', 'tp-key');
+  k.append(el('span', 'tp-key-label', 'How to read it'));
+  for (const x of KEY) {
+    const item = el('span', 'tp-key-item');
+    item.append(verdictChip(x.verdict, x.title), el('span', 'tp-key-means', x.means));
+    k.append(item);
+  }
+  return k;
+}
+
 export function renderPassport(p: PassportFrameView, o: PassportOptions): HTMLElement {
   const root = el('section', `tp-passport${o.animateGrid ? ' tp-animate-grid' : ''}`);
 
-  const head = el('div', 'tp-pp-head');
-  const titles = el('div');
-  const title = el('div', 'tp-pp-title');
-  title.append(icon('passport', 'tp-icon tp-pp-icon'), document.createTextNode(`Your passport for ${p.tool}`));
-  titles.append(title, el('div', 'tp-pp-sub', `Checked as you at ${time(p.checkedAt)}. Click any answer to see why.`), watchLine(p));
-  head.append(titles, button(p.refreshing ? 'Checking…' : 'Check again', 'tp-btn', p.refreshing, () => o.onAction('refresh')));
-  root.append(head);
+  root.append(cover(p, o), visas(p), readingKey());
   const banner = changesBanner(p, o.flips.size > 0);
   if (banner) root.append(banner);
 

@@ -1724,3 +1724,17 @@ the changed note, the card and recent questions as rows.
     **KS-DEV** picked, and the card **No** ("Policy for KS-DEV: Pending security review."). No LLM call.
   - Not tried live: a view arriving while typing (the focus and caret are kept by code, not seen); the changed note
     in the frame (it shows after a re-check changes an open answer).
+
+### The Passport's cover, environment cards and key, 2026-11-27 (human: "make the UI extraordinary")
+
+Built (D64). `npx vitest run`: `Tests 558 passed (558)`; `npx tsc --noEmit -p .` and `npm run lint` exit 0; `npm run
+build:card`. Dev 5.45.0, "eligible for the Runs on Atlassian program".
+
+- Live on the demo site, 800px wide: the blue cover (*YOUR PASSPORT · Kestrel Studio*, checked at 11:40 PM, *Watching
+  KS-DEV and KS-PROD*, **Check again**); KS-DEV card *12 of 19 · you can do now*, 19 squares, *12 Yes · 1 Not ready ·
+  3 No · 3 Don't know yet*; KS-PROD *9 of 19*, *9 Yes · 2 Yes, with approval · 1 Not ready · 4 No · 3 Don't know
+  yet*; the key with the five answers; the grid below with v13.2 under each environment.
+- At laptop width (the pane widened): the cover as one band, the two cards side by side, the key on about a line and
+  a half, the grid starting above the fold.
+- Not seen live: the dark theme; the cards after a version change (old → new version on the card is drawn by the
+  same code as the grid header, which was seen in 5.42.0).

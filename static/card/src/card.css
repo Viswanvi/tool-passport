@@ -475,28 +475,10 @@ body {
   flex-direction: column;
   gap: 14px;
 }
-.tp-pp-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-.tp-pp-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 20px;
-  font-weight: 600;
-}
 .tp-pp-icon {
   width: 22px;
   height: 22px;
   color: var(--ds-icon-brand, #0c66e4);
-}
-.tp-pp-sub {
-  margin-top: 2px;
-  font-size: 13px;
-  color: var(--ds-text-subtle, #44546f);
 }
 .tp-grid-wrap {
   overflow: hidden;
@@ -606,6 +588,246 @@ body {
   }
 }
 
+/* ---- The passport cover, the environment cards and the key (D64) ---- */
+.tp-cover {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  overflow: hidden;
+  padding: 20px 22px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #0c66e4 0%, #0b3f8f 55%, #082a5e 100%);
+  color: #ffffff;
+  box-shadow: 0 8px 24px -12px #082a5e;
+}
+.tp-guilloche {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.tp-guilloche path {
+  fill: none;
+  stroke: #ffffff;
+  stroke-opacity: 0.09;
+  stroke-width: 1;
+}
+.tp-seal,
+.tp-cover-words,
+.tp-btn-cover {
+  position: relative;
+}
+.tp-seal {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 2px solid #ffffff59;
+  border-radius: 50%;
+  background: #ffffff1f;
+}
+.tp-seal .tp-icon {
+  width: 26px;
+  height: 26px;
+  color: #ffffff;
+}
+.tp-cover-words {
+  flex: 1;
+  min-width: 0;
+}
+.tp-cover-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+.tp-cover-title {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.tp-cover-sub {
+  margin-top: 2px;
+  font-size: 13px;
+  opacity: 0.9;
+}
+.tp-cover .tp-watch {
+  color: #b3f5d4;
+}
+.tp-cover .tp-watch-off {
+  color: #ffffffb3;
+}
+.tp-cover .tp-pulse,
+.tp-cover .tp-pulse::after {
+  background: #4bce97;
+}
+.tp-btn-cover {
+  flex: none;
+  border: 1px solid #ffffff66;
+  background: #ffffff1f;
+  color: #ffffff;
+}
+.tp-btn-cover:hover {
+  background: #ffffff38;
+}
+.tp-visas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.tp-visa {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--ds-border, #dcdfe4);
+  border-top: 4px solid var(--ds-background-brand-bold, #0c66e4);
+  border-radius: 12px;
+  background: var(--ds-surface-raised, #ffffff);
+  box-shadow: var(--ds-shadow-raised, 0 1px 1px #091e4240, 0 0 1px #091e424f);
+}
+.tp-visa-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tp-visa-name {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.tp-visa-ver {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--ds-background-neutral, #091e420f);
+  color: var(--ds-text-subtle, #44546f);
+  font-size: 11px;
+  font-weight: 600;
+}
+.tp-visa-ver.tp-env-moved {
+  background: var(--ds-background-warning, #fff7d6);
+}
+.tp-visa-big {
+  line-height: 1;
+}
+.tp-visa-n {
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--ds-text-success, #216e4e);
+}
+.tp-visa-of {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ds-text-subtlest, #626f86);
+}
+.tp-visa-label {
+  margin-top: -2px;
+  font-size: 12px;
+  color: var(--ds-text-subtle, #44546f);
+}
+.tp-strip {
+  display: flex;
+  gap: 3px;
+  margin-top: 4px;
+}
+.tp-sq {
+  flex: 1;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--tp-bold);
+}
+.tp-v-unknown.tp-sq {
+  background: var(--tp-bd);
+}
+.tp-visa-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 2px;
+}
+.tp-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tp-fg);
+}
+.tp-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tp-bold);
+}
+.tp-key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--ds-surface-sunken, #f7f8f9);
+}
+.tp-key-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ds-text-subtlest, #626f86);
+}
+.tp-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tp-key-item .tp-cell {
+  padding: 1px 8px 1px 4px;
+  font-size: 12px;
+}
+.tp-key-means {
+  font-size: 12px;
+  color: var(--ds-text-subtle, #44546f);
+}
+.tp-animate-grid .tp-cover {
+  animation: tp-rise 320ms ease-out both;
+}
+.tp-animate-grid .tp-visa {
+  animation: tp-rise 360ms ease-out both;
+}
+.tp-animate-grid .tp-visa:nth-child(2) {
+  animation-delay: 80ms;
+}
+.tp-animate-grid .tp-sq {
+  animation: tp-sq-in 300ms ease-out both;
+}
+@keyframes tp-sq-in {
+  from {
+    opacity: 0;
+    transform: scaleY(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tp-animate-grid .tp-cover,
+  .tp-animate-grid .tp-visa,
+  .tp-animate-grid .tp-sq {
+    animation: none;
+  }
+}
+@media (max-width: 460px) {
+  .tp-cover {
+    flex-wrap: wrap;
+  }
+}
+
 /* ---- The Ask tab (D63) ---- */
 .tp-ask {
   display: flex;
@@ -613,11 +835,14 @@ body {
   gap: 14px;
 }
 .tp-ask-hero {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow: hidden;
   padding: 18px 20px;
   border: 1px solid var(--ds-border, #dcdfe4);
+  border-top: 5px solid #0c66e4;
   border-radius: 14px;
   background: var(--ds-surface-raised, #ffffff);
   box-shadow: var(--ds-shadow-raised, 0 1px 1px #091e4240, 0 0 1px #091e424f);
