@@ -44,6 +44,18 @@ export const sqlStoryShares: StoryShareStore = {
       }));
   },
 
+  async askIdsFor(toolId, environmentId, limit) {
+    const where = environmentId === null ? '' : ' AND a.environment_id = ?';
+    const res = await sql
+      .prepare<Row>(
+        `SELECT DISTINCT s.ask_id FROM story_shares s JOIN asks a ON a.id = s.ask_id
+         WHERE s.tool_id = ?${where} ORDER BY s.ask_id DESC ${limitClause(limit)}`,
+      )
+      .bindParams(...(environmentId === null ? [toolId] : [toolId, environmentId]))
+      .execute();
+    return ((res.rows ?? []) as Row[]).map((r) => id(r.ask_id, 'story_shares', 'ask_id'));
+  },
+
   async moveVerdict(shareId, from, to) {
     const res = await sql
       .prepare<UpdateQueryResponse>('UPDATE story_shares SET verdict = ? WHERE id = ? AND verdict = ?')

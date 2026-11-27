@@ -152,6 +152,23 @@ describe('the re-verify list', () => {
     expect(m.items.filter((i) => i.kind === 'fact')).toHaveLength(4);
   });
 
+  it('runs the after-listed step once per change, and a failing one never undoes the listing (D55)', async () => {
+    const { m } = await upgraded();
+    const seen: number[] = [];
+    expect(await buildRecheckList(m.changes[0]!, m.repo, async (c) => void seen.push(c.id))).toBe('listed');
+    expect(seen).toEqual([m.changes[0]!.id]);
+    // Listed already: the sweep no longer picks it up, so the step does not run again.
+    expect(await sweepChanges(m.repo, 10, async (c) => void seen.push(c.id))).toEqual({ listed: 0, failed: 0 });
+    expect(seen).toHaveLength(1);
+
+    const again = await upgraded();
+    const out = await buildRecheckList(again.m.changes[0]!, again.m.repo, async () => {
+      throw new Error('stories unreachable');
+    });
+    expect(out).toBe('listed');
+    expect(again.m.changes[0]!.status).toBe('listed');
+  });
+
   it('a fact already verified for the new version, or scoped to another environment, is not listed', async () => {
     const { w, m } = await upgraded();
     const web = factId(w, 'web_frontend');

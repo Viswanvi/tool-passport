@@ -117,7 +117,7 @@ export async function finishRecheck(row: RequestRow, deps: LoopDeps): Promise<'r
   const ask = await deps.loadAsk(row.askId);
   const now = ask ? await recheckAsk(ask, deps) : null;
   if (ask && now) await saveResult(deps, ask.id, now.answer);
-  await tellStoriesSafely({ now, trigger: row.requestKey }, deps);
+  await tellStoriesSafely({ now, trigger: row.requestKey ? { kind: 'request', key: row.requestKey } : null }, deps);
   try {
     await deps.jsm.comment(row.requestKey!, recheckComment(row, now));
   } catch (e) {

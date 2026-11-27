@@ -2,7 +2,7 @@ import type { Catalog, Environment, Tool } from '../engine/model';
 import { normaliseVersion } from '../engine/version';
 import type { RegistryWriter } from '../registry/write';
 import { recheckAsk, saveResult, type LoopDeps, type Rechecked, type RequestRow } from './requests';
-import { tellStoriesSafely } from './stories';
+import { refreshStoriesSafely, tellStoriesSafely } from './stories';
 
 /**
  * Ask the owner, the owner's side (spec F5, section 11 `publishAnswer`). The owner answers once: the answer
@@ -103,6 +103,16 @@ export async function settleOpenQuestions(toolId: number, deps: LoopDeps): Promi
   return { settled, stillOpen };
 }
 
+/**
+ * Everything a new verified fact can settle: open questions about it, and stories whose answer it changes (D55).
+ * Every write of a fact (an owner edit, Still true, a published answer) ends here.
+ */
+export async function afterFactWrite(toolId: number, deps: LoopDeps): Promise<{ settled: string[]; stillOpen: number }> {
+  const result = await settleOpenQuestions(toolId, deps);
+  await refreshStoriesSafely({ toolId, environmentId: null, trigger: { kind: 'facts' } }, deps);
+  return result;
+}
+
 async function settleOne(row: RequestRow, deps: LoopDeps): Promise<'settled' | 'open'> {
   if (!row.requestKey) return 'open';
   const ask = await deps.loadAsk(row.askId);
@@ -111,7 +121,7 @@ async function settleOne(row: RequestRow, deps: LoopDeps): Promise<'settled' | '
   // Someone else (another publish, or the owner resolving it by hand) may be settling it right now.
   if (!(await deps.requests.markResolved(row.id))) return 'open';
   await saveResult(deps, ask.id, now.answer);
-  await tellStoriesSafely({ now, trigger: row.requestKey }, deps);
+  await tellStoriesSafely({ now, trigger: { kind: 'request', key: row.requestKey } }, deps);
   try {
     await deps.jsm.comment(row.requestKey, answeredComment(now));
   } catch (e) {

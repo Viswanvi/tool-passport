@@ -1,6 +1,6 @@
 import { verdictTitle, type Card, type Chip } from '../engine/card';
 import type { CatalogChoice } from '../engine/catalog';
-import { cardWithRequests, requirementHash, type LoopDeps, type Rechecked, type StoredAsk } from './requests';
+import { cardWithRequests, recheckAsk, requirementHash, saveResult, type LoopDeps, type Rechecked, type StoredAsk } from './requests';
 
 /**
  * "Add to story" (D53), without Forge. The person posts the answer to the work item as their own comment, built by
@@ -23,6 +23,8 @@ export interface StoryShareStore {
   save(s: { askId: number; toolId: number; issueKey: string; verdict: string }): Promise<void>;
   /** Stories told an answer to the same question as this ask: same person, tool, environment and requirement. */
   related(ask: StoredAsk): Promise<StoryShare[]>;
+  /** Asks whose answer was added to a story, for this tool (and environment, unless null), newest first. */
+  askIdsFor(toolId: number, environmentId: number | null, limit: number): Promise<number[]>;
   /** Move the remembered verdict from `from` to `to`; true if this call made the move. */
   moveVerdict(id: number, from: string, to: string): Promise<boolean>;
 }
@@ -101,8 +103,18 @@ export function storyComment(card: Card, x: { toolName: string; asker: string })
   };
 }
 
+/** What made the app check again: a request resolved, the environment's version changing, or the owner's facts. */
+export type StoryTrigger = { kind: 'request'; key: string } | { kind: 'version'; from: string; to: string } | { kind: 'facts' };
+
+function because(t: StoryTrigger | null, environment: string | null): string {
+  if (!t) return '.';
+  if (t.kind === 'request') return ` after ${t.key} was resolved.`;
+  if (t.kind === 'version') return ` after ${environment ?? 'the environment'} moved from ${t.from} to ${t.to}.`;
+  return ' after the tool owner updated its verified facts.';
+}
+
 /** The app's update when the answer has changed. */
-export function storyUpdate(card: Card, x: { toolName: string; asker: string; was: string; trigger: string | null }): Adf {
+export function storyUpdate(card: Card, x: { toolName: string; asker: string; was: string; trigger: StoryTrigger | null; environment: string | null }): Adf {
   const was = verdictTitle(x.was);
   return {
     type: 'doc',
@@ -110,7 +122,7 @@ export function storyUpdate(card: Card, x: { toolName: string; asker: string; wa
     content: [
       paragraph(text(`Tool Passport update: ${card.title}`, true), text(`${was ? ` (was ${was})` : ''}${heading(card, x.toolName)}`)),
       ...cardBlocks(card),
-      paragraph(text('Checked again for '), mention(x.asker), text(x.trigger ? ` after ${x.trigger} was resolved.` : '.')),
+      paragraph(text('Checked again for '), mention(x.asker), text(because(x.trigger, x.environment))),
     ],
   };
 }
@@ -123,7 +135,7 @@ export function storyUpdate(card: Card, x: { toolName: string; asker: string; wa
  * loop (the caller catches); a comment that fails after the move is logged, not retried, so a story never gets the
  * same update twice.
  */
-export async function tellStories(x: { now: Rechecked | null; trigger: string | null }, deps: Pick<LoopDeps, 'stories' | 'requests' | 'log'>): Promise<number> {
+export async function tellStories(x: { now: Rechecked | null; trigger: StoryTrigger | null }, deps: Pick<LoopDeps, 'stories' | 'requests' | 'log'>): Promise<number> {
   const links = deps.stories;
   const now = x.now;
   if (!links || !now || now.card.kind !== 'verdict' || !now.card.verdict || !now.ask.requirement) return 0;
@@ -142,7 +154,7 @@ export async function tellStories(x: { now: Rechecked | null; trigger: string | 
     for (const s of shares) if ((await links.shares.moveVerdict(s.id, s.verdict, verdict)) && !won) won = s;
     if (!won) continue;
     try {
-      await links.comments.asApp(issueKey, storyUpdate(card, { toolName: now.tool.name, asker, was: won.verdict, trigger: x.trigger }));
+      await links.comments.asApp(issueKey, storyUpdate(card, { toolName: now.tool.name, asker, was: won.verdict, trigger: x.trigger, environment: now.environment?.name ?? null }));
       told += 1;
     } catch (e) {
       deps.log?.(`[story] update on ${issueKey} failed: ${String(e).slice(0, 200)}`);
@@ -158,5 +170,47 @@ export async function tellStoriesSafely(x: Parameters<typeof tellStories>[0], de
     await tellStories(x, deps);
   } catch (e) {
     deps.log?.(`[story] could not check the stories for ask ${x.now?.ask.id ?? '?'}: ${String(e).slice(0, 200)}`);
+  }
+}
+
+/** How many story-linked asks one refresh checks again: each costs a record read, and stories are few. */
+export const STORY_REFRESH_LIMIT = 25;
+
+/**
+ * The ground moved under the stories (D55): an environment changed version, or the owner changed what is verified.
+ * Every ask whose answer was added to a story, for the tool (and that environment), is checked again for its asker,
+ * and each story whose verdict changed hears once, saying why. Nobody asked: the story learns that its Yes no longer
+ * holds, or that its Don't know yet is settled. Each ask fails on its own; nothing here stops the caller.
+ */
+export async function refreshStories(x: { toolId: number; environmentId: number | null; trigger: StoryTrigger }, deps: LoopDeps): Promise<number> {
+  const links = deps.stories;
+  if (!links) return 0;
+  let told = 0;
+  for (const askId of await links.shares.askIdsFor(x.toolId, x.environmentId, STORY_REFRESH_LIMIT)) {
+    try {
+      const ask = await deps.loadAsk(askId);
+      const now = ask ? await recheckAsk(ask, deps) : null;
+      if (ask && now) await saveResult(deps, ask.id, now.answer);
+      told += await tellStories({ now, trigger: x.trigger }, deps);
+    } catch (e) {
+      deps.log?.(`[story] refresh of ask ${askId} failed: ${String(e).slice(0, 200)}`);
+    }
+  }
+  return told;
+}
+
+/** The stories to tell once a version change is listed: those in that environment, saying what moved. */
+export const storiesAfterChange = (c: { toolId: number; environmentId: number; fromVersion: string; toVersion: string }) => ({
+  toolId: c.toolId,
+  environmentId: c.environmentId,
+  trigger: { kind: 'version' as const, from: c.fromVersion, to: c.toVersion },
+});
+
+/** refreshStories for callers that must not fail because of it (the sweep, the Changes screen, saving a fact). */
+export async function refreshStoriesSafely(x: Parameters<typeof refreshStories>[0], deps: LoopDeps): Promise<void> {
+  try {
+    await refreshStories(x, deps);
+  } catch (e) {
+    deps.log?.(`[story] could not refresh the stories of tool ${x.toolId}: ${String(e).slice(0, 200)}`);
   }
 }

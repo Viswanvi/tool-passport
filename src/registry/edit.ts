@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { CatalogKey } from '../engine/catalog';
 import type { Environment, Tool } from '../engine/model';
-import { checkAnswer, settleOpenQuestions, writeFact } from '../loop/questions';
+import { afterFactWrite, checkAnswer, writeFact } from '../loop/questions';
 import type { LoopDeps } from '../loop/requests';
 import type { RegistryWriter } from './write';
 
@@ -231,7 +231,7 @@ export async function applyEdit(edit: Edit, tool: Tool, actor: string, deps: App
   await writer.bumpRevision(tool.id);
   await writer.audit(actor, `${edit.entity}.saved`, edit.entity, null, after);
   if (!settle) return { ok: true };
-  // A new fact may decide open questions, exactly as a published answer does.
-  const { settled } = await settleOpenQuestions(tool.id, deps.loop);
+  // A new fact may decide open questions, and change answers added to stories, exactly as a published answer does.
+  const { settled } = await afterFactWrite(tool.id, deps.loop);
   return { ok: true, settled };
 }

@@ -4,7 +4,8 @@ import { normaliseVersion } from '../engine/version';
 import { labelReleaseNotes, MAX_NOTES_CHARS, type LabelKind, type LabelStore } from '../change/release-notes';
 import type { Environment, Tool } from '../engine/model';
 import type { ChatFn } from '../engine/translate';
-import { settleOpenQuestions, type AnswerWriter } from '../loop/questions';
+import { afterFactWrite, type AnswerWriter } from '../loop/questions';
+import { refreshStoriesSafely, storiesAfterChange } from '../loop/stories';
 import type { LoopDeps } from '../loop/requests';
 import { mayWriteTool, type WriteCheck } from '../registry/authorise';
 import type { RegistryRows } from './edit-handlers';
@@ -72,7 +73,9 @@ const ReleaseNotes = z.object({ changeId: z.number().int().positive(), notes: z.
 async function catchUp(tool: Tool, deps: ChangeDeps): Promise<void> {
   try {
     if (deps.loop.noteVersion) await detectVersions([{ tool, environments: await deps.listEnvironments(tool.id) }], deps.loop.environments, deps.loop.noteVersion);
-    for (const change of (await deps.changes.openChanges(OPEN_LIMIT)).filter((c) => c.toolId === tool.id)) await buildRecheckList(change, deps.changes);
+    for (const change of (await deps.changes.openChanges(OPEN_LIMIT)).filter((c) => c.toolId === tool.id)) {
+      await buildRecheckList(change, deps.changes, (c) => refreshStoriesSafely(storiesAfterChange(c), deps.loop));
+    }
   } catch (e) {
     console.error(`[changes] catch-up failed: ${String(e).slice(0, 300)}`);
   }
@@ -302,7 +305,7 @@ export async function handleStillTrue(payload: unknown, ctx: ResolverContext, de
   const registry = await deps.loadRegistry(tool.id);
   const r = await stillTrue(p.data, tool, ctx.accountId!, { changes: deps.changes, writer: deps.writer, facts: registry.facts });
   if (!r.ok) return r;
-  // A new verification may decide open questions, as any fact does.
-  const { settled } = await settleOpenQuestions(tool.id, deps.loop);
+  // A new verification may decide open questions and change answers added to stories, as any fact does.
+  const { settled } = await afterFactWrite(tool.id, deps.loop);
   return { ok: true, settled };
 }

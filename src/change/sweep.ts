@@ -9,6 +9,7 @@ import { runMigrations } from '../db/migrations';
 import { listEnvironments, listTools, loadTool } from '../db/repo';
 import { sweepRequests } from '../loop/events';
 import { loopDeps, noteEnvironmentVersion } from '../loop/forge';
+import { refreshStoriesSafely, storiesAfterChange } from '../loop/stories';
 import { detectVersions, sweepChanges } from './changes';
 
 export async function sweep(): Promise<void> {
@@ -34,7 +35,8 @@ export async function sweep(): Promise<void> {
       loopDeps.environments,
       noteEnvironmentVersion,
     );
-    const lists = await sweepChanges(sqlChangeRepo, 10);
+    // Once a change is listed, the stories in that environment hear about it (D55).
+    const lists = await sweepChanges(sqlChangeRepo, 10, (c) => refreshStoriesSafely(storiesAfterChange(c), loopDeps));
     if (found || lists.listed || lists.failed) console.log(`[sweep] versions changed=${found} lists listed=${lists.listed} failed=${lists.failed}`);
   } catch (e) {
     console.error(`[sweep] version check failed: ${String(e).slice(0, 300)}`);

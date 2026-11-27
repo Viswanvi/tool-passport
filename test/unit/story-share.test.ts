@@ -4,7 +4,8 @@ import { raiseFix, recheckAsk } from '../../src/loop/requests';
 import { sameRequirement, storyComment, StoryCommentError, type Adf, type StoryLinks } from '../../src/loop/stories';
 import type { StoredAsk } from '../../src/loop/requests';
 import { adfText, handleStoryShare } from '../../src/resolvers/story-handlers';
-import { DEV, PRIYA, SAM } from '../support/demo-world';
+import { demoWorld, DEV, MARCO, PRIYA, PROD, SAM, yesWorld } from '../support/demo-world';
+import { refreshStories, storiesAfterChange } from '../../src/loop/stories';
 import { loopWorld, resolvedEvent } from '../support/fix-world';
 
 /**
@@ -35,6 +36,10 @@ function memoryStories(asks: Map<number, StoredAsk>) {
           })
           .map(({ id, issueKey, verdict }) => ({ id, issueKey, verdict }));
       },
+      async askIdsFor(toolId, environmentId, limit) {
+        const ids = shares.filter((s) => s.toolId === toolId && (environmentId === null || asks.get(s.askId)?.environmentId === environmentId)).map((s) => s.askId);
+        return [...new Set(ids)].sort((a, b) => b - a).slice(0, limit);
+      },
       async moveVerdict(id, from, to) {
         const s = shares.find((x) => x.id === id);
         if (!s || s.verdict !== from) return false;
@@ -56,8 +61,8 @@ function memoryStories(asks: Map<number, StoredAsk>) {
   return { shares, posted, fail, links };
 }
 
-function world() {
-  const x = loopWorld();
+function world(w = demoWorld()) {
+  const x = loopWorld(w);
   const s = memoryStories(x.asks);
   x.deps.stories = s.links;
   // null: opened outside a work item (no issue in the Forge context).
@@ -223,5 +228,61 @@ describe('the update after a request is resolved', () => {
     const { x } = await sharedAndFixed();
     delete x.deps.stories;
     expect(await handleIssueEvent(resolvedEvent('TPD-1'), x.deps)).toBe('rechecked');
+  });
+});
+
+describe('the story hears when the ground moves (D55)', () => {
+  /** A story told Yes in KS-DEV on 13.2 (frontend build in place, design review approved). */
+  async function sharedYes() {
+    const w = world(yesWorld());
+    expect(await w.share(w.x.addAsk(DEV))).toMatchObject({ ok: true, verdict: 'yes' });
+    return w;
+  }
+  const upgrade = { toolId: 1, environmentId: DEV, fromVersion: '13.2', toVersion: '14.0' };
+  const updates = (s: ReturnType<typeof memoryStories>) => s.posted.filter((p) => p.as === 'app');
+
+  it('an upgrade that leaves the Yes unverified tells the story, once, saying what moved', async () => {
+    const { x, s } = await sharedYes();
+    x.w.records.get(DEV)!.Version = ['14.0'];
+    expect(await refreshStories(storiesAfterChange(upgrade), x.deps)).toBe(1);
+    const words = adfText(updates(s)[0]!.body);
+    expect(words).toContain("Tool Passport update: Don't know yet (was Yes) · Kestrel Studio in KS-DEV · 14.0");
+    expect(words).toContain('Build a custom web front end or dashboard: Verified on 13.2; KS-DEV runs 14.0.');
+    expect(words).toContain('after KS-DEV moved from 13.2 to 14.0.');
+    expect(s.shares[0]!.verdict).toBe('dont_know');
+    // The sweep and the Changes screen may both list it: the story still hears once.
+    expect(await refreshStories(storiesAfterChange(upgrade), x.deps)).toBe(0);
+    expect(updates(s)).toHaveLength(1);
+  });
+
+  it('when the owner verifies the fact on 14.0, the same story hears it is Yes again', async () => {
+    const { x, s } = await sharedYes();
+    x.w.records.get(DEV)!.Version = ['14.0'];
+    await refreshStories(storiesAfterChange(upgrade), x.deps);
+    const web = x.w.facts.find((f) => f.factKey === 'web_frontend')!.id;
+    x.w.factVersions.push({ id: 3001, factId: web, version: '14.0', value: true, quote: null, verifiedBy: MARCO, verifiedAt: '2026-11-27T10:00:00.000Z', status: 'active' });
+    expect(await refreshStories({ toolId: 1, environmentId: null, trigger: { kind: 'facts' } }, x.deps)).toBe(1);
+    const words = adfText(updates(s)[1]!.body);
+    expect(words).toContain("Tool Passport update: Yes (was Don't know yet)");
+    expect(words).toContain('after the tool owner updated its verified facts.');
+  });
+
+  it('a change in another environment, or one that changes no verdict, tells nothing', async () => {
+    const { x, s } = await sharedYes();
+    x.w.records.get(PROD)!.Version = ['14.0'];
+    expect(await refreshStories(storiesAfterChange({ ...upgrade, environmentId: PROD }), x.deps)).toBe(0);
+    expect(await refreshStories({ toolId: 1, environmentId: null, trigger: { kind: 'facts' } }, x.deps)).toBe(0);
+    expect(updates(s)).toEqual([]);
+  });
+
+  it('one ask that fails to check never stops the others', async () => {
+    const { x, s, share } = await sharedYes();
+    await share(x.addAsk(DEV, PRIYA, [{ key: 'max_upload_gb', value: 1 }]));
+    const loadAsk = x.deps.loadAsk;
+    x.deps.loadAsk = async (id) => (id === 70 ? Promise.reject(new Error('read failed')) : loadAsk(id));
+    x.w.records.get(DEV)!.Version = ['14.0'];
+    expect(await refreshStories(storiesAfterChange(upgrade), x.deps)).toBe(1);
+    expect(x.logs.some((l) => l.startsWith('[story] refresh of ask 70 failed'))).toBe(true);
+    expect(updates(s)).toHaveLength(1);
   });
 });

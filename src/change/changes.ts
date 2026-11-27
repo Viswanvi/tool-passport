@@ -71,7 +71,11 @@ export function staleVerifications(facts: FactWithVersions[], toVersion: string)
 
 const sameValue = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-export async function buildRecheckList(change: ChangeRecord, repo: ChangeRepo): Promise<'listed' | 'retry' | 'failed'> {
+/**
+ * `afterListed` runs once a change is listed, the one time per change (the stories in that environment hear about
+ * it, D55). It is extra: whatever it does, the change stays listed.
+ */
+export async function buildRecheckList(change: ChangeRecord, repo: ChangeRepo, afterListed?: (change: ChangeRecord) => Promise<unknown>): Promise<'listed' | 'retry' | 'failed'> {
   try {
     const inScope = await repo.factsInScope(change.toolId, change.environmentId);
     await repo.addRecheckItems(change.id, 'fact', affectedFacts(inScope, change.toVersion).map((f) => f.id));
@@ -82,7 +86,6 @@ export async function buildRecheckList(change: ChangeRecord, repo: ChangeRepo): 
       await repo.markMayHaveChanged(asks.map((a) => a.id));
     }
     await repo.setStatus(change.id, 'listed');
-    return 'listed';
   } catch (e) {
     const error = String(e).slice(0, 300);
     const attempts = await repo.bumpAttempts(change.id, error);
@@ -90,14 +93,20 @@ export async function buildRecheckList(change: ChangeRecord, repo: ChangeRepo): 
     await repo.setStatus(change.id, 'failed', error);
     return 'failed';
   }
+  try {
+    await afterListed?.(change);
+  } catch {
+    // Extra only; the caller's hook logs its own failures.
+  }
+  return 'listed';
 }
 
 /** The sweep's share: build the list for each open change. */
-export async function sweepChanges(repo: ChangeRepo, limit: number): Promise<{ listed: number; failed: number }> {
+export async function sweepChanges(repo: ChangeRepo, limit: number, afterListed?: (change: ChangeRecord) => Promise<unknown>): Promise<{ listed: number; failed: number }> {
   let listed = 0;
   let failed = 0;
   for (const change of await repo.openChanges(limit)) {
-    const out = await buildRecheckList(change, repo);
+    const out = await buildRecheckList(change, repo, afterListed);
     if (out === 'listed') listed += 1;
     if (out === 'failed') failed += 1;
   }

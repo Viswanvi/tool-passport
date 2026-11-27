@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Environment } from '../engine/model';
-import { checkAnswer, openQuestionGroups, settleOpenQuestions, writeAnswer, type AnswerWriter, type QuestionGroup } from '../loop/questions';
+import { afterFactWrite, checkAnswer, openQuestionGroups, writeAnswer, type AnswerWriter, type QuestionGroup } from '../loop/questions';
 import type { LoopDeps } from '../loop/requests';
 import { mayWriteTool, type WriteCheck } from '../registry/authorise';
 import type { ResolverContext } from './handlers';
@@ -92,7 +92,7 @@ export async function handlePublishAnswer(payload: unknown, ctx: ResolverContext
     if (!checked.ok) return checked;
     const factId = await writeAnswer(tool, checked.fact, ctx.accountId!, deps.writer);
     await deps.changes?.closeFactRechecks(factId, checked.fact.version);
-    const result = await settleOpenQuestions(tool.id, deps.loop);
+    const result = await afterFactWrite(tool.id, deps.loop);
     console.log(`[publish] ${checked.fact.key} settled=${result.settled.length} open=${result.stillOpen}`);
     return { ok: true, ...result };
   } catch (e) {
