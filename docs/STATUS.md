@@ -1641,3 +1641,15 @@ the opened cell's card below); only the open tab draws its frame; My tools split
     front end gave the green Yes card under the grid ("Checked", not "AI read": a cell isn't read by the model), and
     KS-PROD the red No card (policy ring red, access ring dashed yellow). Verdict chips no longer wrap onto two lines.
   - LLM calls: 0.
+
+### Production 2.7.0, 2026-11-27 (human: "Yes, deploy")
+
+Since 2.6.0: the Passport tab in the card frame and My tools in tabs (D60), with the frame re-linking fix.
+
+- Before: working tree clean at 5e30704; `npx vitest run`: `Tests 545 passed (545)`; `npx tsc --noEmit -p .` and
+  `npm run lint` exit 0; `npm run build:card` (built fresh); `forge lint`: `No issues found.`
+- `forge deploy -e production --non-interactive` (16:18 UTC): "[2.7.0] … eligible for the Runs on Atlassian
+  program". `forge install list`: tp-judge-1 and tp-judge-2 production, major 2, Up-to-date (no re-approval).
+- Production log since the deploy: nothing logged (no errors, no traffic yet).
+- Not checked live on production (tp-judge-2 needs the human's sign-in); the same build is live on the demo site's
+  development install (5.41.0). LLM calls: 0.
