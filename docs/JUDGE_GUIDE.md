@@ -124,7 +124,7 @@ itself when the fix request is resolved, and again if a later upgrade changes it
 2. Make the fix in Assets: sidebar → **Assets** → **Schemas** → **Tool Passport Environments** → **Tool
    Environment** → **KS-DEV**. On the object, click **3 more attributes** to see them all, click the **Build
    environments** value, add **frontend** next to *standard*, and confirm with ✓.
-   - **No Assets?** In Tool Passport, open **My tools**, click **Show records** (under *Records · Advanced*), pick
+   - **No Assets?** In Tool Passport, open **My tools** → **Records**, click **Show records**, pick
      **Environments**, and under *Add or
      change* enter Name `KS-DEV`, Values come from **Recorded by the owner**, and these three lines, then **Save**:
 
@@ -150,7 +150,7 @@ An approval counts only when the approver resolves it. In this demo the approver
 Approvals don't last forever: the policy stamp reads *Approved · TPD-… · until* a date 30 days on, because the demo's
 design-review rule says approvals count for 30 days. After that the answer goes back to **Yes, with approval** with
 *Your approval TPD-… has expired*, and the path says *Get approval again*. The owner sets the number of days per rule
-(My tools → **Show records** → **Policy rules**, *Approval lasts*); blank means no limit.
+(My tools → **Records** → **Show records** → **Policy rules**, *Approval lasts*); blank means no limit.
 
 ## 5. The unknown loop
 
@@ -188,7 +188,7 @@ Custom domains are not supported: every app lives under the studio's own address
    Before upgrading, preview it: **My tools** → **Changes** → *What if we upgrade?*, pick **KS-DEV**, type **14.0**,
    click **Preview**. It lists the 4 facts that would need re-verifying and how many recent answers in KS-DEV rely on
    them, and what stays untouched. Nothing is saved.
-2. In Assets, set KS-DEV's **Version** to **14.0**. (**No Assets?** Save KS-DEV again under My tools → **Show
+2. In Assets, set KS-DEV's **Version** to **14.0**. (**No Assets?** Save KS-DEV again under My tools → **Records** → **Show
    records** with all three lines, the first one now `Version: 14.0`: the form replaces every value.)
 3. Ask the 3 GB question in KS-DEV again: **Don't know yet**. The upload limit was verified on 13.2 and KS-DEV now
    runs 14.0, so the app no longer vouches for it. KS-PROD still answers No.

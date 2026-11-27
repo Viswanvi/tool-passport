@@ -1,6 +1,6 @@
 import type { Card, PathStep, Stamp } from '../../../src/engine/card';
-import type { CardFrameView, FrameAction } from '../../../src/frontend/card-frame';
-import { checkLine, chipText, stampLines } from '../../../src/frontend/card-text';
+import type { CardFrameView, FrameAction, PassportFrameView } from '../../../src/frontend/card-frame';
+import { checkLine, chipText, stampLines, time } from '../../../src/frontend/card-text';
 import { ICONS, type IconName } from './icons';
 
 /**
@@ -143,5 +143,110 @@ export function renderCard(v: CardFrameView, o: RenderOptions): HTMLElement {
     root.append(d);
   }
   if (c.checked.length && !c.stamps.length && !c.read.length) root.append(el('p', 'tp-small', `I checked: ${c.checked.join(' · ')}`));
+  return root;
+}
+
+// ---- The Passport tab (D60): every capability against every environment, then the opened cell's card ----
+
+type Cell = { key: string; environmentId: number };
+
+export interface PassportOptions {
+  /** The grid rises in once, when the tab first shows. */
+  animateGrid: boolean;
+  /** The opened card's stamps land when its answer first shows or changes. */
+  animateCard: boolean;
+  detailsOpen: boolean;
+  showUnknown: boolean;
+  onAction(a: FrameAction, cell?: Cell): void;
+  onToggleDetails(): void;
+  onToggleUnknown(): void;
+}
+
+const stateOf = (verdict: string | null): State => (verdict ? (VERDICT_STATE[verdict] ?? 'none') : 'none');
+
+/** Capabilities down the side, environments across the top; each cell is a coloured verdict that opens its card. */
+function grid(p: PassportFrameView, rows: PassportFrameView['rows'], o: PassportOptions, label: string): HTMLElement {
+  const wrap = el('div', 'tp-grid-wrap');
+  const table = el('table', 'tp-grid');
+  table.setAttribute('aria-label', label);
+  const head = el('tr');
+  head.append(el('th', 'tp-th-cap', 'Capability'));
+  for (const e of p.environments) {
+    const th = el('th');
+    const yes = rows.filter((r) => r.cells.some((c) => c.environmentId === e.id && c.verdict === 'yes')).length;
+    th.append(el('span', 'tp-env-name', e.name), el('span', 'tp-env-meta', `${e.version ? `${e.version} · ` : ''}${yes} of ${rows.length} Yes`));
+    head.append(th);
+  }
+  const thead = el('thead');
+  thead.append(head);
+  const body = el('tbody');
+  for (const r of rows) {
+    const tr = el('tr');
+    tr.append(el('td', 'tp-cap', r.label));
+    for (const e of p.environments) {
+      const td = el('td');
+      const c = r.cells.find((x) => x.environmentId === e.id);
+      if (c) {
+        const state = stateOf(c.verdict);
+        const picked = p.picked?.key === r.key && p.picked.environmentId === e.id;
+        const b = el('button', `tp-cell tp-v-${state}${picked ? ' tp-cell-picked' : ''}`);
+        b.type = 'button';
+        b.setAttribute('aria-pressed', String(picked));
+        b.title = `${r.label} in ${e.name}: ${c.title}. Click to see why.`;
+        b.append(icon(STATE_ICON[state]), document.createTextNode(c.title));
+        b.addEventListener('click', () => o.onAction('open-cell', { key: r.key, environmentId: e.id }));
+        td.append(b);
+      }
+      tr.append(td);
+    }
+    body.append(tr);
+  }
+  table.append(thead, body);
+  wrap.append(table);
+  return wrap;
+}
+
+export function renderPassport(p: PassportFrameView, o: PassportOptions): HTMLElement {
+  const root = el('section', `tp-passport${o.animateGrid ? ' tp-animate-grid' : ''}`);
+
+  const head = el('div', 'tp-pp-head');
+  const titles = el('div');
+  const title = el('div', 'tp-pp-title');
+  title.append(icon('passport', 'tp-icon tp-pp-icon'), document.createTextNode(`Your passport for ${p.tool}`));
+  titles.append(title, el('div', 'tp-pp-sub', `What you can do, everywhere, checked as you at ${time(p.checkedAt)}. Click a cell to see why.`));
+  head.append(titles, button(p.refreshing ? 'Checking…' : 'Check again', 'tp-btn', p.refreshing, () => o.onAction('refresh')));
+  root.append(head);
+
+  // Rows nobody has verified anywhere are folded away, so the grid leads with what is known.
+  const unknown = p.rows.filter((r) => r.cells.length > 0 && r.cells.every((c) => c.verdict === 'dont_know'));
+  const known = p.rows.filter((r) => !unknown.includes(r));
+  root.append(grid(p, known, o, `What you can do with ${p.tool}, by environment`));
+  if (unknown.length) {
+    const fold = el('div', 'tp-fold');
+    fold.append(
+      el('span', 'tp-fold-badge', `Not verified yet · ${unknown.length}`),
+      el('span', 'tp-small', "Nobody has verified these, so they are Don't know yet everywhere."),
+      button(o.showUnknown ? 'Hide them' : 'Show them', 'tp-btn tp-btn-link', false, o.onToggleUnknown),
+    );
+    root.append(fold);
+    if (o.showUnknown) root.append(grid(p, unknown, o, `Capabilities of ${p.tool} nobody has verified yet`));
+  }
+
+  if (p.picked) {
+    const row = p.rows.find((r) => r.key === p.picked!.key);
+    const env = p.environments.find((e) => e.id === p.picked!.environmentId);
+    root.append(el('div', 'tp-pp-answer-title', `${row?.label ?? ''} · ${env?.name ?? ''}`));
+    if (p.status) root.append(el('div', 'tp-small', p.status));
+    if (p.answer) {
+      root.append(
+        renderCard(p.answer, {
+          animate: o.animateCard,
+          detailsOpen: o.detailsOpen,
+          onAction: (a) => o.onAction(a),
+          onToggleDetails: o.onToggleDetails,
+        }),
+      );
+    }
+  }
   return root;
 }

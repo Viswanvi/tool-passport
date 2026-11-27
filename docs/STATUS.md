@@ -1615,3 +1615,22 @@ AI reading and Fill in from your docs (D58), and the answer card in a Custom UI 
 - Not checked live on production: tp-judge-2 asked for a sign-in under its own Atlassian account, which is the
   human's step. The same code runs on the demo site's development install (5.33.0), checked live there.
 - LLM calls: 0.
+
+### The Passport tab in the frame, My tools in tabs, 2026-11-27 (human: "Lets make it more elegant")
+
+Built (D60): the Passport tab drawn by the card frame (grid of coloured verdict chips, "N of M Yes" per environment,
+the opened cell's card below); only the open tab draws its frame; My tools split into four tabs.
+
+- `npx vitest run`: `Tests 545 passed (545)`; `npx tsc --noEmit -p .` and `npm run lint` exit 0; `forge lint`: `No
+  issues found.` Dev 5.34.0 to 5.38.0, each "eligible for the Runs on Atlassian program".
+- Live on the demo site:
+  - 5.34.0: the Passport frame drew the grid but only about 360px wide (labels wrapping in a narrow table). 5.35.0
+    tried the Frame's `width="100%"`: that switched off its auto-sizing altogether (a small box with a scroll bar),
+    so it was reverted. 5.36.0 gave the passport a fixed 700px: the frame stayed narrow and clipped it. The cause was
+    the page: UI Kit stacks shrink to their widest child (the Ask tab's 480px question box had hidden it). 5.37.0
+    made the tab bodies full width: the passport fills the page, header with **Check again**, environments *KS-DEV
+    13.2 · 5 of 6 Yes* and *KS-PROD 13.2 · 4 of 6 Yes*, six known rows as green Yes and red No chips, *Not verified
+    yet · 13* folded. 5.38.0 keeps buttons on one line.
+  - My tools: four tabs, Open questions first ("No open questions for Kestrel Studio.").
+  - Not clicked live: a Passport cell (the pane's clicks don't reach the frame; the human's clicks do, as Details
+    showed). LLM calls: 0.

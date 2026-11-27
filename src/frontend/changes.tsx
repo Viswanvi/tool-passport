@@ -203,10 +203,7 @@ export const ChangesSection = ({ toolId, refreshKey }: { toolId: number; refresh
   if (!data.ok) return null;
   return (
     <Stack space="space.150">
-      <Inline space="space.150" alignBlock="baseline" shouldWrap>
-        <Heading as="h2">Changes</Heading>
-        {checkedAt ? <Text size="small" color="color.text.subtlest">{`Records checked ${day(checkedAt)} · looks again every 30 seconds`}</Text> : null}
-      </Inline>
+      {checkedAt ? <Text size="small" color="color.text.subtlest">{`Version changes · records checked ${day(checkedAt)} · looks again every 30 seconds`}</Text> : null}
       {data.environments?.length ? <UpgradePreviewForm toolId={toolId} environments={data.environments} /> : null}
       {data.changes.length === 0 ? <Text>No version changes yet.</Text> : null}
       {message ? (

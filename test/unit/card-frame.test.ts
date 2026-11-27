@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Card, CardAction, Stamp } from '../../src/engine/card';
-import { frameView, primaryOf } from '../../src/frontend/card-frame';
+import { cellOf, frameView, primaryOf, type PassportFrameView } from '../../src/frontend/card-frame';
 import { stampLines } from '../../src/frontend/card-text';
 
 /**
@@ -61,6 +61,31 @@ describe('the view sent to the frame', () => {
     expect(frameView(waiting, { busy: false, canRecheck: true })).toMatchObject({ primary: null, recheck: true });
     expect(frameView(waiting, { busy: false, canRecheck: false }).recheck).toBe(false);
     expect(frameView(card({ kind: 'request_fix', label: 'Request the fix' }), { busy: true, canRecheck: true })).toMatchObject({ recheck: false, busy: true });
+  });
+});
+
+describe('a Passport cell clicked in the frame (D60)', () => {
+  const passport: PassportFrameView = {
+    tool: 'Kestrel Studio',
+    checkedAt: '2026-11-27T12:00:00.000Z',
+    environments: [
+      { id: 1, name: 'KS-DEV', version: '13.2' },
+      { id: 2, name: 'KS-PROD', version: '13.2' },
+    ],
+    rows: [{ key: 'web_frontend', label: 'Build a custom web front end or dashboard', cells: [{ environmentId: 1, verdict: 'not_ready', title: 'Not ready' }] }],
+    picked: null,
+    answer: null,
+    status: null,
+    refreshing: false,
+  };
+
+  it('opens only a cell the page sent', () => {
+    expect(cellOf({ frameId: 'f', action: 'open-cell', cell: { key: 'web_frontend', environmentId: 1 } }, passport)).toEqual({ key: 'web_frontend', environmentId: 1 });
+    // A key or environment the page never showed, another action, or no view at all: nothing is opened.
+    expect(cellOf({ frameId: 'f', action: 'open-cell', cell: { key: 'gpu_compute', environmentId: 1 } }, passport)).toBeNull();
+    expect(cellOf({ frameId: 'f', action: 'open-cell', cell: { key: 'web_frontend', environmentId: 2 } }, passport)).toBeNull();
+    expect(cellOf({ frameId: 'f', action: 'primary', cell: { key: 'web_frontend', environmentId: 1 } }, passport)).toBeNull();
+    expect(cellOf({ frameId: 'f', action: 'open-cell', cell: { key: 'web_frontend', environmentId: 1 } }, null)).toBeNull();
   });
 });
 

@@ -1,4 +1,5 @@
 import type { Card } from '../engine/card';
+import type { Verdict } from '../engine/model';
 
 /**
  * The answer card drawn in a Custom UI frame (D59). UI Kit's blocks couldn't give the card the look it needs (four
@@ -18,7 +19,8 @@ export const EVENT = {
   action: 'tool-passport:card-action',
 } as const;
 
-export type FrameAction = 'primary' | 'recheck';
+/** primary and recheck: the card's buttons. open-cell: a Passport cell was clicked. refresh: Check again. */
+export type FrameAction = 'primary' | 'recheck' | 'open-cell' | 'refresh';
 
 export interface CardFrameView {
   card: Card;
@@ -31,18 +33,54 @@ export interface CardFrameView {
   busy: boolean;
 }
 
+/** One cell of the Passport grid, as the server worked it out for the person looking. */
+export interface PassportFrameCell {
+  environmentId: number;
+  verdict: Verdict | null;
+  title: string;
+}
+
+/**
+ * The Passport tab in the frame (D60): every capability against every environment, and the card of the cell the
+ * person opened. Loading and errors are said in `status`; the page keeps every call, as for the card.
+ */
+export interface PassportFrameView {
+  tool: string;
+  checkedAt: string;
+  environments: Array<{ id: number; name: string; version: string | null }>;
+  rows: Array<{ key: string; label: string; cells: PassportFrameCell[] }>;
+  picked: { key: string; environmentId: number } | null;
+  /** The opened cell's card, once it has come back. */
+  answer: CardFrameView | null;
+  /** "Checking…" while the opened cell is being checked, or a problem in words. */
+  status: string | null;
+  /** True while the grid itself is being checked again. */
+  refreshing: boolean;
+}
+
+export type FrameView = { kind: 'card'; card: CardFrameView } | { kind: 'passport'; passport: PassportFrameView };
+
 export interface ReadyMessage {
   frameId: string;
 }
 
 export interface ViewMessage {
   frameId: string;
-  view: CardFrameView | null;
+  view: FrameView | null;
 }
 
 export interface ActionMessage {
   frameId: string;
   action: FrameAction;
+  /** open-cell only. */
+  cell?: { key: string; environmentId: number };
+}
+
+/** A clicked cell as the page will act on it: only cells it sent may be opened (the frame decides nothing). */
+export function cellOf(m: ActionMessage, view: PassportFrameView | null): { key: string; environmentId: number } | null {
+  if (m.action !== 'open-cell' || !m.cell || !view) return null;
+  const row = view.rows.find((r) => r.key === m.cell!.key);
+  return row && row.cells.some((c) => c.environmentId === m.cell!.environmentId) ? { key: row.key, environmentId: m.cell.environmentId } : null;
 }
 
 /** Requests the card waits on: while one is open the card checks again by itself and offers Re-check. */

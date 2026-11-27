@@ -1,9 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import ForgeReconciler, {
   Box,
   Button,
   Checkbox,
-  DynamicTable,
   EmptyState,
   Frame,
   Heading,
@@ -11,7 +10,6 @@ import ForgeReconciler, {
   Inline,
   Link,
   Lozenge,
-  Pressable,
   ProgressTracker,
   SectionMessage,
   Select,
@@ -31,7 +29,19 @@ import ForgeReconciler, {
 } from '@forge/react';
 import type { Card, CardRequest, PathStep, Stamp } from '../engine/card';
 import { events } from '@forge/bridge';
-import { EVENT, FRAME_RESOURCE, frameView, primaryOf, WAITING_KINDS, type ActionMessage, type ReadyMessage, type ViewMessage } from './card-frame';
+import {
+  cellOf,
+  EVENT,
+  FRAME_RESOURCE,
+  frameView,
+  primaryOf,
+  WAITING_KINDS,
+  type ActionMessage,
+  type FrameView,
+  type PassportFrameView,
+  type ReadyMessage,
+  type ViewMessage,
+} from './card-frame';
 import { checkLine, chipText, stampLines, time } from './card-text';
 import type { Verdict } from '../engine/model';
 import { call, cardStyle, type Option } from './common';
@@ -50,7 +60,7 @@ import { PREFERRED_MODELS } from '../llm/model-choice';
 import type { SetupStatus } from '../resolvers/setup-handlers';
 import type { QuickPlan, QuickSetupReply } from '../resolvers/quick-setup';
 import type { HelpStartReply } from '../resolvers/help-handlers';
-import type { PassportReply, PassportRow } from '../resolvers/passport-handlers';
+import type { PassportReply } from '../resolvers/passport-handlers';
 import type { StoryContextReply, StoryShareReply } from '../resolvers/story-handlers';
 import type { SafetyRun } from '../safety/run';
 
@@ -437,20 +447,25 @@ function useAnswer(onAnswered?: () => void) {
 type AnswerState = ReturnType<typeof useAnswer>;
 
 /**
- * The answer card drawn in a Custom UI frame (D59). The frame only draws: this component sends it the view (the card
- * and which button it has) whenever that changes, and does what a clicked button asks, through the same useAnswer
- * actions as the UI Kit card. The frame says it is ready until it gets a view, so a frame that loads after this
- * page subscribes still gets one. Only one Frame per module, so Ask, the story panel and the help center use it,
- * and the Passport tab keeps the UI Kit card.
+ * Whether this part of the page may draw its frame. A module may hold one Frame, and the global page has two tabs
+ * that use one (Ask and Passport), so the page lets only the open tab draw its frame (D60). Elsewhere it is true.
  */
-const FramedCard = ({ card, busy, onRecheck, onRequest, canRecheck }: { card: Card } & CardActions) => {
+const FrameSlot = createContext(true);
+
+/**
+ * Links the page to its frame (D59, D60). The frame only draws: this sends it the view whenever the view changes,
+ * and hands what was clicked to `onAction`. The frame says it is ready until it gets a view, so a frame that loads
+ * after this subscribes still gets one, and a frame drawn again (switching tabs) gets the current view. It listens
+ * only while `active`, so a hidden tab's link never answers the open tab's frame.
+ */
+function useFrameLink(view: FrameView | null, active: boolean, onAction: (m: ActionMessage) => void) {
   const frameId = useRef<string | null>(null);
-  const view = frameView(card, { busy, canRecheck });
-  // The listeners are set up once; they read the latest view and actions through these refs.
-  const latest = useRef({ view, card, onRecheck, onRequest });
-  latest.current = { view, card, onRecheck, onRequest };
+  // The listeners read the latest view and handler through this ref.
+  const latest = useRef({ view, onAction });
+  latest.current = { view, onAction };
 
   useEffect(() => {
+    if (!active) return undefined;
     const ready = events.on(EVENT.ready, async (m: ReadyMessage) => {
       if (!m?.frameId) return;
       frameId.current = m.frameId;
@@ -459,31 +474,47 @@ const FramedCard = ({ card, busy, onRecheck, onRequest, canRecheck }: { card: Ca
     });
     const action = events.on(EVENT.action, async (m: ActionMessage) => {
       if (!m || m.frameId !== frameId.current) return;
-      const now = latest.current;
-      if (m.action === 'recheck') return now.onRecheck();
-      const p = primaryOf(now.card);
-      if (!p) return;
-      if (p.does === 'recheck') now.onRecheck();
-      else now.onRequest(p.does);
+      latest.current.onAction(m);
     });
     return () => {
+      frameId.current = null;
       void ready.then((s) => s.unsubscribe());
       void action.then((s) => s.unsubscribe());
     };
-  }, []);
+  }, [active]);
 
-  // A new card, or busy changing, is sent at once; the frame redraws (and animates only if the answer changed).
+  // A changed view is sent at once; the frame redraws (and animates only if the answer changed).
+  const key = JSON.stringify(view);
   useEffect(() => {
     if (!frameId.current) return;
     const m: ViewMessage = { frameId: frameId.current, view: latest.current.view };
     void events.emit(EVENT.view, m);
-  }, [card, busy, canRecheck]);
+  }, [key]);
+}
 
+/** Does what the card's main button or Re-check asks, through the same useAnswer actions as the UI Kit card. */
+function cardButton(m: ActionMessage, card: Card, x: Pick<CardActions, 'onRecheck' | 'onRequest'>) {
+  if (m.action === 'recheck') return x.onRecheck();
+  if (m.action !== 'primary') return undefined;
+  const p = primaryOf(card);
+  if (!p) return undefined;
+  return p.does === 'recheck' ? x.onRecheck() : x.onRequest(p.does);
+}
+
+/** "Fix requested (TPD-3) to Marco": under a framed card, where the page can look the owner's name up. */
+const CardRequests = ({ card }: { card: Card }) => {
   const kind = card.action?.kind;
+  return kind && WAITING.has(kind) && card.action?.requests ? <OpenRequests label={card.action.label} to={kind === 'owner_asked'} requests={card.action.requests} /> : null;
+};
+
+/** The answer card drawn in a Custom UI frame (D59), on Ask, the story panel and the help center. */
+const FramedCard = ({ card, busy, onRecheck, onRequest, canRecheck }: { card: Card } & CardActions) => {
+  const active = useContext(FrameSlot);
+  useFrameLink({ kind: 'card', card: frameView(card, { busy, canRecheck }) }, active, (m) => cardButton(m, card, { onRecheck, onRequest }));
   return (
     <Stack space="space.100">
-      <Frame resource={FRAME_RESOURCE} />
-      {kind && WAITING.has(kind) && card.action?.requests ? <OpenRequests label={card.action.label} to={kind === 'owner_asked'} requests={card.action.requests} /> : null}
+      {active ? <Frame resource={FRAME_RESOURCE} /> : null}
+      <CardRequests card={card} />
     </Stack>
   );
 };
@@ -624,86 +655,74 @@ const AskPage = () => {
 
 // ---- the Passport overview: every capability in every environment, for the person looking ----------------
 
-const cellStyle = xcss({ padding: 'space.050', borderRadius: 'radius.small', ':hover': { backgroundColor: 'color.background.neutral.subtle.hovered' } });
-
-type OpenCell = (row: PassportRow, cell: PassportRow['cells'][number], environment: string) => void;
-
-/** Capabilities down the side, environments across the top; each cell opens its card. */
-const PassportTable = ({ data, rows, picked, onOpen, label }: { data: Extract<PassportReply, { ok: true }>; rows: PassportRow[]; picked: string | null; onOpen: OpenCell; label: string }) => (
-  <DynamicTable
-    label={label}
-    head={{
-      cells: [
-        { key: 'capability', content: 'Capability', width: 40 },
-        ...data.environments.map((e) => ({ key: String(e.id), content: e.version ? `${e.name} · ${e.version}` : e.name })),
-      ],
-    }}
-    rows={rows.map((row) => ({
-      key: row.key,
-      isHighlighted: picked === row.key,
-      cells: [
-        { key: 'capability', content: <Text>{row.label}</Text> },
-        ...row.cells.map((cell) => {
-          const environment = data.environments.find((e) => e.id === cell.environmentId)?.name ?? '';
-          return {
-            key: String(cell.environmentId),
-            content: (
-              <Pressable xcss={cellStyle} onClick={() => onOpen(row, cell, environment)}>
-                <Lozenge appearance={cell.lozenge} isBold>
-                  {cell.title}
-                </Lozenge>
-              </Pressable>
-            ),
-          };
-        }),
-      ],
-    }))}
-  />
-);
-
+/**
+ * The Passport tab, drawn in the frame (D60): every capability against every environment, checked as the person
+ * looking, and the card of the cell they open. This page keeps every call (`passport`, `askKey` and the card's
+ * buttons) and sends the frame the view; the frame reports clicks, and only cells this page sent can be opened.
+ */
 const PassportPage = ({ refreshKey }: { refreshKey: number }) => {
   const { tools, tool, setTool } = useTools();
   const [data, setData] = useState<PassportReply | null>(null);
-  const [picked, setPicked] = useState<{ key: string; label: string; environment: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [picked, setPicked] = useState<{ key: string; environmentId: number } | null>(null);
   // Bumped by "Check again".
   const [round, setRound] = useState(0);
-  const [showUnknown, setShowUnknown] = useState(false);
   const a = useAnswer();
+  const active = useContext(FrameSlot);
 
   useEffect(() => {
     if (!tool) return;
-    setData(null);
+    // Check again keeps the grid on screen while it reads; a new tool starts empty.
+    setLoading(true);
     void call<PassportReply>('passport', { toolId: Number(tool.value) })
       .then(setData)
-      .catch((e: unknown) => setData({ ok: false, reason: String(e) }));
+      .catch((e: unknown) => setData({ ok: false, reason: String(e) }))
+      .finally(() => setLoading(false));
   }, [tool, refreshKey, round]);
+
+  const passport: PassportFrameView | null = data?.ok
+    ? {
+        tool: data.tool,
+        checkedAt: data.checkedAt,
+        environments: data.environments,
+        rows: data.rows.map((r) => ({ key: r.key, label: r.label, cells: r.cells.map((c) => ({ environmentId: c.environmentId, verdict: c.verdict, title: c.title })) })),
+        picked,
+        answer: a.card ? frameView(a.card, { busy: a.busy, canRecheck: a.askId !== null }) : null,
+        status: a.busy && !a.card ? a.working : (a.notice ?? (a.failed && !a.card ? 'Something went wrong. Try again.' : null)),
+        refreshing: loading,
+      }
+    : null;
+
+  useFrameLink(passport ? { kind: 'passport', passport } : null, active, (m) => {
+    if (m.action === 'refresh') return setRound((n) => n + 1);
+    const cell = cellOf(m, passport);
+    if (cell && tool) {
+      setPicked(cell);
+      void a.show('Checking the tool, policy, setup and access…', () => call<AskReply>('askKey', { toolId: Number(tool.value), environmentId: cell.environmentId, key: cell.key }));
+      return undefined;
+    }
+    return a.card ? cardButton(m, a.card, { onRecheck: () => void a.recheck(), onRequest: (kind) => void a.request(kind) }) : undefined;
+  });
 
   if (tools === null) return <Spinner />;
   if (tools.length === 0) return <NoTools />;
 
-  // Rows nobody has verified anywhere are folded away, so the grid leads with what is known.
-  const rows = data?.ok ? data.rows : [];
-  const unknown = rows.filter((r) => r.cells.length > 0 && r.cells.every((c) => c.verdict === 'dont_know'));
-  const known = rows.filter((r) => !unknown.includes(r));
-
-  const openCell = (row: PassportRow, cell: PassportRow['cells'][number], environment: string) => {
-    if (!tool) return;
-    setPicked({ key: row.key, label: row.label, environment });
-    void a.show('Checking the tool, policy, setup and access…', () => call<AskReply>('askKey', { toolId: Number(tool.value), environmentId: cell.environmentId, key: row.key }));
-  };
-
   return (
     <Stack space="space.200">
-      <Inline space="space.200" alignBlock="center" shouldWrap>
-        {tools.length > 1 ? (
-          <Box xcss={xcss({ width: '240px' })}>
-            <Select options={tools} value={tool} onChange={(o: Option) => setTool(o)} placeholder="Tool" />
-          </Box>
-        ) : null}
-        <Button appearance="subtle" onClick={() => setRound((n) => n + 1)} isDisabled={data === null}>
-          Check again
-        </Button>
-      </Inline>
+      {tools.length > 1 ? (
+        <Box xcss={xcss({ width: '240px' })}>
+          <Select
+            options={tools}
+            value={tool}
+            onChange={(o: Option) => {
+              setData(null);
+              setPicked(null);
+              setTool(o);
+            }}
+            placeholder="Tool"
+          />
+        </Box>
+      ) : null}
       {data === null ? (
         <Inline space="space.100" alignBlock="center">
           <Spinner size="small" />
@@ -713,31 +732,10 @@ const PassportPage = ({ refreshKey }: { refreshKey: number }) => {
         <SectionMessage appearance="warning">
           <Text>{data.reason}</Text>
         </SectionMessage>
-      ) : (
-        <Stack space="space.150">
-          <Heading as="h2" size="medium">{`Your passport for ${data.tool}`}</Heading>
-          <Text color="color.text.subtle">
-            {`What you can do, everywhere, checked as you at ${time(data.checkedAt)}. Click a cell to see why.`}
-          </Text>
-          <PassportTable data={data} rows={known} picked={picked?.key ?? null} onOpen={openCell} label={`What you can do with ${data.tool}, by environment`} />
-          {unknown.length ? (
-            <Stack space="space.100">
-              <Inline space="space.100" alignBlock="center" shouldWrap>
-                <Lozenge appearance="new">{`Not verified yet · ${unknown.length}`}</Lozenge>
-                <Text color="color.text.subtle">
-                  {`${unknown.length} not verified yet: Don't know yet everywhere.`}
-                </Text>
-                <Button appearance="subtle" onClick={() => setShowUnknown(!showUnknown)}>
-                  {showUnknown ? 'Hide them' : 'Show them'}
-                </Button>
-              </Inline>
-              {showUnknown ? <PassportTable data={data} rows={unknown} picked={picked?.key ?? null} onOpen={openCell} label={`Capabilities of ${data.tool} nobody has verified yet`} /> : null}
-            </Stack>
-          ) : null}
-        </Stack>
-      )}
-      {picked ? <Heading as="h3" size="small">{`${picked.label} · ${picked.environment}`}</Heading> : null}
-      <AnswerView a={a} />
+      ) : active ? (
+        <Frame resource={FRAME_RESOURCE} />
+      ) : null}
+      {a.card ? <CardRequests card={a.card} /> : null}
     </Stack>
   );
 };
@@ -1646,12 +1644,39 @@ const MyToolsPage = ({ tools, refreshKey }: { tools: Option[]; refreshKey: numbe
           Refresh
         </Button>
       </Inline>
-      <DocAssistant key={`docs-${tool.value}`} toolId={Number(tool.value)} toolName={tool.label} onSaved={() => setRefreshed((n) => n + 1)} />
-      <Heading as="h2">Open questions</Heading>
-      <Text color="color.text.subtle">Answer once: everyone who asked gets it on their own request.</Text>
-      <QuestionsForTool key={tool.value} toolId={Number(tool.value)} refreshKey={key} />
-      <ChangesSection key={`changes-${tool.value}`} toolId={Number(tool.value)} refreshKey={key} />
-      <ToolRecords key={`records-${tool.value}`} toolId={Number(tool.value)} refreshKey={key} />
+      {/* One section at a time (D60): the owner's work used to be one long page. The tab names are the ones the
+          judge guide uses. */}
+      <Tabs id="my-tools-tabs">
+        <TabList>
+          <Tab>Open questions</Tab>
+          <Tab>Changes</Tab>
+          <Tab>Fill in from your docs</Tab>
+          <Tab>Records</Tab>
+        </TabList>
+        <TabPanel>
+          <Box xcss={tabBody}>
+            <Stack space="space.150">
+              <Text color="color.text.subtle">Answer once: everyone who asked gets it on their own request.</Text>
+              <QuestionsForTool key={tool.value} toolId={Number(tool.value)} refreshKey={key} />
+            </Stack>
+          </Box>
+        </TabPanel>
+        <TabPanel>
+          <Box xcss={tabBody}>
+            <ChangesSection key={`changes-${tool.value}`} toolId={Number(tool.value)} refreshKey={key} />
+          </Box>
+        </TabPanel>
+        <TabPanel>
+          <Box xcss={tabBody}>
+            <DocAssistant key={`docs-${tool.value}`} toolId={Number(tool.value)} toolName={tool.label} onSaved={() => setRefreshed((n) => n + 1)} />
+          </Box>
+        </TabPanel>
+        <TabPanel>
+          <Box xcss={tabBody}>
+            <ToolRecords key={`records-${tool.value}`} toolId={Number(tool.value)} refreshKey={key} />
+          </Box>
+        </TabPanel>
+      </Tabs>
     </Stack>
   );
 };
@@ -1868,29 +1893,39 @@ const HelpCenterAsk = () => {
   );
 };
 
-const tabBody = xcss({ paddingTop: 'space.200' });
+// Full width: UI Kit stacks shrink to their widest child, and a Frame takes the width it is given (seen live: the
+// Passport frame stayed narrow on a tab with nothing wide in it).
+const tabBody = xcss({ paddingTop: 'space.200', width: '100%' });
 
 /** The global page: Ask and Passport for everyone, My tools for tool owners and Jira administrators. */
 const HomePage = () => {
   const [mine, setMine] = useState<Option[]>([]);
   // Opening a tab reads it again: Passport is tab 1, My tools tab 2.
   const [opened, setOpened] = useState({ passport: 0, mine: 0 });
+  // The open tab: only it may draw its frame (one Frame per module, D60).
+  const [tab, setTab] = useState(0);
   useEffect(() => {
     void call<{ tools: Array<{ id: number; name: string }> }>('myTools').then((r) => setMine(r.tools.map((t) => ({ label: t.name, value: String(t.id) }))));
   }, []);
-  const onChange = (index: number) =>
+  const onChange = (index: number) => {
+    setTab(index);
     setOpened((o) => (index === 1 ? { ...o, passport: o.passport + 1 } : index === 2 ? { ...o, mine: o.mine + 1 } : o));
+  };
   const ask = (
     <TabPanel>
       <Box xcss={tabBody}>
-        <AskPage />
+        <FrameSlot.Provider value={tab === 0}>
+          <AskPage />
+        </FrameSlot.Provider>
       </Box>
     </TabPanel>
   );
   const passport = (
     <TabPanel>
       <Box xcss={tabBody}>
-        <PassportPage refreshKey={opened.passport} />
+        <FrameSlot.Provider value={tab === 1}>
+          <PassportPage refreshKey={opened.passport} />
+        </FrameSlot.Provider>
       </Box>
     </TabPanel>
   );
