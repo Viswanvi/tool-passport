@@ -60,3 +60,6 @@ Thumbs.db
 # Kept local, not published: Atlassian's Forge skills for Claude Code (not this app's code) and the original starter kit.
 .claude/
 Claude outputs/
+
+# Built Custom UI (npm run build:card before forge deploy)
+static/card/build/

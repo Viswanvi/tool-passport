@@ -138,6 +138,8 @@ resources:
     path: src/frontend/index.tsx
   - key: icons                      # the story panel's icon, shipped with the app (nothing loads from outside)
     path: static/icons
+  - key: card                       # the answer card, drawn in a Frame (D59); `npm run build:card` makes this folder
+    path: static/card/build
 permissions:
   # Assets and groups are read as the app (DECISIONS D25), so no scope allows impersonation.
   scopes:

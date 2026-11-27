@@ -5,10 +5,11 @@
   "license": "MIT",
   "private": true,
   "scripts": {
+    "build:card": "vite build --config static/card/vite.config.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint \"src/**/*.{ts,tsx}\" \"test/**/*.ts\"",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"test/**/*.ts\" \"static/card/src/**/*.ts\"",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run lint && npm test"
+    "check": "npm run typecheck && npm run lint && npm test && npm run build:card"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
@@ -18,6 +19,7 @@
     "eslint": "8.57.1",
     "eslint-plugin-react-hooks": "^4.6.0",
     "typescript": "5.9.3",
+    "vite": "8.3.8",
     "vitest": "5.1.1"
   },
   "dependencies": {

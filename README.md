@@ -83,6 +83,7 @@ list in [src/safety/cases.ts](src/safety/cases.ts).
 | Part | What it does |
 | --- | --- |
 | Forge UI Kit: `jira:globalPage`, `jira:adminPage`, `jira:issuePanel` | Ask, Passport and My tools; the setup page with its checklist; Check this story and Add to story on a work item |
+| Forge Custom UI in a UI Kit `Frame` | The answer card on Ask, the story panel and the help center: a verdict banner, four passport stamps that land with a short animation, the path to Yes. It only draws; the page around it keeps every server call (they talk through `@forge/bridge` events) |
 | Forge UI Kit: `jiraServiceManagement:portalSubheader` | "Can I…?" in the help center, with its own resolver offering only asking and the card's actions; `unlicensedAccess: customer`, never anonymous |
 | Jira REST: work item comments | Add to story posts the answer as the person's comment; the app adds the new answer when it changes |
 | Forge resolvers | Every action; the signed-in person always comes from the Forge context, never from the request |
@@ -120,6 +121,7 @@ deploy is reported eligible for the Runs on Atlassian program.
 | `src/safety/` | The false-Yes cases and their in-memory test data, shared by the build and the app |
 | `src/db/` | Forge SQL repositories and migrations |
 | `src/resolvers/`, `src/frontend/` | Resolver wiring and the UI Kit screens |
+| `static/card/` | The answer card, drawn in a Custom UI frame inside the UI Kit screens (built with Vite into `static/card/build`) |
 | `test/` | Unit tests, the safety suite runner and the 40-question set |
 | `docs/` | Judge guide, [specification](docs/tool-passport-v2.1.md), [decisions](docs/DECISIONS.md), [status](docs/STATUS.md), [experiments](docs/experiments.md) |
 
@@ -132,6 +134,7 @@ npm install
 npm test               # unit tests and the false-Yes suite (vitest)
 npm run typecheck
 npm run lint
+npm run build:card     # the answer card's frame; forge deploy uploads static/card/build as it is
 forge lint
 forge deploy -e development
 forge install          # first time, on your development site

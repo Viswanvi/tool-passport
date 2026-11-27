@@ -5,6 +5,7 @@ import ForgeReconciler, {
   Checkbox,
   DynamicTable,
   EmptyState,
+  Frame,
   Heading,
   Icon,
   Inline,
@@ -28,7 +29,10 @@ import ForgeReconciler, {
   useProductContext,
   xcss,
 } from '@forge/react';
-import type { Card, CardRequest, Chip, PathStep, Stamp } from '../engine/card';
+import type { Card, CardRequest, PathStep, Stamp } from '../engine/card';
+import { events } from '@forge/bridge';
+import { EVENT, FRAME_RESOURCE, frameView, primaryOf, WAITING_KINDS, type ActionMessage, type ReadyMessage, type ViewMessage } from './card-frame';
+import { checkLine, chipText, stampLines, time } from './card-text';
 import type { Verdict } from '../engine/model';
 import { call, cardStyle, type Option } from './common';
 import { ChangesSection, RecentQuestions } from './changes';
@@ -61,35 +65,8 @@ const ANY = 'any';
 const POLL_MS = 10_000;
 const POLL_LIMIT = 90;
 
-const time = (iso: string | null | undefined) => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-};
-const day = (iso: string | null | undefined) => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-};
-
-/** "until Dec 26" on an approval that lapses; "on Dec 26" on one that has. */
-const untilText = (c: Chip) => (c.until && day(c.until) ? ` · ${c.label === 'Approval expired' ? 'on' : 'until'} ${day(c.until)}` : '');
-
-function chipText(c: Chip): string {
-  if (c.label === 'Assets record') return `Assets record · read ${time(c.readAt)}`;
-  if (c.label === 'Recorded by owner') return `Recorded by owner${c.changedAt ? ` · ${day(c.changedAt)}` : ''}`;
-  return `${c.label} · ${c.detail}${untilText(c)}`;
-}
-
-function checkLine(c: Card['checks'][number]): string {
-  const chip = c.chip;
-  const extra = chip.label === 'Assets record' || chip.label === 'Recorded by owner' ? `${chip.detail}${chip.changedAt ? `, changed ${day(chip.changedAt)}` : ''}` : `${chip.detail}${untilText(chip)}`;
-  return `${c.subject}: ${c.statusText} (${chip.label}${extra ? ` · ${extra}` : ''})`;
-}
-
-// Actions that arrive in Phase 2, shown as the next step in words rather than as buttons that do nothing.
 /** Open requests keep the card checking again (spec section 15). */
-const WAITING = new Set(['fix_requested', 'approval_requested', 'owner_asked']);
+const WAITING = WAITING_KINDS;
 
 /** "Fix requested (TPD-3) from Marco · view request", one line per open request. Names are looked up by the page. */
 const OpenRequests = ({ label, to, requests }: { label: string; to: boolean; requests: CardRequest[] }) => (
@@ -149,11 +126,6 @@ const HERO_BOX: Record<Stamp['state'], ReturnType<typeof xcss>> = {
   none: HERO_NEUTRAL,
 };
 
-/** The evidence label in a few words ("Owner-verified · 13.2"); the full line is in the stamp's tooltip. */
-function chipShort(c: Chip): string {
-  const short = c.detail && c.detail.length <= 12 && c.label !== 'Assets record' && c.label !== 'Recorded by owner';
-  return short ? `${c.label} · ${c.detail}` : c.label;
-}
 
 /**
  * One passport stamp, readable at a glance: what was checked, the answer, and its source in a few words (or, when
@@ -161,9 +133,7 @@ function chipShort(c: Chip): string {
  */
 const StampTile = ({ stamp }: { stamp: Stamp }) => {
   const look = LOOK[stamp.state];
-  const third = stamp.state !== 'pass' && stamp.detail ? stamp.detail : stamp.chip ? chipShort(stamp.chip) : null;
-  const more = stamp.more ? `+${stamp.more} more ${stamp.more === 1 ? 'check' : 'checks'}` : null;
-  const tip = [stamp.detail, stamp.chip ? `Evidence: ${chipText(stamp.chip)}` : null, more].filter(Boolean).join(' · ');
+  const { third, tip } = stampLines(stamp);
   const tile = (
     <Box xcss={look.box}>
       <Stack space="space.050">
@@ -466,8 +436,60 @@ function useAnswer(onAnswered?: () => void) {
 
 type AnswerState = ReturnType<typeof useAnswer>;
 
-/** The spinner, the "changed by itself" note, any notice, and the card. */
-const AnswerView = ({ a }: { a: AnswerState }) => (
+/**
+ * The answer card drawn in a Custom UI frame (D59). The frame only draws: this component sends it the view (the card
+ * and which button it has) whenever that changes, and does what a clicked button asks, through the same useAnswer
+ * actions as the UI Kit card. The frame says it is ready until it gets a view, so a frame that loads after this
+ * page subscribes still gets one. Only one Frame per module, so Ask, the story panel and the help center use it,
+ * and the Passport tab keeps the UI Kit card.
+ */
+const FramedCard = ({ card, busy, onRecheck, onRequest, canRecheck }: { card: Card } & CardActions) => {
+  const frameId = useRef<string | null>(null);
+  const view = frameView(card, { busy, canRecheck });
+  // The listeners are set up once; they read the latest view and actions through these refs.
+  const latest = useRef({ view, card, onRecheck, onRequest });
+  latest.current = { view, card, onRecheck, onRequest };
+
+  useEffect(() => {
+    const ready = events.on(EVENT.ready, async (m: ReadyMessage) => {
+      if (!m?.frameId) return;
+      frameId.current = m.frameId;
+      const reply: ViewMessage = { frameId: m.frameId, view: latest.current.view };
+      await events.emit(EVENT.view, reply);
+    });
+    const action = events.on(EVENT.action, async (m: ActionMessage) => {
+      if (!m || m.frameId !== frameId.current) return;
+      const now = latest.current;
+      if (m.action === 'recheck') return now.onRecheck();
+      const p = primaryOf(now.card);
+      if (!p) return;
+      if (p.does === 'recheck') now.onRecheck();
+      else now.onRequest(p.does);
+    });
+    return () => {
+      void ready.then((s) => s.unsubscribe());
+      void action.then((s) => s.unsubscribe());
+    };
+  }, []);
+
+  // A new card, or busy changing, is sent at once; the frame redraws (and animates only if the answer changed).
+  useEffect(() => {
+    if (!frameId.current) return;
+    const m: ViewMessage = { frameId: frameId.current, view: latest.current.view };
+    void events.emit(EVENT.view, m);
+  }, [card, busy, canRecheck]);
+
+  const kind = card.action?.kind;
+  return (
+    <Stack space="space.100">
+      <Frame resource={FRAME_RESOURCE} />
+      {kind && WAITING.has(kind) && card.action?.requests ? <OpenRequests label={card.action.label} to={kind === 'owner_asked'} requests={card.action.requests} /> : null}
+    </Stack>
+  );
+};
+
+/** The spinner, the "changed by itself" note, any notice, and the card (in the frame where `framed`). */
+const AnswerView = ({ a, framed = false }: { a: AnswerState; framed?: boolean }) => (
   <Stack space="space.150">
     {a.busy ? (
       <Inline space="space.100" alignBlock="center">
@@ -492,7 +514,10 @@ const AnswerView = ({ a }: { a: AnswerState }) => (
         <Text>{a.notice}</Text>
       </SectionMessage>
     ) : null}
-    {a.card ? (
+    {a.card && framed ? (
+      <FramedCard card={a.card} busy={a.busy} canRecheck={a.askId !== null} onRecheck={() => void a.recheck()} onRequest={(kind) => void a.request(kind)} />
+    ) : null}
+    {a.card && !framed ? (
       <VerdictCard card={a.card} busy={a.busy} canRecheck={a.askId !== null} onRecheck={() => void a.recheck()} onRequest={(kind) => void a.request(kind)} />
     ) : null}
     {a.failed && !a.card ? (
@@ -591,7 +616,7 @@ const AskPage = () => {
           ))}
         </Inline>
       ) : null}
-      <AnswerView a={a} />
+      <AnswerView a={a} framed />
       <RecentQuestions refreshKey={asksMade} onAskAgain={(id) => void a.open(id)} />
     </Stack>
   );
@@ -1744,7 +1769,7 @@ const StoryPanel = () => {
         </Button>
       </Inline>
       {named && env?.value === String(named.id) ? <Text size="small" color="color.text.subtlest">{`${named.name} is named in the story.`}</Text> : null}
-      <AnswerView a={a} />
+      <AnswerView a={a} framed />
       <AddToStory a={a} />
     </Stack>
   );
@@ -1837,7 +1862,7 @@ const HelpCenterAsk = () => {
             ))}
           </Inline>
         ) : null}
-        <AnswerView a={a} />
+        <AnswerView a={a} framed />
       </Stack>
     </Box>
   );

@@ -1574,3 +1574,25 @@ one-line texts across the screens.
     tagged.
 - LLM calls: 4 (the four draft runs); every Ask answer came from the cache. The demo site now also has CSV export
   verified on 13.2 (Reset demo clears it).
+
+### The answer card in a Custom UI frame, 2026-11-27 (human: "Yes, rebuild it")
+
+Built (D59): the card on Ask, the story panel and the help center is drawn in a UI Kit `Frame` (resource `card`,
+`static/card`, Vite build); the page keeps every server call and the frame only draws and reports clicks.
+
+- Docs read first: the UI Kit Frame component, Custom UI, permissions (content security policy), the bridge events
+  and view APIs. Not stated there: whether a Frame can call resolvers (so it doesn't), or the Frame's release stage.
+- `npx vitest run`: `Tests 544 passed (544)`; `npx tsc --noEmit -p .` (now including `static/card/src`) and
+  `npm run lint` (now including the frame) exit 0; `npm run build:card`: `index.html` with `./assets/…` paths, one
+  script and one stylesheet; `forge lint`: `No issues found.` Dev 5.33.0 deployed ("eligible for the Runs on
+  Atlassian program"). `vite` 8.3.8 is now a direct dev dependency (it was already installed for vitest).
+- Live on the demo site:
+  - Ask, KS-DEV: the frame drew *AI read your question as* … *Rules decide*, a green **Yes** banner with *KS-DEV ·
+    13.2*, and four ringed stamps (tool, policy, setup, access icons, each with a green check badge) with their
+    evidence, then **Details**. KS-PROD: a red **No** banner, the policy ring red with a "no" badge and access a dashed
+    yellow ring with a warning badge. The stamps land with their animation when an answer first shows.
+  - MSD-19's story panel: **Check this story** gave the same card in the frame, four stamps in one row.
+  - Not verified live: clicks inside the frame. The browser pane's clicks reach the Jira page but not the frame (a
+    separate Atlassian-hosted frame); **Details** didn't open from the pane. Needs a click by the human. The button
+    choice behind each click is unit-tested, and the page's actions are the ones already verified.
+- LLM calls: 2 (the first Ask and the story check weren't cached after the catalog changed). Production still 2.5.0.
