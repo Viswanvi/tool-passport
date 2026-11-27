@@ -15,6 +15,21 @@ Everything is created by the app's own setup through the same APIs a real custom
 people are fictional: Kestrel Studio is a data-app platform with two environments, KS-DEV and KS-PROD. You play both
 the employee asking (Priya in the video) and the tool owner (Marco), with your own account.
 
+## The 5-minute tour
+
+Short on time? These four steps show the idea; everything after them is optional. Each answer itself takes a few
+seconds; the minutes are installing and setting up.
+
+| Step | What to do | About |
+| --- | --- | --- |
+| 1 | Open the installation link (section 1), click **Get app**, choose your site and accept the permissions | 2 min |
+| 2 | Jira settings → Marketplace apps → **Tool Passport setup** → **Set it all up**. No service desk needed yet | 1 min |
+| 3 | Sidebar → Apps → **Tool Passport** → KS-DEV, the first suggested question: **Not ready**, with four stamps. Then KS-PROD: **No** | 1 min |
+| 4 | The **Passport** tab: every capability in every environment, on one screen | 30 s |
+
+With 10 more minutes: make a service desk (step 1.2), click **Set it all up** again, and try the guided fix (section
+4), where the card turns **Yes** by itself. Then the story panel (section 3) and the version change (section 6).
+
 ## What you need
 
 - An Atlassian Cloud site where you are a site admin, with **Jira** and **Jira Service Management**. A free
@@ -27,8 +42,8 @@ the employee asking (Priya in the video) and the tool owner (Marco), with your o
 
 1. Open the [installation link](https://developer.atlassian.com/console/install/116e4a95-46a5-4008-8a77-9177f8e23ed0?signature=AYABeBOvsiGiDaXFGITTJXv0SaIAAAADAAdhd3Mta21zAEthcm46YXdzOmttczp1cy13ZXN0LTI6NzA5NTg3ODM1MjQzOmtleS83MDVlZDY3MC1mNTdjLTQxYjUtOWY5Yi1lM2YyZGNjMTQ2ZTcAuAECAQB4CxqLTo9l4lqXuFjNim1xJM%2Bp%2F3TVP9xHS2BrU5DRRucB8Hj7T4MmnIhU5akWl5pzoQAAAH4wfAYJKoZIhvcNAQcGoG8wbQIBADBoBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDOD0JAw07f27V8F8XgIBEIA7dKrAKCYfrYkYJtQvIeUgMqQ8rhTDohP39PayEcH3s5n%2B682bPPVY%2Bw5D9USPs5o77ccLi%2Be7qlomgOIAB2F3cy1rbXMAS2Fybjphd3M6a21zOmV1LXdlc3QtMTo3MDk1ODc4MzUyNDM6a2V5LzQ2MzBjZTZiLTAwYzMtNGRlMi04NzdiLTYyN2UyMDYwZTVjYwC4AQICAHi9bVMAkme4qVQX1fQHo6ePw3H40A7cGfz7yrmSfBWMXgFKpXbOptH67Vllbilcs9HrAAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMMkyFEahs9%2B36EKTQAgEQgDuY3llj2%2F5UvFALfautqlMgDSNgY2ShYcRmYu8qPeeGgsWT7GJWGR0k7Rw6aCg3k06R%2FkiQiSYBHI%2BWqwAHYXdzLWttcwBLYXJuOmF3czprbXM6dXMtZWFzdC0xOjcwOTU4NzgzNTI0MzprZXkvNmMxMjBiYTAtNGNkNS00OTg1LWI4MmUtNDBhMDQ5NTJjYzU3ALgBAgIAeDYASx0XCjkny4iLV6vz%2BKtEGSGT6kdt0QRpkn6D%2FlVEAaNe4JzmVWrpJEHBN1biRTQAAAB%2BMHwGCSqGSIb3DQEHBqBvMG0CAQAwaAYJKoZIhvcNAQcBMB4GCWCGSAFlAwQBLjARBAyxcWouXocdF4f3GHICARCAO%2Fs1ZbTP7YgbQmqybuh8fJ%2FTJMdJfeUsg2TiOhwgv4KF5phAN8spaXgKGHzbaK5dI7AhcAmBohzzRAh3AgAAAAAMAAAQAAAAAAAAAAAAAAAAAGLcpKVj0k2gKGWiLyaubMb%2F%2F%2F%2F%2FAAAAAQAAAAAAAAAAAAAAAQAAADIxzJ9VXpQTOUhYT3KOxUZOf0T8ZV13dhK4R5xigaOLlkTeu78JymUYmKG3YTjC28CiRNmcPap6INasNvLghyJMBvk%3D&product=jira)
    (also on the Devpost page), click **Get app**, choose your site and accept the app's permissions.
-2. **A service desk.** If your site has none, create one. On a brand-new site Jira opens on *Welcome to Service
-   Collection*: click **Create space**. Otherwise use the sidebar, **Spaces → +**. Then choose **Service
+2. **A service desk** (needed to raise requests, from section 4; you can ask before you make it). If your site has
+   none, create one. On a brand-new site Jira opens on *Welcome to Service Collection*: click **Create space**. Otherwise use the sidebar, **Spaces → +**. Then choose **Service
    management** → **Basic IT service management** → **Use template**, give it a name (for example *Tool Passport
    Desk*), pick any **Team type** (for example *Information technology*) and click **Create space**.
 3. **Resolutions.** Open Jira settings (the gear icon at the top right) → **Work items** → **Resolutions**. If the
@@ -42,8 +57,9 @@ Open Jira settings (gear icon) → **Marketplace apps**, then in the sidebar und
 **The quick way.** The box at the top, **Set up in one click**, lists exactly what it will set: your service desk
 with the request type **Get IT help**, **Done** approves and **Declined** declines, and the demo data. Click **Set it
 all up** (**No Assets?** click **No Assets? Set up in registry mode**). It takes up to a minute. When the box says
-**Ready to ask**, go to section 3. If a line has a warning sign instead (for example, the site has two service desks
-or no resolution named Done), do that one step below; the box keeps everything else.
+**Ready to ask**, go to section 3. No service desk yet? It loads the demo anyway, so you can ask straight away; make
+the desk later and click **Set it all up** again to turn on requests. If a line has a warning sign (for example, the
+site has two service desks or no resolution named Done), do that one step below; the box keeps everything else.
 
 **Step by step.** The checklist shows each step as **Done** or **To do** and updates as you go.
 
@@ -92,7 +108,7 @@ suggests **KS-DEV** because the story names it. Click **Check this story**: the 
 **Request the fix**, before anyone starts the work. (One model call per new story.) Then click **Add to story**: the
 answer, its four stamps and the path to Yes go on the work item as your comment (refresh the work item to see it), so
 the team sees the blocker where it plans. If you then do moment 2 from this panel, the story gets the new answer by
-itself when the fix request is resolved.
+itself when the fix request is resolved, and again if a later upgrade changes it (section 6).
 
 ## 4. Moment 2: the guided fix
 
@@ -158,6 +174,11 @@ design-review rule says approvals count for 30 days. After that the answer goes 
    **Save**.
 5. Ask the 3 GB question in KS-DEV once more: **Yes**. Your recent questions mark the earlier answers *May have
    changed* until you ask again.
+
+Stories hear about it too. If you added the dashboard answer to a story (section 3) while it was **Yes**, the app
+comments on that story by itself once the Changes screen lists the upgrade: *Tool Passport update: Don't know yet
+(was Yes) … after KS-DEV moved from 13.2 to 14.0*. Click **Still true on 14.0** for *Build a custom web front end or
+dashboard* and the story gets one more: *Yes (was Don't know yet) … after the tool owner updated its verified facts*.
 
 Optional: paste release notes into the box on the change card and click **Suggest labels**. The model suggests a
 label for each fact with the line that supports it. Nothing counts as verified until you choose Still true or
