@@ -111,11 +111,12 @@ the suggestion **Can I build a custom web front end or dashboard?** (or type it 
 
 Try your own wording too. A question outside the tool's catalog gets **Don't know yet**, never a guess.
 
-**Your whole passport.** The **Passport** tab opens with your passport's cover (the tool, when it was checked, and
-*Watching KS-DEV and KS-PROD*), one card per environment (how many things you can do there now, with one coloured
-square per capability) and a key to the five answers. Below them, every capability of Kestrel Studio against KS-DEV
-and KS-PROD, each cell the answer Ask would give, checked as you right now (no model is called). On a fresh demo, as
-a member of `kestrel-dev-builders`:
+**Your whole passport.** The **Passport** tab opens with a header (the tool, when it was checked, and *Watching
+KS-DEV and KS-PROD*), one card per environment (its version, how many things you can do there now, and one bar split
+by answer) and a key to the five answers. Below them, every capability of Kestrel Studio against KS-DEV and KS-PROD,
+each cell the answer Ask would give, checked as you right now (no model is called): first where the two
+environments differ, then what is the same in both, with the rows that are Yes in both folded into one line. On a
+fresh demo, as a member of `kestrel-dev-builders`:
 
 | Capability | KS-DEV | KS-PROD | Why |
 | --- | --- | --- | --- |
