@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Button, Heading, Inline, Lozenge, SectionMessage, Select, Spinner, Stack, Text, TextArea, Textfield, xcss } from '@forge/react';
+import { Box, Button, Heading, Icon, Inline, Lozenge, SectionMessage, Select, Spinner, Stack, Text, TextArea, Textfield, xcss } from '@forge/react';
 import type { LabelKind } from '../change/release-notes';
 import type { ChangeView, RecentAsk, UpgradePreview } from '../resolvers/change-handlers';
 import { call, cardStyle, type Option } from './common';
@@ -99,7 +99,9 @@ const UpgradePreviewForm = ({ toolId, environments }: { toolId: number; environm
     <Box xcss={cardStyle}>
       <Stack space="space.100">
         <Text weight="bold">What if we upgrade?</Text>
-        <Text size="small">See what a new version would change before it happens: which facts would need re-verifying and whose answers rely on them. Nothing is saved.</Text>
+        <Text size="small" color="color.text.subtle">
+          Which facts need re-checking, and who relies on them. Nothing is saved.
+        </Text>
         <Inline space="space.100" alignBlock="center" shouldWrap>
           <Box xcss={xcss({ width: '240px' })}>
             <Select options={options} value={env} onChange={(o: Option) => setEnv(o)} placeholder="Environment" />
@@ -246,7 +248,10 @@ export const ChangesSection = ({ toolId, refreshKey }: { toolId: number; refresh
             ))}
             {c.status === 'listed' && c.toRecheck.length ? (
               <Stack space="space.050">
-                <Text size="small">{`Release notes for ${c.to} (optional): paste them to get a suggested label for each fact, with the line that shows it. Nothing is fetched, and nothing is verified until you choose Still true or Changed.`}</Text>
+                <Inline space="space.075" alignBlock="center">
+                  <Icon glyph="magic-wand" color="color.icon.discovery" label="AI" size="small" />
+                  <Text size="small">{`Paste the ${c.to} release notes: AI suggests a label for each fact, with the line that proves it. You decide.`}</Text>
+                </Inline>
                 <TextArea
                   value={notes[c.id] ?? ''}
                   placeholder={`Paste the ${c.to} release notes`}
@@ -256,14 +261,14 @@ export const ChangesSection = ({ toolId, refreshKey }: { toolId: number; refresh
                 />
                 <Inline space="space.100" alignBlock="center">
                   <Button onClick={() => void suggest(c.id)} isDisabled={labelling !== null || !(notes[c.id] ?? '').trim()}>
-                    Suggest labels
+                    Suggest with AI
                   </Button>
                   {labelling === c.id ? <Spinner /> : null}
                 </Inline>
               </Stack>
             ) : null}
             <Text size="small">
-              {`Not listed: ${c.notListed} ${c.notListed === 1 ? 'fact that doesn’t' : 'facts that don’t'} depend on the version. Policy rules untouched: ${c.rulesUntouched}. Other environments untouched: ${c.otherEnvironments.join(', ') || 'none'}.`}
+              {`Untouched: ${c.notListed} version-free ${c.notListed === 1 ? 'fact' : 'facts'}, ${c.rulesUntouched} policy rules, ${c.otherEnvironments.join(', ') || 'no other environments'}.`}
             </Text>
           </Stack>
         </Box>

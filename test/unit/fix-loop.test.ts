@@ -159,6 +159,8 @@ describe('open requests on the card', () => {
     stamps: [],
     path: [],
     banner: null,
+    read: [],
+    readBy: null,
   });
   const row =(target: string, key: string | null): RequestRow => ({
     id: 1,

@@ -34,6 +34,7 @@ import { seedDemo } from '../seed/demo';
 import { handleAsk, handleEnvironments, handleLoadDemo, handleResetDemo, handleTools, type AskHandlerDeps, type ResolverContext } from './handlers';
 import { handleChanges, handleRecentAsks, handleReleaseNotes, handleStillTrue, handleUpgradePreview, type ChangeDeps } from './change-handlers';
 import { handleCreateTool, handleEdit, handleToolDetails, type EditDeps } from './edit-handlers';
+import { handleDocFacts } from './doc-handlers';
 import { handleRunEval, type EvalDeps } from './eval-handlers';
 import { handleMyTools, handleOpenQuestions, handlePublishAnswer, type OwnerDeps } from './owner-handlers';
 import {
@@ -218,6 +219,12 @@ resolver.define('upgradePreview', ({ payload, context }) => handleUpgradePreview
 
 // Release-note labels (spec F9): one model call per paste, owner or Jira administrator only.
 resolver.define('releaseNotes', ({ payload, context }) => handleReleaseNotes(payload, ctxOf(context), changeDeps));
+
+// "Fill in from your docs" (D58): drafted facts with quotes, one model call per paste, owner or Jira administrator
+// only. Nothing is saved until the owner accepts a draft, which goes through publishAnswer.
+resolver.define('docFacts', ({ payload, context }) =>
+  handleDocFacts(payload, ctxOf(context), { loadTool, loadCatalog, listEnvironments, loadRegistry, check: writeCheck, chat: labelChat }),
+);
 
 resolver.define('recentAsks', ({ context }) => handleRecentAsks(ctxOf(context), { recentAsksFor, loadTool, loadEnvironment }));
 

@@ -89,11 +89,12 @@ site has two service desks or no resolution named Done), do that one step below;
 Open the app: sidebar → **Apps** → **Tool Passport**. On the **Ask** tab, pick **Kestrel Studio** and **KS-DEV**,
 then click the suggested question **Can I build a custom web front end or dashboard?** (or type it and click **Ask**).
 
-- Expected: **Not ready**. "Frontend build isn't set up in KS-DEV." Under it, four passport stamps, one per check,
-  each naming its evidence: **Tool can do it · Yes** (*Owner-verified · 13.2*), **Policy allows it · Needs
-  approval** (*Policy rule · Needs design review*), **Set up here · Missing** (Frontend build, *Assets record*) and
-  **You have access · Yes** (*Mapped access · kestrel-dev-builders*). Below them, the **path to Yes**: Asked → Set up
-  frontend build → Get approval → Yes.
+- Expected: at the top, *AI read your question as* **Build a custom web front end or dashboard**, next to **Rules
+  decide**: the model only matched your words to the tool's list. Then the answer in a yellow banner: **Not ready**,
+  "Frontend build isn't set up in KS-DEV." Under it, four passport stamps, one per check, each naming its evidence
+  (hover a stamp for the full line): **Tool can do it · Yes** (*Owner-verified · 13.2*), **Policy allows it · Needs
+  approval**, **Set up here · Missing** (Frontend build) and **You have access · Yes** (*Mapped access*). Below them,
+  the **path to Yes**: Asked → Set up frontend build → Get approval → Yes. **Details** lists every check in words.
 - Switch the environment to **KS-PROD** and ask again: **No**. The policy stamp is red: not allowed in production
   (*Policy rule*), even though KS-PROD has the frontend build.
 - Pick **Any environment** and ask again: only the tool stamp is checked; the other three say **Not checked**.
@@ -160,6 +161,25 @@ design-review rule says approvals count for 30 days. After that the answer goes 
    every version**, and click **Publish**. The message names the request it answered and closed, and asking again
    gives **Yes**.
 
+**Or let the AI do the typing: Fill in from your docs.** Owners rarely start from nothing: the tool has
+documentation. Instead of step 3, open **My tools** → **Fill in from your docs**, paste the text below (a made-up page
+for the fictional Kestrel Studio) and click **Draft facts with AI**. One model call later you get drafts such as
+*Keep two-way connections open (websockets) · Yes*, each with the exact line it came from and a tag: **New**, **Same
+as recorded** or **Recorded: …**. A draft whose quote isn't really in the text is dropped. Click **Accept** on the
+websockets draft: it is saved as an owner-verified fact on 13.2, and the open question's request is answered and
+closed, as in step 3. Nothing is saved until you accept.
+
+```text
+Kestrel Studio 13.2 feature overview
+Live dashboards stream updates to the browser over WebSockets, so charts refresh without a reload.
+Apps can run jobs on a schedule, for example every night at 2 AM.
+Every table in an app can be exported to a CSV file.
+Apps can send email notifications to a person or a team.
+Each app can use up to 8 GB of memory.
+GPU machines are not available in Kestrel Studio.
+Custom domains are not supported: every app lives under the studio's own address.
+```
+
 ## 6. Moment 3: a version change
 
 1. In KS-DEV, ask **Can I upload a 3 GB file?** Expected: **No**, the limit is 2 GB on version 13.2.
@@ -184,7 +204,7 @@ comments on that story by itself once the Changes screen lists the upgrade: *Too
 (was Yes) … after KS-DEV moved from 13.2 to 14.0*. Click **Still true on 14.0** for *Build a custom web front end or
 dashboard* and the story gets one more: *Yes (was Don't know yet) … after the tool owner updated its verified facts*.
 
-Optional: paste release notes into the box on the change card and click **Suggest labels**. The model suggests a
+Optional: paste release notes into the box on the change card and click **Suggest with AI**. The model suggests a
 label for each fact with the line that supports it. Nothing counts as verified until you choose Still true or
 Changed.
 

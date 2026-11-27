@@ -1537,3 +1537,16 @@ Model and Tests are now steps 5 and 6.
   is still open), and **Request the fix** from the help center (it would raise a TPD request; the same handler as the
   Ask page, which is verified).
 - LLM calls: 1. Demo site left with the box on, KS-DEV at 13.2. Production still 2.5.0.
+
+### Visible AI, docs drafting for owners, and a card that reads at a glance, 2026-11-27 (human: "Lets fix this")
+
+Built (D58): the reading step on every answer (*AI read your question as* … · *Rules decide*), **Fill in from your
+docs** on My tools, a redesigned answer card (coloured verdict banner, compact stamps with tooltips, Details), and
+one-line texts across the screens.
+
+- Checked the installed UI Kit (`@forge/react` 12.5.0) types first: `Tooltip`, `ProgressTracker`, `Tag` colours
+  (`purpleLight`), `Lozenge` `discovery`, `Icon` glyphs `magic-wand` and `search`, `Heading` sizes.
+- `npx vitest run`: `Tests 538 passed (538)`; `npx tsc --noEmit -p .` and `npx eslint src test` exit 0; `forge lint`:
+  `No issues found.` Dev 5.24.0 deployed ("eligible for the Runs on Atlassian program").
+- Live check: not done yet. The browser pane's Atlassian session had expired (it showed id.atlassian.com), and
+  signing in is the human's step.

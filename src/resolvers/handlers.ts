@@ -63,6 +63,8 @@ const TRY_AGAIN: Card = {
   stamps: [],
   path: [],
   banner: null,
+  read: [],
+  readBy: null,
 };
 
 export async function handleAsk(payload: unknown, ctx: ResolverContext, deps: AskHandlerDeps): Promise<AskReply> {
@@ -105,6 +107,8 @@ export async function finishAsk(
 ): Promise<AskReply> {
   const { asker, tool, environment, catalog } = x;
   let card = buildCard(answer, { toolName: tool.name, environment, catalog });
+  // A typed question (Ask, the help center, a story) was read into these keys by the model; a Passport cell wasn't.
+  if (x.source !== 'passport' && card.read.length) card = { ...card, readBy: 'model' };
   if (deps.requests) {
     const built = card;
     card = await cardWithRequests({ answer, card, environment }, asker, deps.requests).catch(() => built);

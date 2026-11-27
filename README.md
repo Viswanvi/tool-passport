@@ -32,6 +32,20 @@ Four more ways in:
 Setup is one click: the setup page proposes the desk, request type, approval outcomes, the demo data and the help
 center box, and sets them when you click. Without a service desk yet, it loads the demo so you can ask at once.
 
+**AI where it helps, rules where it matters.** Every answer shows the AI's part: *AI read your question as* the
+tool's own capability names, next to *Rules decide*. The model reads; it never decides.
+
+**Keeping it current costs owners little.** The work that makes answers trustworthy is small and the app does most
+of it:
+
+- **Environments** come from Assets records the company already keeps; nobody re-types them.
+- **Facts are drafted by AI from the tool's own documentation** (*Fill in from your docs*): paste a page and the AI
+  drafts each fact it states, with the exact line that proves it. Drafts whose line isn't really in the text are
+  dropped. The owner clicks Accept; nothing is saved before that.
+- **Each fact is verified once per version.** After an upgrade the app lists exactly which facts to re-check, and AI
+  suggests a label for each from the release notes. One click per fact.
+- **Questions arrive grouped.** The owner answers a question once and everyone who asked gets the answer.
+
 Facts are verified per tool version. When an environment moves to a new version, Tool Passport stops vouching for
 the facts that depend on the version in that environment only, and the owner re-verifies them on one screen.
 
@@ -73,7 +87,7 @@ list in [src/safety/cases.ts](src/safety/cases.ts).
 | Jira REST: work item comments | Add to story posts the answer as the person's comment; the app adds the new answer when it changes |
 | Forge resolvers | Every action; the signed-in person always comes from the Forge context, never from the request |
 | Forge SQL with migrations | Tools, catalog, facts and their versions, rules, mappings, asks, requests, changes, audit log |
-| Forge LLM | Question translation and optional release-note labels; the model is picked from the site's live list |
+| Forge LLM | Question translation, release-note labels and fact drafts from pasted documentation, each with a quote checked against the text; the model is picked from the site's live list |
 | Jira Service Management REST | Private requests raised for the asker, assigned to the owner |
 | Jira issue events and a 5-minute scheduled trigger | Re-check an answer when its request is resolved; notice version changes |
 | Assets REST | Environment records read as the app (AQL); setup creates the demo schema and records |

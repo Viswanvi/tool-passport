@@ -46,7 +46,9 @@ To understand a question, the app sends its text, with the tool's catalog of cap
 model through Forge LLM. For **Check this story**, that text is the work item's summary and the start of its
 description, up to 500 characters. The model never receives facts, policy rules, environment values, group names or
 anyone's identity, and its reply can only name catalog keys. The **Passport** screen calls no model. If a tool owner pastes release notes on the Changes screen, the
-notes are sent the same way to suggest labels. Atlassian applies its usual moderation to these requests.
+notes are sent the same way to suggest labels. If a tool owner pastes documentation into **Fill in from your docs**,
+that text is sent the same way, with the tool's capability names, to draft facts; nothing is saved until the owner
+accepts a draft. Atlassian applies its usual moderation to these requests.
 
 ## Requests in Jira Service Management
 

@@ -110,6 +110,16 @@ export interface Card {
   /** Not ready and Yes, with approval only: what is left before Yes. */
   path: PathStep[];
   banner: string | null;
+  /**
+   * What the question was read as: the catalog's own labels for the keys checked (never the model's words, D29),
+   * so the page can show the reading step. Empty when nothing was read.
+   */
+  read: string[];
+  /**
+   * 'model' when the model read a typed question into those keys (Ask, story, help center); null otherwise. The page
+   * shows that reading step (D58); the card's own words still never mention the model (spec section 15).
+   */
+  readBy: 'model' | null;
 }
 
 export interface CardContext {
@@ -368,7 +378,18 @@ const empty = (kind: Card['kind'], title: string, reason: string, action: CardAc
   stamps: [],
   path: [],
   banner: null,
+  read: [],
+  readBy: null,
 });
+
+/** The catalog's labels for the keys a question was read as, with any value ("Upload a file of a given size · 3 GB"). */
+export function readLabels(requirement: Array<{ key: string; value?: unknown }>, catalog: Catalog): string[] {
+  return requirement.map((c) => {
+    const k = catalog.keys.get(c.key);
+    const label = k?.label ?? humanize(c.key);
+    return c.value === undefined || c.value === null ? label : `${label} · ${String(c.value)}${shortUnit(k?.unit)}`;
+  });
+}
 
 export function buildCard(answer: Answer, ctx: CardContext): Card {
   switch (answer.state) {
@@ -400,6 +421,8 @@ export function buildCard(answer: Answer, ctx: CardContext): Card {
         stamps: stampsFor(o, ctx, answer.anyEnvironment),
         path: pathFor(o, ctx, answer.anyEnvironment),
         banner: answer.anyEnvironment ? ANY_ENVIRONMENT_BANNER : null,
+        read: readLabels(answer.requirement, ctx.catalog),
+        readBy: null,
       };
     }
   }

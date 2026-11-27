@@ -23,13 +23,16 @@ import ForgeReconciler, {
   Tag,
   Text,
   Textfield,
+  Tooltip,
   User,
   useProductContext,
   xcss,
 } from '@forge/react';
 import type { Card, CardRequest, Chip, PathStep, Stamp } from '../engine/card';
+import type { Verdict } from '../engine/model';
 import { call, cardStyle, type Option } from './common';
 import { ChangesSection, RecentQuestions } from './changes';
+import { DocAssistant } from './doc-assistant';
 import { AddToolSection, ToolRecords } from './records';
 import { EVAL_QUESTIONS } from '../eval/questions';
 import { BATCH, summarise, type EvalResult } from '../eval/summary';
@@ -130,31 +133,102 @@ const LOOK: Record<Stamp['state'], Look> = {
   none: NEUTRAL,
 };
 
-/** One passport stamp: what was checked, the answer, and the evidence label it rests on. */
+// The verdict banner takes the colours of the stamp state that matches it.
+const VERDICT_STATE: Record<Verdict, Stamp['state']> = { yes: 'pass', yes_with_approval: 'approval', not_ready: 'missing', no: 'fail', dont_know: 'unknown' };
+const HERO = { padding: 'space.200', borderRadius: 'radius.large', borderWidth: 'border.width', borderStyle: 'solid' } as const;
+const HERO_NEUTRAL = xcss({ ...HERO, backgroundColor: 'color.background.neutral', borderColor: 'color.border' });
+const HERO_BOX: Record<Stamp['state'], ReturnType<typeof xcss>> = {
+  pass: xcss({ ...HERO, backgroundColor: 'color.background.success', borderColor: 'color.border.success' }),
+  approval: xcss({ ...HERO, backgroundColor: 'color.background.information', borderColor: 'color.border.information' }),
+  missing: xcss({ ...HERO, backgroundColor: 'color.background.warning', borderColor: 'color.border.warning' }),
+  unknown: xcss({ ...HERO, backgroundColor: 'color.background.discovery', borderColor: 'color.border.discovery' }),
+  fail: xcss({ ...HERO, backgroundColor: 'color.background.danger', borderColor: 'color.border.danger' }),
+  not_checked: HERO_NEUTRAL,
+  none: HERO_NEUTRAL,
+};
+
+/** The evidence label in a few words ("Owner-verified · 13.2"); the full line is in the stamp's tooltip. */
+function chipShort(c: Chip): string {
+  const short = c.detail && c.detail.length <= 12 && c.label !== 'Assets record' && c.label !== 'Recorded by owner';
+  return short ? `${c.label} · ${c.detail}` : c.label;
+}
+
+/**
+ * One passport stamp, readable at a glance: what was checked, the answer, and its source in a few words (or, when
+ * it didn't pass, what is missing). The full evidence line and any further checks are in the tooltip.
+ */
 const StampTile = ({ stamp }: { stamp: Stamp }) => {
   const look = LOOK[stamp.state];
-  return (
+  const third = stamp.state !== 'pass' && stamp.detail ? stamp.detail : stamp.chip ? chipShort(stamp.chip) : null;
+  const more = stamp.more ? `+${stamp.more} more ${stamp.more === 1 ? 'check' : 'checks'}` : null;
+  const tip = [stamp.detail, stamp.chip ? `Evidence: ${chipText(stamp.chip)}` : null, more].filter(Boolean).join(' · ');
+  const tile = (
     <Box xcss={look.box}>
-      <Stack space="space.050">
-        <Inline space="space.075" alignBlock="center">
-          <Icon glyph={look.glyph} color={look.icon} label={stamp.statusText} size="small" />
-          <Text weight="semibold">{stamp.title}</Text>
+      <Inline space="space.100" alignBlock="center">
+        <Icon glyph={look.glyph} color={look.icon} label={stamp.statusText} size="medium" />
+        <Stack space="space.025">
+          <Text size="small" color="color.text.subtle">
+            {stamp.title}
+          </Text>
+          <Text weight="bold" color={look.text}>
+            {stamp.statusText}
+          </Text>
+          {third ? (
+            <Text size="small" color="color.text.subtlest" maxLines={1}>
+              {third}
+            </Text>
+          ) : null}
+        </Stack>
+      </Inline>
+    </Box>
+  );
+  return tip ? <Tooltip content={tip}>{tile}</Tooltip> : tile;
+};
+
+/** The reading step: what the question was read as and, for a typed question, that the AI read it but rules decided. */
+const ReadStrip = ({ card }: { card: Card }) => {
+  if (!card.read.length) return null;
+  const ai = card.readBy === 'model';
+  return (
+    <Inline space="space.075" alignBlock="center" shouldWrap>
+      <Icon glyph={ai ? 'magic-wand' : 'search'} color="color.icon.discovery" label={ai ? 'Read by AI' : 'Checked'} size="small" />
+      <Text size="small" color="color.text.subtle">
+        {ai ? 'AI read your question as' : 'Checked'}
+      </Text>
+      {card.read.map((r) => (
+        <Tag key={r} text={r} color="purpleLight" />
+      ))}
+      {ai ? (
+        <Tooltip content="The AI only matches your words to this tool's list. Fixed rules check the evidence and give the answer, so the AI can never say Yes on its own.">
+          <Lozenge appearance="discovery">Rules decide</Lozenge>
+        </Tooltip>
+      ) : null}
+    </Inline>
+  );
+};
+
+/** The answer itself, big and in its colour: icon, verdict, one-line reason, and where it applies. */
+const VerdictHero = ({ card }: { card: Card }) => {
+  const state = card.verdict ? VERDICT_STATE[card.verdict] : 'none';
+  const look = LOOK[state];
+  return (
+    <Box xcss={HERO_BOX[state]}>
+      <Inline space="space.150" alignBlock="center" spread="space-between" shouldWrap>
+        <Inline space="space.150" alignBlock="center">
+          <Icon glyph={look.glyph} color={look.icon} label={card.title} size="large" />
+          <Stack space="space.050">
+            <Heading as="h3" size="large">
+              {card.title}
+            </Heading>
+            <Text>{card.reason}</Text>
+          </Stack>
         </Inline>
-        <Text weight="bold" color={look.text}>
-          {stamp.statusText}
-        </Text>
-        {stamp.detail ? <Text size="small">{stamp.detail}</Text> : null}
-        {stamp.chip ? (
-          <Text size="small" color="color.text.subtlest">
-            {chipText(stamp.chip)}
+        {card.where ? (
+          <Text weight="semibold" color="color.text.subtle">
+            {card.where}
           </Text>
         ) : null}
-        {stamp.more ? (
-          <Text size="small" color="color.text.subtlest">
-            {`+${stamp.more} more ${stamp.more === 1 ? 'check' : 'checks'}`}
-          </Text>
-        ) : null}
-      </Stack>
+      </Inline>
     </Box>
   );
 };
@@ -184,16 +258,9 @@ const VerdictCard = ({ card, busy, onRecheck, onRequest, canRecheck }: { card: C
     kind === 'request_fix' ? () => onRequest('fix') : requestApproval ? () => onRequest('approval') : askOwner ? () => onRequest('question') : onRecheck;
   return (
     <Box xcss={cardStyle}>
-      <Stack space="space.150">
-        <Inline spread="space-between" alignBlock="center">
-          <Lozenge appearance={card.lozenge} isBold>
-            {card.title}
-          </Lozenge>
-          {card.where ? <Text color="color.text.subtle">{card.where}</Text> : null}
-        </Inline>
-        <Heading size="small" as="h3">
-          {card.reason}
-        </Heading>
+      <Stack space="space.200">
+        <ReadStrip card={card} />
+        <VerdictHero card={card} />
         {card.banner ? (
           <SectionMessage appearance="information">
             <Text>{card.banner}</Text>
@@ -232,18 +299,20 @@ const VerdictCard = ({ card, busy, onRecheck, onRequest, canRecheck }: { card: C
           {card.next.length ? <Text>next: {card.next.join(', ')}</Text> : null}
           {card.checks.length ? (
             <Button appearance="subtle" onClick={() => setOpen(!open)}>
-              {open ? 'Hide checks' : card.checks.length === 1 ? 'Show the check' : `Show all ${card.checks.length} checks`}
+              {open ? 'Hide details' : 'Details'}
             </Button>
           ) : null}
         </Inline>
         {open ? (
           <Stack space="space.050">
             {card.checks.map((c, i) => (
-              <Text key={i}>{checkLine(c)}</Text>
+              <Text key={i} size="small">
+                {checkLine(c)}
+              </Text>
             ))}
           </Stack>
         ) : null}
-        {card.checked.length && !card.stamps.length ? <Text size="small">I checked: {card.checked.join(' · ')}</Text> : null}
+        {card.checked.length && !card.stamps.length && !card.read.length ? <Text size="small">I checked: {card.checked.join(' · ')}</Text> : null}
       </Stack>
     </Box>
   );
@@ -335,7 +404,9 @@ function useAnswer(onAnswered?: () => void) {
         const before = shown.current;
         const changedNow = before !== null && before.title !== r.card.title;
         if (changedNow) setChanged({ from: before, to: r.card, at: new Date().toISOString(), byItself: quiet });
-        setCard(r.card);
+        // A re-check evaluates the same stored keys: the question was still read by the AI, so keep saying so.
+        const sameReading = before?.readBy === 'model' && before.read.join('|') === r.card.read.join('|');
+        setCard(sameReading ? { ...r.card, readBy: 'model' } : r.card);
         // The server saved the new answer: lists showing it (Your recent questions) read it again.
         if (changedNow || !quiet) onAnswered?.();
       } else if (!quiet) setNotice('Could not check again just now. Try again.');
@@ -470,7 +541,7 @@ const AskPage = () => {
   const ask = (q: string) => {
     if (!tool || !env || !q.trim()) return;
     const payload = { toolId: Number(tool.value), environmentId: env.value === ANY ? null : Number(env.value), question: q };
-    void a.show('Reading your question, then checking the tool, policy, setup and access…', () => call<AskReply>('ask', payload));
+    void a.show('AI is reading your question, then the rules check it…', () => call<AskReply>('ask', payload));
   };
 
   if (tools === null) return <Spinner />;
@@ -612,7 +683,7 @@ const PassportPage = ({ refreshKey }: { refreshKey: number }) => {
         <Stack space="space.150">
           <Heading as="h2" size="medium">{`Your passport for ${data.tool}`}</Heading>
           <Text color="color.text.subtle">
-            {`What you can do, everywhere, checked as you at ${time(data.checkedAt)}. Each cell is the answer Ask would give, from the same checks and records. Click one to see why and what to do next.`}
+            {`What you can do, everywhere, checked as you at ${time(data.checkedAt)}. Click a cell to see why.`}
           </Text>
           <PassportTable data={data} rows={known} picked={picked?.key ?? null} onOpen={openCell} label={`What you can do with ${data.tool}, by environment`} />
           {unknown.length ? (
@@ -620,7 +691,7 @@ const PassportPage = ({ refreshKey }: { refreshKey: number }) => {
               <Inline space="space.100" alignBlock="center" shouldWrap>
                 <Lozenge appearance="new">{`Not verified yet · ${unknown.length}`}</Lozenge>
                 <Text color="color.text.subtle">
-                  {`Nobody has verified ${unknown.length === 1 ? 'this capability' : 'these capabilities'} for ${data.tool} yet, so every environment says Don't know yet. Open one to ask the owner.`}
+                  {`${unknown.length} not verified yet: Don't know yet everywhere.`}
                 </Text>
                 <Button appearance="subtle" onClick={() => setShowUnknown(!showUnknown)}>
                   {showUnknown ? 'Hide them' : 'Show them'}
@@ -693,10 +764,7 @@ const RequestSetupSection = ({ onSaved }: { onSaved?: () => void }) => {
   return (
     <Stack space="space.150">
       <Heading as="h2">1. Requests</Heading>
-      <Text>
-        Request the fix, Request approval and Ask the owner each raise a private request in this service desk for the person asking. All three use the request type
-        you pick here. Pick one that needs only a summary and a description.
-      </Text>
+      <Text color="color.text.subtle">Where fixes, approvals and questions are raised, privately for the person asking. Pick a request type that needs only a summary and a description.</Text>
       {setup ? (
         <Inline space="space.200" alignBlock="center" shouldWrap>
           <Box xcss={xcss({ width: '280px' })}>
@@ -775,10 +843,7 @@ const ApprovalSetupSection = ({ onSaved }: { onSaved?: () => void }) => {
   return (
     <Stack space="space.150">
       <Heading as="h2">2. Approvals</Heading>
-      <Text>
-        Request approval raises a private request for the approver. Choose which outcomes decide it. Anything else leaves the approval pending, and a decision only counts
-        when the approver (or the person the request is assigned to) sets it.
-      </Text>
+      <Text color="color.text.subtle">Which outcomes decide an approval. Anything else leaves it pending, and only the approver&apos;s decision counts.</Text>
       {by === 'status' ? (
         <Text>
           {names?.length
@@ -847,10 +912,9 @@ const SafetySuite = () => {
   return (
     <Stack space="space.150">
       <Text weight="bold">The false-Yes suite</Text>
-      <Text>
-        The same cases as the app&apos;s own automated safety tests. Each one starts from a question whose answer is Yes, takes away one piece of evidence (an access mapping, a
-        policy rule, a group lookup, a readable record, a verified fact) or adds pressure such as &quot;my manager approved this&quot;, and the answer must then be
-        anything but Yes. They use fixed test data and a scripted model inside the app: nothing on this site is read or changed, and no model is called, so a run is free.
+      <Text color="color.text.subtle">
+        Each case takes one piece of evidence away from a Yes, or adds pressure like &quot;my manager approved this&quot;. None may still say Yes. Free: fixed test data, no
+        model call, nothing on this site touched.
       </Text>
       <Inline space="space.150" alignBlock="center">
         <Button appearance="primary" onClick={() => void run()} isDisabled={running}>
@@ -921,10 +985,7 @@ const TestsSection = ({ onRan }: { onRan?: () => void }) => {
       <Heading as="h2">6. Tests</Heading>
       <SafetySuite />
       <Text weight="bold">The 40-question set</Text>
-      <Text>
-        Run the 40-question set against the model this app uses. It makes about 40 model calls, which cost money, so a new run can start only 10 minutes after the last.
-        Answers are not cached during the run.
-      </Text>
+      <Text color="color.text.subtle">40 real questions through the model this app uses: about 40 model calls, so at most one run every 10 minutes.</Text>
       <Inline space="space.150" alignBlock="center">
         <Button appearance="primary" onClick={() => void run()} isDisabled={running}>
           Run the 40-question set
@@ -1013,18 +1074,9 @@ const Checklist = ({ status }: { status: SetupStatus }) => {
 
 const BeforeYouStart = () => (
   <SectionMessage appearance="information" title="Before you start">
-    <Text>
-      You need no extra role to try the demo yourself. Other people who ask need the Jira Service Management Customer role, given in Atlassian Administration.
-    </Text>
-    <Text>
-      A service desk you have just created can take about 10 minutes before Jira counts you as one of its agents. Until then its requests open in the customer portal;
-      you can still resolve them there with Resolve this issue.
-    </Text>
-    <Text>
-      If Jira settings → Work items → Resolutions is empty on this site, add Done and Declined there before step 2. With no resolutions, Jira won&apos;t let an
-      agent resolve a request.
-    </Text>
-    <Text>The Rovo agent needs Rovo turned on for this site. Everything else works without it.</Text>
+    <Text>• No Resolutions on this site? Add Done and Declined (Jira settings → Work items → Resolutions) before step 2.</Text>
+    <Text>• A new service desk opens its requests in the portal for about 10 minutes: resolve them there with Resolve this issue.</Text>
+    <Text>• Other people who ask need the service desk Customer role. The Rovo agent needs Rovo on the site.</Text>
   </SectionMessage>
 );
 
@@ -1058,14 +1110,8 @@ const HelpCenterSection = ({ onSaved }: { onSaved: () => void }) => {
   return (
     <Stack space="space.150">
       <Heading as="h2">4. Help center</Heading>
-      <Text>
-        Show “Can I…?” in this site&apos;s help center, on its home page and its portal pages, so people check before they raise a request. They get the same answer as in
-        Tool Passport, checked as them, and can request the fix or approval from there.
-      </Text>
-      <Text>
-        Only signed-in people see it, service desk customers included; anonymous visitors never do. If your help center is open to people outside your company, leave it
-        off: answers name your groups, records and policy.
-      </Text>
+      <Text>“Can I…?” across your help center, so people check before they raise a request. Signed-in people only, never anonymous visitors.</Text>
+      <Text color="color.text.subtle">Leave it off if outsiders use your help center: answers name your groups and policy.</Text>
       {state === null ? <Spinner /> : null}
       {state && !state.ok ? (
         <SectionMessage appearance="warning">
@@ -1119,7 +1165,7 @@ const ModelSection = ({ model, onSaved }: { model: SetupStatus['model']; onSaved
       <Text>
         {`The model only reads each question into catalog keys and values. Fixed rules decide the answer, and the model never sees facts, rules or groups. Without a choice here, the app uses the first of ${PREFERRED_MODELS.join(', ')} that is active on this site, and moves to the next one by itself if that model is retired.`}
       </Text>
-      <Text>A new choice applies to questions the app has not read before. Questions it has already read keep their saved reading.</Text>
+      <Text color="color.text.subtle">A new choice applies to questions not read before.</Text>
       {options.length ? (
         <Inline space="space.200" alignBlock="center" shouldWrap>
           <Box xcss={xcss({ width: '280px' })}>
@@ -1333,7 +1379,7 @@ const SetupPage = () => {
           setVersion((v) => v + 1);
         }}
       />
-      <Text>Or work through the steps in order. Each one shows Done once it is set; you can come back and change any of them.</Text>
+      <Text color="color.text.subtle">Or go step by step:</Text>
       {status === null ? <Spinner /> : null}
       {status?.ok ? <Checklist status={status} /> : null}
       {status && !status.ok ? (
@@ -1346,15 +1392,8 @@ const SetupPage = () => {
       <ApprovalSetupSection key={`approvals-${version}`} onSaved={reload} />
       <Stack space="space.150">
         <Heading as="h2">3. Demo data</Heading>
-        <Text>
-          Load demo data creates the fictional tool Kestrel Studio with KS-DEV and KS-PROD, its catalog, verified facts, policy rules and access
-          mappings. You become its owner. In Assets it creates the Tool Passport Environments schema with the KS-DEV and KS-PROD records, or uses
-          them if they are already there. It is safe to run again.
-        </Text>
-        <Text>
-          No Assets on this site? Load it in registry mode: the environment values are recorded by the owner in Tool Passport instead, and answers
-          label them Recorded by owner, which is weaker evidence than an Assets record.
-        </Text>
+        <Text>The fictional tool Kestrel Studio with KS-DEV and KS-PROD, its Assets records and two groups. You become its owner. Safe to run again.</Text>
+        <Text color="color.text.subtle">No Assets? Registry mode keeps the environment values in Tool Passport, labelled Recorded by owner.</Text>
         <Inline space="space.100">
           <Button appearance="primary" onClick={() => void load('assets')} isDisabled={busy}>
             Load demo data
@@ -1369,9 +1408,8 @@ const SetupPage = () => {
         {confirmReset ? (
           <SectionMessage appearance="warning" title="Reset the demo?">
             <Text>
-              This deletes everything Tool Passport holds about Kestrel Studio: questions, request records, approvals, version changes, release-note labels,
-              facts, rules and mappings. Then it loads the demo again from the start, and in Assets it puts KS-DEV and KS-PROD back to version 13.2 and
-              their first values. Jira requests already raised stay in the service desk. Other tools are not touched. This can't be undone.
+              Deletes everything Tool Passport holds about Kestrel Studio (questions, requests, approvals, changes, facts, rules), loads it again and puts KS-DEV and
+              KS-PROD back to 13.2 in Assets. Requests already raised stay in the service desk; other tools aren&apos;t touched. This can&apos;t be undone.
             </Text>
             <Inline space="space.100">
               <Button appearance="danger" onClick={() => void run('resetDemo')}>
@@ -1574,8 +1612,9 @@ const MyToolsPage = ({ tools, refreshKey }: { tools: Option[]; refreshKey: numbe
           Refresh
         </Button>
       </Inline>
+      <DocAssistant key={`docs-${tool.value}`} toolId={Number(tool.value)} toolName={tool.label} onSaved={() => setRefreshed((n) => n + 1)} />
       <Heading as="h2">Open questions</Heading>
-      <Text>Answer each question once. Publishing adds a verified fact and answers every open question it settles, each on the asker's own request.</Text>
+      <Text color="color.text.subtle">Answer once: everyone who asked gets it on their own request.</Text>
       <QuestionsForTool key={tool.value} toolId={Number(tool.value)} refreshKey={key} />
       <ChangesSection key={`changes-${tool.value}`} toolId={Number(tool.value)} refreshKey={key} />
       <ToolRecords key={`records-${tool.value}`} toolId={Number(tool.value)} refreshKey={key} />
@@ -1668,12 +1707,12 @@ const StoryPanel = () => {
   const check = () => {
     if (!tool || !env) return;
     const payload = { toolId: Number(tool.value), environmentId: env.value === ANY ? null : Number(env.value) };
-    void a.show('Reading the story, then checking the tool, policy, setup and access…', () => call<AskReply>('storyCheck', payload));
+    void a.show('AI is reading the story, then the rules check it…', () => call<AskReply>('storyCheck', payload));
   };
 
   return (
     <Stack space="space.150">
-      <Text>Can this story be built where it will run? Tool Passport reads it, matches it to the tool&apos;s catalog and checks it as you, before the work starts.</Text>
+      <Text color="color.text.subtle">Can this story be built where it will run? Check before the work starts.</Text>
       <Inline space="space.100" alignBlock="center" shouldWrap>
         {toolOptions.length > 1 ? (
           <Box xcss={xcss({ width: '180px' })}>
@@ -1744,7 +1783,7 @@ const HelpCenterAsk = () => {
   const ask = (q: string) => {
     if (!tool || !env || !q.trim()) return;
     const payload = { toolId: Number(tool.value), environmentId: env.value === ANY ? null : Number(env.value), question: q };
-    void a.show('Checking the tool, policy, setup and your access…', () => call<AskReply>('ask', payload));
+    void a.show('AI is reading your question, then the rules check it…', () => call<AskReply>('ask', payload));
   };
 
   // Nothing at all until the server says the box belongs here, so a portal where it is off shows no trace of it.
@@ -1755,7 +1794,7 @@ const HelpCenterAsk = () => {
         <Heading as="h3" size="small">
           Before you raise a request: can you already do it?
         </Heading>
-        <Text>Ask Tool Passport. It checks the tool, the policy, the setup and your access, names its evidence, and raises the right request for you if something is missing.</Text>
+        <Text color="color.text.subtle">Tool, policy, setup and your access, checked in seconds.</Text>
         <Inline space="space.100" alignBlock="center" shouldWrap>
           {tools.length > 1 ? (
             <Box xcss={xcss({ width: '200px' })}>

@@ -520,7 +520,7 @@ export const ToolRecords = ({ toolId, refreshKey }: { toolId: number; refreshKey
     return (
       <Stack space="space.100">
         {header}
-        <Text>The facts, policy rules, setup checks and access groups behind every answer. Open it to add or change one.</Text>
+        <Text color="color.text.subtle">The facts, rules, setup checks and groups behind every answer.</Text>
       </Stack>
     );
   }
@@ -536,7 +536,7 @@ export const ToolRecords = ({ toolId, refreshKey }: { toolId: number; refreshKey
   return (
     <Stack space="space.200">
       {header}
-      <Text>What {d.tool.name} can do, what policy allows, what proves readiness and which groups grant access. Every change is saved under your name.</Text>
+      <Text color="color.text.subtle">Every change is saved under your name.</Text>
       <Box xcss={w(240)}>
         <Pick
           options={VIEWS}
