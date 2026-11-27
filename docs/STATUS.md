@@ -1774,3 +1774,19 @@ build:card`. Dev 5.48.0, "eligible for the Runs on Atlassian program".
 - Not seen live: the change moment in this look (the card lighting up, the bar growing in, the count) and a version
   moved and moved back (covered by the `markChanges` tests, not watched); full width (the human's screen); dark theme.
 - LLM calls: 0.
+- The human looked at 5.48.0 on their own screen: "Looks good".
+
+### Production 2.9.0, 2026-11-28 (human: "Yes, deploy")
+
+Since 2.8.0: the Ask tab in the frame (D63), the Passport's header, environment cards and key (D64, D66), differences
+first in the grid with Yes-in-both rows folded (D65), and marks that clear when things go back (D66).
+
+- Before: working tree clean at 48300d7; `npx vitest run`: `Tests 559 passed (559)`; `npx tsc --noEmit -p .` and
+  `npm run lint` exit 0; `npm run build:card` (built fresh); `forge lint`: `No issues found.`
+- `forge deploy -e production --non-interactive` (18:42 UTC): "[2.9.0] … eligible for the Runs on Atlassian
+  program". `forge install list`: tp-judge-1 and tp-judge-2 production, major 2, Up-to-date (no manifest change, no
+  re-approval).
+- `forge logs -e production --since 10m`: nothing logged since the deploy.
+- Not checked live on production (tp-judge-2 needs the human's sign-in); the same code is live on the demo site's
+  development install (5.48.0). The judge sites still have the demo data they loaded before 2.8.0 until **Load demo
+  data** is clicked there. LLM calls: 0.
