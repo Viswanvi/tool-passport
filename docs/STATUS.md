@@ -1687,3 +1687,20 @@ your docs* from the Passport's unverified rows.
     the demo, which needs **Reset demo** first on this site); a fresh demo's grid (seen only through the engine in
     `seed.test.ts`).
   - LLM calls: 0.
+
+### Production 2.8.0, 2026-11-27 (human: "Yes, deploy")
+
+Since 2.7.0: Passport first and checking itself every 30 seconds, *Built for you* after setup (D61); richer demo
+data, *Needs you* on My tools, *Fill them in from your docs* from the Passport (D62).
+
+- Before: working tree clean at 49177fb; `npx vitest run`: `Tests 555 passed (555)`; `npx tsc --noEmit -p .` and
+  `npm run lint` exit 0; `npm run build:card` (built fresh); `forge lint`: `No issues found.`
+- `forge deploy -e production --non-interactive` (17:41 UTC): "[2.8.0] … eligible for the Runs on Atlassian
+  program". `forge install list`: tp-judge-1 and tp-judge-2 production, major 2, Up-to-date (no manifest change, no
+  re-approval).
+- `forge logs -e production --since 10m`: nothing logged since the deploy.
+- The new demo data reaches a site only when its demo is loaded: a new install's **Set it all up** loads it; on
+  tp-judge-1 and tp-judge-2, which loaded the demo before, **Load demo data** (adds the new rows) or **Reset demo**
+  brings it. Not done there (tp-judge-2 needs the human's sign-in).
+- Not checked live on production; the same code is live on the demo site's development install (5.43.0, checked
+  above). LLM calls: 0.
