@@ -76,8 +76,12 @@ async function start() {
     shownAnswer = key;
     draw(animate);
   });
-  // The page may start listening after this frame starts, so say ready until it answers (about 15 seconds at most).
+  // The page may start listening after this frame starts, so say ready until it answers (about 15 seconds at most),
+  // and again whenever a page asks (it subscribed again after this frame had stopped saying it).
   const ready: ReadyMessage = { frameId };
+  await events.on(EVENT.hello, async () => {
+    await events.emit(EVENT.ready, ready);
+  });
   void events.emit(EVENT.ready, ready);
   let tries = 0;
   const timer = setInterval(() => {

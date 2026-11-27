@@ -1632,5 +1632,12 @@ the opened cell's card below); only the open tab draws its frame; My tools split
     13.2 · 5 of 6 Yes* and *KS-PROD 13.2 · 4 of 6 Yes*, six known rows as green Yes and red No chips, *Not verified
     yet · 13* folded. 5.38.0 keeps buttons on one line.
   - My tools: four tabs, Open questions first ("No open questions for Kestrel Studio.").
-  - Not clicked live: a Passport cell (the pane's clicks don't reach the frame; the human's clicks do, as Details
-    showed). LLM calls: 0.
+  - Opening a cell: the human's first try showed no card. To see it, a debug build (5.39.0 to 5.40.0, removed since)
+    wrote on the page what crossed: the pane can't click into the frame, but the keyboard can (Tab into the frame,
+    Enter). It showed "page got refresh from card-… (linked card-…)", then "page got open-cell …", and the cell's card
+    opened. The first failure wasn't reproduced; one real gap was found and closed: a page that subscribes again
+    after its frame had stopped saying ready (it stops once answered) would never link. The page now asks frames to
+    say ready again whenever it subscribes (`EVENT.hello`). Final build 5.41.0: Enter on KS-DEV · Build a custom web
+    front end gave the green Yes card under the grid ("Checked", not "AI read": a cell isn't read by the model), and
+    KS-PROD the red No card (policy ring red, access ring dashed yellow). Verdict chips no longer wrap onto two lines.
+  - LLM calls: 0.

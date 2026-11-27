@@ -17,6 +17,8 @@ export const EVENT = {
   ready: 'tool-passport:card-ready',
   view: 'tool-passport:card-view',
   action: 'tool-passport:card-action',
+  /** The page asks frames to say ready again: a page that (re)subscribes after a frame stopped saying it still links. */
+  hello: 'tool-passport:card-hello',
 } as const;
 
 /** primary and recheck: the card's buttons. open-cell: a Passport cell was clicked. refresh: Check again. */

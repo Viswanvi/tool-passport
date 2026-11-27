@@ -476,6 +476,8 @@ function useFrameLink(view: FrameView | null, active: boolean, onAction: (m: Act
       if (!m || m.frameId !== frameId.current) return;
       latest.current.onAction(m);
     });
+    // A frame already linked stopped saying ready; ask it again, so this subscription links too.
+    void ready.then(() => events.emit(EVENT.hello, {}));
     return () => {
       frameId.current = null;
       void ready.then((s) => s.unsubscribe());
