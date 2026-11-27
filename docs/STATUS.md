@@ -1653,3 +1653,37 @@ Since 2.6.0: the Passport tab in the card frame and My tools in tabs (D60), with
 - Production log since the deploy: nothing logged (no errors, no traffic yet).
 - Not checked live on production (tp-judge-2 needs the human's sign-in); the same build is live on the demo site's
   development install (5.41.0). LLM calls: 0.
+
+### A passport that keeps itself true, demo data that matters, an owner's home, 2026-11-27 (human: "Yes, build them"; "improve this to 9/10")
+
+Built (D61, D62): Passport opens first and reads itself again every 30 seconds while open, marking what changed;
+setup lists what it built and runs the safety tests; richer demo data; *Needs you* on My tools; *Fill them in from
+your docs* from the Passport's unverified rows.
+
+- `npx vitest run`: `Tests 555 passed (555)`; `npx tsc --noEmit -p .` and `npm run lint` exit 0; `npm run
+  build:card`; `forge lint`: `No issues found.` Dev 5.42.0 and 5.43.0, each "eligible for the Runs on Atlassian
+  program". No manifest change, so no install upgrade.
+- Live on the demo site (development):
+  - Setup → 3. Demo data → **Load demo data** (5.42.0): *tools: 1 · environments: 2 · catalogKeys: 25 · links: 18 ·
+    facts: 15 · rules: 14 · readinessKeys: 4 · accessMappings: 10*, KS-DEV → TPENV-4679, KS-PROD → TPENV-4680. (5.43.0
+    shows the same in plain lines.)
+  - The app opened on **Passport** with *Watching KS-DEV and KS-PROD · checks again every 30 seconds*. KS-DEV 12 of
+    16 Yes, KS-PROD 9 of 16 Yes; *Let other systems call an app as an API* Yes / Not ready, *Connect an app to a
+    company database* Yes / Yes, with approval, *Sign in with the company single sign-on* Not ready / Yes, GPUs and
+    custom domains No / No; *Not verified yet · 3*. (This site's earlier tests had already verified CSV export and
+    websockets and fixed KS-DEV's front end; a reset gives the fresh-demo answers in `seed.test.ts`.)
+  - In a second tab, Assets → TPENV-4679 → Version 13.2 → **14.0**. Back on the Passport tab, with no click, within
+    35 seconds: *4 answers changed at 10:44 PM. KS-DEV moved from 13.2 to 14.0. Nobody asked: the passport checked
+    again by itself. Facts recorded for the old version are not vouched for on the new one until the owner checks
+    them again.* KS-DEV's header showed ~~13.2~~ → **14.0**, *8 of 16 Yes*; the API, CSV, background-tasks and
+    runtime 3.9 cells turned **Don't know yet** with a dashed outline and *was Yes*. KS-PROD unchanged.
+  - My tools: *Kestrel Studio · You own it*, then **Needs you**: *No open questions*, *12 facts to re-check · KS-DEV
+    moved from 13.2 to 14.0* (this site has earlier changes still open), *3 capabilities not verified yet*. Its
+    **Fill in from your docs** button opened that section.
+  - Passport fold, as the owner: **Fill them in from your docs** (clicked with the mouse) switched to My tools on that
+    section.
+  - Assets → TPENV-4679 → Version set back to **13.2**.
+  - Not seen live: the *Built for you* panel and the automatic safety run (they show after **Set it all up** loads
+    the demo, which needs **Reset demo** first on this site); a fresh demo's grid (seen only through the engine in
+    `seed.test.ts`).
+  - LLM calls: 0.

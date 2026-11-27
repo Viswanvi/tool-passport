@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Card, CardAction, Stamp } from '../../src/engine/card';
-import { cellOf, frameView, primaryOf, type PassportFrameView } from '../../src/frontend/card-frame';
+import { cellOf, frameView, markChanges, namesText, NO_MARKS, primaryOf, type GridRead, type PassportFrameView } from '../../src/frontend/card-frame';
 import { stampLines } from '../../src/frontend/card-text';
 
 /**
@@ -69,14 +69,16 @@ describe('a Passport cell clicked in the frame (D60)', () => {
     tool: 'Kestrel Studio',
     checkedAt: '2026-11-27T12:00:00.000Z',
     environments: [
-      { id: 1, name: 'KS-DEV', version: '13.2' },
-      { id: 2, name: 'KS-PROD', version: '13.2' },
+      { id: 1, name: 'KS-DEV', version: '13.2', change: null },
+      { id: 2, name: 'KS-PROD', version: '13.2', change: null },
     ],
-    rows: [{ key: 'web_frontend', label: 'Build a custom web front end or dashboard', cells: [{ environmentId: 1, verdict: 'not_ready', title: 'Not ready' }] }],
+    rows: [{ key: 'web_frontend', label: 'Build a custom web front end or dashboard', cells: [{ environmentId: 1, verdict: 'not_ready', title: 'Not ready', change: null }] }],
     picked: null,
     answer: null,
     status: null,
     refreshing: false,
+    watch: { seconds: 30 },
+    fill: false,
   };
 
   it('opens only a cell the page sent', () => {
@@ -86,6 +88,52 @@ describe('a Passport cell clicked in the frame (D60)', () => {
     expect(cellOf({ frameId: 'f', action: 'open-cell', cell: { key: 'web_frontend', environmentId: 2 } }, passport)).toBeNull();
     expect(cellOf({ frameId: 'f', action: 'primary', cell: { key: 'web_frontend', environmentId: 1 } }, passport)).toBeNull();
     expect(cellOf({ frameId: 'f', action: 'open-cell', cell: { key: 'web_frontend', environmentId: 1 } }, null)).toBeNull();
+  });
+});
+
+describe('the Passport keeps itself true (D61)', () => {
+  const read = (dev: string, devTitle: string, prodTitle = 'No'): GridRead => ({
+    environments: [
+      { id: 1, version: dev },
+      { id: 2, version: '13.2' },
+    ],
+    rows: [
+      {
+        key: 'web_frontend',
+        cells: [
+          { environmentId: 1, title: devTitle },
+          { environmentId: 2, title: prodTitle },
+        ],
+      },
+    ],
+  });
+  const at = '2026-11-27T12:00:30.000Z';
+
+  it('marks a cell whose answer changed, with what it was, and a version that moved', () => {
+    const m = markChanges(read('13.2', 'Yes'), read('14.0', "Don't know yet"), NO_MARKS, { at, byItself: true });
+    expect(m.cells).toEqual({ 'web_frontend|1': { from: 'Yes', at, byItself: true } });
+    expect(m.versions).toEqual({ 1: { from: '13.2', at } });
+  });
+
+  it('marks nothing on a first read, or when nothing changed', () => {
+    expect(markChanges(null, read('14.0', "Don't know yet"), NO_MARKS, { at, byItself: true })).toBe(NO_MARKS);
+    expect(markChanges(read('13.2', 'Yes'), read('13.2', 'Yes'), NO_MARKS, { at, byItself: true })).toEqual(NO_MARKS);
+  });
+
+  it('keeps earlier marks and the latest change of each cell; a cell new in this read is not a change', () => {
+    const first = markChanges(read('13.2', 'Yes'), read('14.0', "Don't know yet"), NO_MARKS, { at, byItself: true });
+    const later = '2026-11-27T12:05:00.000Z';
+    const back = markChanges(read('14.0', "Don't know yet"), read('13.2', 'Yes', 'Yes'), first, { at: later, byItself: false });
+    expect(back.cells).toEqual({ 'web_frontend|1': { from: "Don't know yet", at: later, byItself: false }, 'web_frontend|2': { from: 'No', at: later, byItself: false } });
+    expect(back.versions).toEqual({ 1: { from: '14.0', at: later } });
+    const added: GridRead = { ...read('13.2', 'Yes'), rows: [...read('13.2', 'Yes').rows, { key: 'gpu_compute', cells: [{ environmentId: 1, title: 'No' }] }] };
+    expect(markChanges(read('13.2', 'Yes'), added, NO_MARKS, { at, byItself: true })).toEqual(NO_MARKS);
+  });
+
+  it('names the environments it watches in plain words', () => {
+    expect(namesText(['KS-DEV'])).toBe('KS-DEV');
+    expect(namesText(['KS-DEV', 'KS-PROD'])).toBe('KS-DEV and KS-PROD');
+    expect(namesText(['A', 'B', 'C'])).toBe('A, B and C');
   });
 });
 

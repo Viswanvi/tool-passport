@@ -1,15 +1,23 @@
 # Tool Passport: judge guide
 
-Tool Passport answers one question for employees: **"Can I do X with tool T in environment E?"** It answers from
-recorded evidence (an Assets record, an owner-verified fact, a policy rule, your group membership) and names the
-source of every piece. When something is missing it says so, and it can raise a private request to fix it.
+**Not a chatbot. A passport that keeps itself true as your tools change.**
+
+A developer picks up a story, *Build a usage dashboard for the sales team*, and two days in finds out production
+forbids custom front ends and development never had the build for one. Nobody was wrong: the answer was spread over
+an Assets record, a policy, a wiki page and a group they weren't in. Tool Passport puts that answer on the story
+before the sprint starts.
+
+For every tool, it shows each person a **passport**: what they can do in each environment, checked as them, from
+recorded evidence (an Assets record, an owner-verified fact, a policy rule, their group membership), with the source
+of every piece named. A blocker becomes a private Jira request to the person who can fix it. And when the ground
+moves (an environment upgrades, a request is resolved), the answers change by themselves, wherever they were given.
 
 This guide takes you from the installation link to the three things the app is built for:
 
 1. **Context:** the same question gets a different answer in development and in production, and each answer says why.
 2. **Guided fix:** a blocked answer becomes a private request; when it's resolved, the answer updates by itself.
-3. **Version change:** when an environment moves to a new tool version, answers that depended on the old version
-   stop being vouched for, and the owner re-verifies them in one place.
+3. **Version change:** when an environment moves to a new tool version, the answers that depended on the old version
+   stop being vouched for, on screen, without anyone asking, and the owner re-verifies them in one place.
 
 Everything is created by the app's own setup through the same APIs a real customer would use. The company, tool and
 people are fictional: Kestrel Studio is a data-app platform with two environments, KS-DEV and KS-PROD. You play both
@@ -23,13 +31,14 @@ seconds; the minutes are installing and setting up.
 | Step | What to do | About |
 | --- | --- | --- |
 | 1 | Open the installation link (section 1), click **Get app**, choose your site and accept the permissions | 2 min |
-| 2 | Jira settings → Marketplace apps → **Tool Passport setup** → **Set it all up**. No service desk needed yet | 1 min |
-| 3 | Sidebar → Apps → **Tool Passport** → KS-DEV, the first suggested question: **Not ready**, with four stamps. Then KS-PROD: **No** | 1 min |
-| 4 | The **Passport** tab: every capability in every environment, on one screen | 30 s |
-| 5 | Your help center (`https://<your-site>.atlassian.net/servicedesk/customer/portals`): the same check in the box *Before you raise a request* (section 7) | 30 s |
+| 2 | Jira settings → Marketplace apps → **Tool Passport setup** → **Set it all up**. No service desk needed yet. A panel lists what it built on your site and runs the 51 safety tests | 1 min |
+| 3 | Sidebar → Apps → **Tool Passport**. It opens on your **passport**: every capability of Kestrel Studio in KS-DEV and KS-PROD, checked as you. Click **Not ready** next to *Build a custom web front end or dashboard* for the card with its four stamps | 1 min |
+| 4 | Keep that tab open. In another tab, Assets → **Tool Passport Environments** → **KS-DEV** → set **Version** to **14.0** (section 6, step 2). Within 30 seconds, without a click, the passport marks the answers that changed: *KS-DEV moved from 13.2 to 14.0. Nobody asked.* Set it back to 13.2 after | 1 min |
+| 5 | Any Jira work item → the **Tool Passport** panel → **Check this story** (section 3), or your help center's box *Before you raise a request* (section 7) | 30 s |
 
 With 10 more minutes: make a service desk (step 1.2), click **Set it all up** again, and try the guided fix (section
-4), where the card turns **Yes** by itself. Then the story panel (section 3) and the version change (section 6).
+4), where the card turns **Yes** by itself. Then **My tools**, where *Needs you* lists what the owner has to do, and
+*Fill in from your docs* (section 5).
 
 ## What you need
 
@@ -86,8 +95,9 @@ site has two service desks or no resolution named Done), do that one step below;
 
 ## 3. Moment 1: the answer depends on the environment
 
-Open the app: sidebar → **Apps** → **Tool Passport**. On the **Ask** tab, pick **Kestrel Studio** and **KS-DEV**,
-then click the suggested question **Can I build a custom web front end or dashboard?** (or type it and click **Ask**).
+Open the app: sidebar → **Apps** → **Tool Passport**. It opens on the **Passport** tab (below). Open the **Ask** tab,
+pick **Kestrel Studio** and **KS-DEV**, then click the suggested question **Can I build a custom web front end or
+dashboard?** (or type it and click **Ask**).
 
 - Expected: at the top, *AI read your question as* **Build a custom web front end or dashboard**, next to **Rules
   decide**: the model only matched your words to the tool's list. Then the answer in a yellow banner: **Not ready**,
@@ -101,11 +111,25 @@ then click the suggested question **Can I build a custom web front end or dashbo
 
 Try your own wording too. A question outside the tool's catalog gets **Don't know yet**, never a guess.
 
-**Your whole passport.** Open the **Passport** tab: every capability of Kestrel Studio against KS-DEV and KS-PROD,
-each cell the answer Ask would give, checked as you right now (no model is called). On a fresh demo: *Build a custom
-web front end or dashboard* is **Not ready** in KS-DEV and **No** in KS-PROD, *Use the community app framework* is
-**No** in both, and the version-verified ones are **Yes**. Click any cell to open its full card, with its stamps and
-next step. Capabilities nobody has verified yet are folded under **Not verified yet**.
+**Your whole passport.** The **Passport** tab: every capability of Kestrel Studio against KS-DEV and KS-PROD, each
+cell the answer Ask would give, checked as you right now (no model is called). On a fresh demo, as a member of
+`kestrel-dev-builders`:
+
+| Capability | KS-DEV | KS-PROD | Why |
+| --- | --- | --- | --- |
+| Build a custom web front end or dashboard | Not ready | No | KS-DEV's Assets record lacks the frontend build; production forbids it |
+| Let other systems call an app as an API | Yes | Not ready | In production that needs `kestrel-prod-deployers`, and a security review |
+| Connect an app to a company database | Yes | Yes, with approval | Production holds customer data: privacy review |
+| Sign in with the company single sign-on | Not ready | Yes | Single sign-on is turned on only in KS-PROD's Assets record |
+| Run jobs on GPU machines, Give an app its own web address | No | No | The tool can't (owner-verified) |
+| Secrets, audit log, roles, git, background tasks, scheduled jobs, runtime 3.9 | Yes | Yes | Owner-verified, and set up where needed |
+
+Click any answer to open its full card, with its stamps and next step. Capabilities nobody has verified yet (CSV
+export, email, websockets, and two more) are folded under **Not verified yet**; as the tool's owner you also see
+**Fill them in from your docs** there (section 5).
+
+The passport keeps itself true: while it is open it checks every cell again every 30 seconds (*Watching KS-DEV and
+KS-PROD*). Section 6 shows what that looks like when an environment upgrades.
 
 **Check a story before the sprint.** Open any Jira work item and click the apps button under its title (choose
 **Tool Passport** if a list opens; with no other apps on the site, the button adds the panel straight away). Write or pick a story such as *Build a usage dashboard for the sales team in KS-DEV*: the panel
@@ -161,15 +185,19 @@ design-review rule says approvals count for 30 days. After that the answer goes 
    every version**, and click **Publish**. The message names the request it answered and closed, and asking again
    gives **Yes**.
 
-**Or let the AI do the typing: Fill in from your docs.** Owners rarely start from nothing: the tool has
-documentation. Instead of step 3, open **My tools** → **Fill in from your docs**, paste the text below (a made-up page
-for the fictional Kestrel Studio) and click **Draft facts with AI**. One model call later you get drafts such as
-*Keep two-way connections open (websockets) · Yes*, each with the exact line it came from and a tag: **New**, **Same
-as recorded** or **Recorded: …**. A draft whose quote isn't really in the text is dropped. Click **Accept** on the
-websockets draft: it is saved as an owner-verified fact on 13.2, and the open question's request is answered and
-closed, as in step 3. Nothing is saved until you accept. Drafts tagged **Checks not linked** are for capabilities
-whose policy and setup checks the owner hasn't linked yet: they can be saved, but answers stay Not verified until
-the links exist, so nothing turns Yes on a fact alone.
+**Or let the AI do the typing: Fill in from your docs.** "Who keeps all this current?" Mostly the tool's own
+documentation. Open **My tools**: **Needs you** at the top counts what waits for you (open questions, facts to
+re-check after an upgrade, capabilities not verified yet). Click **Fill in from your docs** (or **Fill them in from
+your docs** under the Passport's unverified rows), paste the text below (a made-up page for the fictional Kestrel
+Studio) and click **Draft facts with AI**. One model call later you get a draft for each fact the page states, each
+with the exact line it came from and a tag: **New** for websockets, CSV export and email; **Same as recorded** for
+scheduled jobs, GPUs and custom domains. A draft whose quote isn't really in the text is dropped. Click **Accept** on
+the three **New** ones: each is saved as an owner-verified fact on 13.2, and the open websockets question's request
+is answered and closed, as in step 3. Back on the **Passport**, those rows have left *Not verified yet*: CSV export
+is **Yes** in KS-DEV and **Yes, with approval** in KS-PROD (exports of customer data need the data owner's
+approval), with each changed cell marked. Nothing is saved until you accept. A draft tagged **Checks not linked**
+(the memory limit) is for a capability whose policy and setup checks the owner hasn't linked yet: it can be saved,
+but answers stay Not verified until the links exist, so nothing turns Yes on a fact alone.
 
 ```text
 Kestrel Studio 13.2 feature overview
@@ -186,13 +214,20 @@ Custom domains are not supported: every app lives under the studio's own address
 
 1. In KS-DEV, ask **Can I upload a 3 GB file?** Expected: **No**, the limit is 2 GB on version 13.2.
    Before upgrading, preview it: **My tools** → **Changes** → *What if we upgrade?*, pick **KS-DEV**, type **14.0**,
-   click **Preview**. It lists the 4 facts that would need re-verifying and how many recent answers in KS-DEV rely on
+   click **Preview**. It lists the 6 facts that would need re-verifying and how many recent answers in KS-DEV rely on
    them, and what stays untouched. Nothing is saved.
-2. In Assets, set KS-DEV's **Version** to **14.0**. (**No Assets?** Save KS-DEV again under My tools → **Records** → **Show
-   records** with all three lines, the first one now `Version: 14.0`: the form replaces every value.)
-3. Ask the 3 GB question in KS-DEV again: **Don't know yet**. The upload limit was verified on 13.2 and KS-DEV now
-   runs 14.0, so the app no longer vouches for it. KS-PROD still answers No.
-4. Open **My tools** → **Changes**: *KS-DEV: 13.2 → 14.0 · Found in Assets record* (*Recorded by owner* in registry
+2. Open the **Passport** tab and leave it open. In another browser tab, set KS-DEV's **Version** to **14.0** in Assets:
+   sidebar → **Assets** → **Schemas** → **Tool Passport Environments** → **Tool Environment** → **KS-DEV**, click **3
+   more attributes**, click the **Version** value, type **14.0** and confirm with ✓. (**No Assets?** Save KS-DEV again
+   under My tools → **Records** → **Show records** with all three lines, the first one now `Version: 14.0`: the form
+   replaces every value.)
+3. Go back to the Passport tab and don't click anything. Within 30 seconds a banner says *N answers changed at …
+   KS-DEV moved from 13.2 to 14.0. Nobody asked: the passport checked again by itself*, KS-DEV's header shows ~~13.2~~
+   → **14.0**, and the cells whose facts were verified only on 13.2 (the API, background tasks, runtime 3.9 and the web
+   front end) turn over to **Don't know yet**, each marked *was …*. Policy answers and KS-PROD don't move. Ask the 3 GB
+   question in KS-DEV again: **Don't know yet** too; KS-PROD still answers No.
+4. Open **My tools**: *Needs you* now counts the facts to re-check, *KS-DEV moved from 13.2 to 14.0*; click
+   **Re-check**. The **Changes** section shows *KS-DEV: 13.2 → 14.0 · Found in Assets record* (*Recorded by owner* in registry
    mode), the facts to re-verify, and a note of what was not touched (facts that don't depend on the version, policy
    rules, KS-PROD). Opening the screen reads the records and builds the list right away, and while it is open it
    looks again every 30 seconds, so you can even skip step 3 and watch the change appear. For *Build a custom web

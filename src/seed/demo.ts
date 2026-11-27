@@ -36,17 +36,38 @@ export type SeedResult =
 const ENVIRONMENTS = ['KS-DEV', 'KS-PROD'] as const;
 type EnvName = (typeof ENVIRONMENTS)[number];
 
+/**
+ * Which checks decide each capability. The spec's seven (section 16) plus the ones a team building internal apps
+ * actually worries about: company data, endpoints other systems call, exports, secrets, audit (D62). Policy and
+ * access differ between KS-DEV and KS-PROD, so the Passport shows every kind of answer, each for a real reason.
+ * embed_in_pages and mobile_access stay unlinked: what an owner hasn't covered yet.
+ */
 const LINKS: CapabilityLink[] = [
   { capabilityKey: 'web_frontend', actions: ['custom_ui'], readinessKeys: ['frontend_build'] },
   { capabilityKey: 'runtime_3_9', actions: [], readinessKeys: [] },
   { capabilityKey: 'community_app_framework', actions: ['community_app_framework'], readinessKeys: [] },
   { capabilityKey: 'max_upload_gb', actions: [], readinessKeys: ['uploads'] },
-  { capabilityKey: 'scheduled_jobs', actions: [], readinessKeys: [] },
-  { capabilityKey: 'single_sign_on', actions: [], readinessKeys: [] },
+  { capabilityKey: 'scheduled_jobs', actions: [], readinessKeys: ['scheduling'] },
+  { capabilityKey: 'single_sign_on', actions: [], readinessKeys: ['sso'] },
   { capabilityKey: 'websockets', actions: [], readinessKeys: [] },
+  { capabilityKey: 'database_connections', actions: ['company_data'], readinessKeys: [] },
+  { capabilityKey: 'api_endpoints', actions: ['public_api'], readinessKeys: [] },
+  { capabilityKey: 'export_csv', actions: ['data_export'], readinessKeys: [] },
+  { capabilityKey: 'email_notifications', actions: [], readinessKeys: [] },
+  { capabilityKey: 'secrets_storage', actions: [], readinessKeys: [] },
+  { capabilityKey: 'audit_logging', actions: [], readinessKeys: [] },
+  { capabilityKey: 'role_based_access', actions: [], readinessKeys: [] },
+  { capabilityKey: 'version_control_sync', actions: [], readinessKeys: [] },
+  { capabilityKey: 'background_workers', actions: [], readinessKeys: [] },
+  { capabilityKey: 'gpu_compute', actions: [], readinessKeys: [] },
+  { capabilityKey: 'custom_domains', actions: [], readinessKeys: [] },
 ];
 
-// All owner-verified on 13.2. websockets has no fact: the known unknown.
+/**
+ * All owner-verified on 13.2. websockets, export_csv and email_notifications are linked but have no fact yet: the
+ * judge guide's sample docs page fills them in (Fill in from your docs), and websockets is also the Ask the owner
+ * example. Version-sensitive facts are the ones an upgrade stops the app vouching for.
+ */
 const FACTS: Array<{ key: string; value: boolean | number; versionSensitive: boolean; quote: string | null }> = [
   { key: 'web_frontend', value: true, versionSensitive: true, quote: 'Yes, through the build workflow' },
   { key: 'runtime_3_9', value: true, versionSensitive: true, quote: 'Supported' },
@@ -54,6 +75,15 @@ const FACTS: Array<{ key: string; value: boolean | number; versionSensitive: boo
   { key: 'max_upload_gb', value: 2, versionSensitive: true, quote: 'Up to 2 GB per file' },
   { key: 'scheduled_jobs', value: true, versionSensitive: false, quote: null },
   { key: 'single_sign_on', value: true, versionSensitive: false, quote: null },
+  { key: 'database_connections', value: true, versionSensitive: false, quote: 'Apps connect to company databases through managed connections' },
+  { key: 'api_endpoints', value: true, versionSensitive: true, quote: 'Apps can publish REST endpoints for other systems to call' },
+  { key: 'background_workers', value: true, versionSensitive: true, quote: 'Long tasks run on background workers' },
+  { key: 'secrets_storage', value: true, versionSensitive: false, quote: 'Passwords and API keys are kept in the encrypted secrets store' },
+  { key: 'audit_logging', value: true, versionSensitive: false, quote: 'Every change is written to the audit log' },
+  { key: 'role_based_access', value: true, versionSensitive: false, quote: 'Apps can give each role its own permissions' },
+  { key: 'version_control_sync', value: true, versionSensitive: false, quote: "Each app's code is kept in the company git server" },
+  { key: 'gpu_compute', value: false, versionSensitive: false, quote: 'GPU machines are not available' },
+  { key: 'custom_domains', value: false, versionSensitive: false, quote: "Every app lives under the studio's own address" },
 ];
 
 // Approvals count for 30 days, then the answer asks for approval again (D52; not in spec section 16).
@@ -68,6 +98,13 @@ const RULES: Array<{ action: string; env: EnvName; effect: Effect; reason: strin
   { action: 'external_api_calls', env: 'KS-PROD', effect: 'approval', reason: 'Needs security approval', approval: true },
   { action: 'external_sharing', env: 'KS-DEV', effect: 'deny', reason: 'Not allowed', approval: false },
   { action: 'external_sharing', env: 'KS-PROD', effect: 'deny', reason: 'Not allowed', approval: false },
+  // Development uses test data; production holds customer data, so the same thing needs a review there (D62).
+  { action: 'company_data', env: 'KS-DEV', effect: 'allow', reason: 'Test data only', approval: false },
+  { action: 'company_data', env: 'KS-PROD', effect: 'approval', reason: 'Customer data needs a privacy review', approval: true },
+  { action: 'public_api', env: 'KS-DEV', effect: 'allow', reason: 'Allowed in development', approval: false },
+  { action: 'public_api', env: 'KS-PROD', effect: 'approval', reason: 'Needs a security review', approval: true },
+  { action: 'data_export', env: 'KS-DEV', effect: 'allow', reason: 'Test data only', approval: false },
+  { action: 'data_export', env: 'KS-PROD', effect: 'approval', reason: "Exports of customer data need the data owner's approval", approval: true },
 ];
 
 const ACCESS: Array<{ action: string; env: EnvName; group: string | null; grants: string | null }> = [
@@ -75,6 +112,13 @@ const ACCESS: Array<{ action: string; env: EnvName; group: string | null; grants
   { action: 'custom_ui', env: 'KS-PROD', group: 'kestrel-prod-deployers', grants: 'Deployer role in Kestrel' },
   { action: 'community_app_framework', env: 'KS-DEV', group: null, grants: null },
   { action: 'community_app_framework', env: 'KS-PROD', group: null, grants: null },
+  { action: 'company_data', env: 'KS-DEV', group: 'kestrel-dev-builders', grants: 'Developer role in Kestrel' },
+  { action: 'company_data', env: 'KS-PROD', group: 'kestrel-dev-builders', grants: 'Developer role in Kestrel' },
+  { action: 'public_api', env: 'KS-DEV', group: 'kestrel-dev-builders', grants: 'Developer role in Kestrel' },
+  // Publishing an endpoint in production is a deployer's job: a builder gets "Not ready" and a path to access.
+  { action: 'public_api', env: 'KS-PROD', group: 'kestrel-prod-deployers', grants: 'Deployer role in Kestrel' },
+  { action: 'data_export', env: 'KS-DEV', group: 'kestrel-dev-builders', grants: 'Developer role in Kestrel' },
+  { action: 'data_export', env: 'KS-PROD', group: 'kestrel-dev-builders', grants: 'Developer role in Kestrel' },
 ];
 
 /** The section 16 values an environment's record holds, as the registry keeps them (no Name or Tool). */
@@ -137,7 +181,10 @@ export async function seedDemo(deps: SeedDeps): Promise<SeedResult> {
   }
   await writer.upsertReadinessKey({ toolId, key: 'frontend_build', providerAttribute: 'Build environments', match: 'has', expected: 'frontend', label: 'Frontend build', fixRoute: ROUTES.environmentOwner });
   await writer.upsertReadinessKey({ toolId, key: 'uploads', providerAttribute: 'Features enabled', match: 'has', expected: 'uploads', label: 'Uploads', fixRoute: ROUTES.environmentOwner });
-  counts.readinessKeys = 2;
+  // Read from the same Assets attribute: scheduling is on in both environments, single sign-on only in KS-PROD.
+  await writer.upsertReadinessKey({ toolId, key: 'scheduling', providerAttribute: 'Features enabled', match: 'has', expected: 'scheduling', label: 'Scheduling', fixRoute: ROUTES.environmentOwner });
+  await writer.upsertReadinessKey({ toolId, key: 'sso', providerAttribute: 'Features enabled', match: 'has', expected: 'single sign-on', label: 'Single sign-on', fixRoute: ROUTES.environmentOwner });
+  counts.readinessKeys = 4;
   for (const a of ACCESS) {
     await writer.upsertAccessMapping({
       toolId,

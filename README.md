@@ -2,8 +2,14 @@
 
 An Atlassian Forge app for Jira and Jira Service Management, built for Codegeist 2026 (Apps for Software Teams).
 
-Employees ask **"Can I do X with tool T in environment E?"**, for example *"Can I build a custom web dashboard with
-Kestrel Studio in KS-DEV?"* Tool Passport answers from recorded evidence and names the source of every piece:
+**Not a chatbot. A passport that keeps itself true as your tools change.**
+
+Before the sprint starts, know if your story can ship. Tool Passport opens on each person's **passport**: every
+capability of a tool against every environment, checked as them. While it is open it checks itself again every 30
+seconds, so when an environment upgrades, the answers that relied on the old version turn *Don't know yet* on
+screen, marked with what they were, without anyone asking. Behind every cell is the answer to **"Can I do X with
+tool T in environment E?"**, for example *"Can I build a custom web dashboard with Kestrel Studio in KS-DEV?"*,
+answered from recorded evidence with the source of every piece named:
 
 - **Yes**, **Yes, with approval**, **Not ready**, **No**, or **Don't know yet**, with the reason;
 - four **passport stamps**, one per check (the tool can do it, policy allows it, set up here, you have access),
@@ -14,10 +20,13 @@ Kestrel Studio in KS-DEV?"* Tool Passport answers from recorded evidence and nam
   private Jira Service Management request raised for the person asking. When it's resolved, the answer updates by
   itself, and the card says what changed.
 
-Four more ways in:
+More ways in:
 
-- **Passport:** one screen with every capability of a tool against every environment, each cell the answer Ask would
-  give, checked as you (no model call). Click a cell for its card.
+- **Ask:** the same answer for a question in your own words. The AI only reads the question into the tool's own list;
+  fixed rules decide. The Passport itself makes no model call; click a cell for its card.
+- **My tools**, for a tool's owner: *Needs you* counts the open questions, the facts to re-check after an upgrade and
+  the capabilities nobody has verified, and *Fill in from your docs* drafts facts from pasted documentation, each with
+  the line that proves it.
 - **Check this story:** a panel on any Jira work item. It reads the story as you, suggests the environment the story
   names, and answers before the sprint starts, with Request the fix right there. **Add to story** posts the answer,
   its stamps and the path to Yes as your comment. When the answer changes, the app adds the new one to the story by

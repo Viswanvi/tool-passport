@@ -379,6 +379,18 @@ body {
   background: transparent;
   color: var(--ds-text-subtle, #44546f);
 }
+.tp-btn-small {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+.tp-btn-primary .tp-icon-ai {
+  width: 14px;
+  height: 14px;
+  color: inherit;
+}
 .tp-note {
   font-size: 13px;
   color: var(--ds-text-subtle, #44546f);
@@ -590,6 +602,127 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   .tp-animate-grid .tp-grid-wrap {
+    animation: none;
+  }
+}
+
+/* ---- The Passport keeps itself true (D61): the watch, what changed, and the changed cells ---- */
+.tp-watch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ds-text-success, #216e4e);
+}
+.tp-watch-off {
+  color: var(--ds-text-subtlest, #626f86);
+}
+.tp-pulse {
+  position: relative;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ds-icon-success, #22a06b);
+}
+.tp-pulse::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--ds-icon-success, #22a06b);
+  animation: tp-pulse 2s ease-out infinite;
+}
+@keyframes tp-pulse {
+  from {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.8);
+  }
+}
+.tp-changes {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--ds-border-warning, #e2b203);
+  border-left-width: 4px;
+  border-radius: 10px;
+  background: var(--ds-background-warning, #fff7d6);
+  color: var(--ds-text, #172b4d);
+}
+.tp-changes-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: var(--ds-icon-warning, #e56910);
+}
+.tp-changes-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.tp-changes-sub {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--ds-text-subtle, #44546f);
+}
+.tp-animate.tp-changes {
+  animation: tp-rise 320ms ease-out both;
+}
+.tp-env-moved {
+  color: var(--ds-text-warning, #a54800);
+}
+.tp-ver-was {
+  color: var(--ds-text-subtlest, #626f86);
+}
+.tp-cell-changed {
+  outline: 2px dashed var(--ds-border-warning, #e2b203);
+  outline-offset: 2px;
+}
+.tp-was {
+  display: block;
+  margin-top: 3px;
+  padding-left: 4px;
+  font-size: 11px;
+  color: var(--ds-text-subtlest, #626f86);
+  white-space: nowrap;
+}
+/* A cell whose answer just changed turns over once, like a card being flipped, then glows for a moment. */
+@keyframes tp-flip {
+  0% {
+    transform: rotateX(0);
+  }
+  45% {
+    transform: rotateX(90deg);
+  }
+  100% {
+    transform: rotateX(0);
+  }
+}
+@keyframes tp-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  40% {
+    box-shadow: 0 0 0 6px var(--ds-background-warning, #fff7d6);
+  }
+}
+.tp-cell-flip {
+  animation:
+    tp-flip 600ms ease-in-out both,
+    tp-glow 1600ms ease-out 600ms both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tp-pulse::after,
+  .tp-animate.tp-changes,
+  .tp-cell-flip {
     animation: none;
   }
 }

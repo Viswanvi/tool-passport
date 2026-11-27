@@ -1,5 +1,5 @@
 import { events, view } from '@forge/bridge';
-import { EVENT, type ActionMessage, type FrameAction, type FrameView, type ReadyMessage, type ViewMessage } from '../../../src/frontend/card-frame';
+import { cellId, EVENT, type ActionMessage, type FrameAction, type FrameView, type ReadyMessage, type ViewMessage } from '../../../src/frontend/card-frame';
 import { renderCard, renderPassport } from './render';
 import './card.css';
 
@@ -18,6 +18,24 @@ let gridShown = false;
 let detailsOpen = false;
 let showUnknown = false;
 let answered = false;
+// Changes already flipped (cell and time), so a cell flips once per change and not on every redraw.
+const flipped = new Set<string>();
+
+/** Cells whose change is new in this view. */
+function newFlips(v: FrameView | null): Set<string> {
+  const fresh = new Set<string>();
+  if (v?.kind !== 'passport') return fresh;
+  for (const r of v.passport.rows) {
+    for (const c of r.cells) {
+      if (!c.change) continue;
+      const sig = `${cellId(r.key, c.environmentId)}@${c.change.at}`;
+      if (flipped.has(sig)) continue;
+      flipped.add(sig);
+      fresh.add(cellId(r.key, c.environmentId));
+    }
+  }
+  return fresh;
+}
 
 function send(action: FrameAction, cell?: ActionMessage['cell']) {
   const m: ActionMessage = cell ? { frameId, action, cell } : { frameId, action };
@@ -32,7 +50,7 @@ function answerKey(v: FrameView | null): string | null {
   return p.answer ? `${p.picked?.key}|${p.picked?.environmentId}|${p.answer.card.title}` : null;
 }
 
-function draw(animateCard: boolean) {
+function draw(animateCard: boolean, flips: ReadonlySet<string> = new Set()) {
   if (!current) {
     root.replaceChildren();
     return;
@@ -50,6 +68,7 @@ function draw(animateCard: boolean) {
   root.replaceChildren(
     renderPassport(current.passport, {
       animateGrid,
+      flips,
       animateCard,
       detailsOpen,
       showUnknown,
@@ -74,7 +93,7 @@ async function start() {
     if (key !== shownAnswer) detailsOpen = false;
     current = m.view;
     shownAnswer = key;
-    draw(animate);
+    draw(animate, newFlips(m.view));
   });
   // The page may start listening after this frame starts, so say ready until it answers (about 15 seconds at most),
   // and again whenever a page asks (it subscribed again after this frame had stopped saying it).

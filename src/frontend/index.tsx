@@ -30,19 +30,25 @@ import ForgeReconciler, {
 import type { Card, CardRequest, PathStep, Stamp } from '../engine/card';
 import { events } from '@forge/bridge';
 import {
+  cellId,
   cellOf,
   EVENT,
   FRAME_RESOURCE,
   frameView,
+  markChanges,
+  NO_MARKS,
   primaryOf,
   WAITING_KINDS,
   type ActionMessage,
   type FrameView,
   type PassportFrameView,
+  type PassportMarks,
   type ReadyMessage,
   type ViewMessage,
 } from './card-frame';
 import { checkLine, chipText, stampLines, time } from './card-text';
+import { builtLines } from './setup-text';
+import { needsOf, type Needs } from './needs';
 import type { Verdict } from '../engine/model';
 import { call, cardStyle, type Option } from './common';
 import { ChangesSection, RecentQuestions } from './changes';
@@ -74,6 +80,10 @@ import type { SafetyRun } from '../safety/run';
 const ANY = 'any';
 const POLL_MS = 10_000;
 const POLL_LIMIT = 90;
+// The Passport tab reads its grid again by itself every 30 seconds while it is open, for 30 minutes (D61). A read
+// is one resolver call: Assets records and stored facts, no model call.
+const WATCH_MS = 30_000;
+const WATCH_LIMIT = 60;
 
 /** Open requests keep the card checking again (spec section 15). */
 const WAITING = WAITING_KINDS;
@@ -661,42 +671,109 @@ const AskPage = () => {
  * The Passport tab, drawn in the frame (D60): every capability against every environment, checked as the person
  * looking, and the card of the cell they open. This page keeps every call (`passport`, `askKey` and the card's
  * buttons) and sends the frame the view; the frame reports clicks, and only cells this page sent can be opened.
+ *
+ * While the tab is open it reads the grid again by itself every 30 seconds (D61). A cell whose answer changed is
+ * marked with what it was and when; an environment whose recorded version changed shows the old one. So when an
+ * admin moves KS-DEV to a new version in Assets, the cells it affects turn Don't know yet on this screen without
+ * anyone asking. Every read is the same `passport` call as Check again: the server works each cell out afresh.
  */
-const PassportPage = ({ refreshKey }: { refreshKey: number }) => {
+const PassportPage = ({ refreshKey, owns, onFill }: { refreshKey: number; owns?: (toolId: string) => boolean; onFill?: () => void }) => {
   const { tools, tool, setTool } = useTools();
   const [data, setData] = useState<PassportReply | null>(null);
   const [loading, setLoading] = useState(false);
   const [picked, setPicked] = useState<{ key: string; environmentId: number } | null>(null);
-  // Bumped by "Check again".
+  const [marks, setMarks] = useState<PassportMarks>(NO_MARKS);
+  // Bumped by "Check again"; it also starts the watch again once it has stopped.
   const [round, setRound] = useState(0);
+  const [watching, setWatching] = useState(true);
   const a = useAnswer();
   const active = useContext(FrameSlot);
+  // The grid on screen, read by the next load to find what changed (loads run from an interval).
+  const shownGrid = useRef<PassportReply | null>(null);
+  const reading = useRef(false);
+
+  /** first: a new tool, nothing to compare. click: Check again. self: the tab's own re-check, or coming back to it. */
+  const load = async (how: 'first' | 'click' | 'self') => {
+    if (!tool) return;
+    // A re-check of its own waits for any read still running; a click doesn't.
+    if (how === 'self' && reading.current) return;
+    reading.current = true;
+    if (how !== 'self') setLoading(true);
+    try {
+      const r = await call<PassportReply>('passport', { toolId: Number(tool.value) });
+      const before = how === 'first' ? null : shownGrid.current;
+      if (r.ok && before?.ok) {
+        setMarks((m) => markChanges(before, r, m, { at: r.checkedAt, byItself: how === 'self' }));
+        // The opened cell changed under its card: the card checks again too (no model call).
+        const title = (g: typeof r, p: NonNullable<typeof picked>) => g.rows.find((x) => x.key === p.key)?.cells.find((c) => c.environmentId === p.environmentId)?.title;
+        if (picked && a.card && title(before, picked) !== title(r, picked)) void a.recheck(true);
+      }
+      shownGrid.current = r;
+      setData(r);
+    } catch (e) {
+      // A re-check of its own that fails keeps the grid on screen; the next one tries again.
+      if (how !== 'self') setData({ ok: false, reason: String(e) });
+    } finally {
+      reading.current = false;
+      if (how !== 'self') setLoading(false);
+    }
+  };
+  // The interval calls the latest load, with this render's tool, cell and card.
+  const loadRef = useRef(load);
+  loadRef.current = load;
 
   useEffect(() => {
     if (!tool) return;
-    // Check again keeps the grid on screen while it reads; a new tool starts empty.
-    setLoading(true);
-    void call<PassportReply>('passport', { toolId: Number(tool.value) })
-      .then(setData)
-      .catch((e: unknown) => setData({ ok: false, reason: String(e) }))
-      .finally(() => setLoading(false));
-  }, [tool, refreshKey, round]);
+    // A new tool starts empty, with nothing marked.
+    shownGrid.current = null;
+    setMarks(NO_MARKS);
+    void loadRef.current('first');
+  }, [tool]);
+  useEffect(() => {
+    // Coming back to the tab: whatever changed meanwhile changed without anyone asking.
+    if (refreshKey > 0) void loadRef.current('self');
+  }, [refreshKey]);
+  useEffect(() => {
+    if (round > 0) void loadRef.current('click');
+  }, [round]);
+
+  const shown = data?.ok === true;
+  useEffect(() => {
+    if (!active || !shown) return undefined;
+    setWatching(true);
+    let reads = 0;
+    const timer = setInterval(() => {
+      reads += 1;
+      if (reads > WATCH_LIMIT) {
+        clearInterval(timer);
+        setWatching(false);
+      } else void loadRef.current('self');
+    }, WATCH_MS);
+    return () => clearInterval(timer);
+  }, [active, shown, tool, round]);
 
   const passport: PassportFrameView | null = data?.ok
     ? {
         tool: data.tool,
         checkedAt: data.checkedAt,
-        environments: data.environments,
-        rows: data.rows.map((r) => ({ key: r.key, label: r.label, cells: r.cells.map((c) => ({ environmentId: c.environmentId, verdict: c.verdict, title: c.title })) })),
+        environments: data.environments.map((e) => ({ ...e, change: marks.versions[e.id] ?? null })),
+        rows: data.rows.map((r) => ({
+          key: r.key,
+          label: r.label,
+          cells: r.cells.map((c) => ({ environmentId: c.environmentId, verdict: c.verdict, title: c.title, change: marks.cells[cellId(r.key, c.environmentId)] ?? null })),
+        })),
         picked,
         answer: a.card ? frameView(a.card, { busy: a.busy, canRecheck: a.askId !== null }) : null,
         status: a.busy && !a.card ? a.working : (a.notice ?? (a.failed && !a.card ? 'Something went wrong. Try again.' : null)),
         refreshing: loading,
+        watch: watching ? { seconds: WATCH_MS / 1000 } : null,
+        fill: Boolean(tool && onFill && owns?.(tool.value)),
       }
     : null;
 
   useFrameLink(passport ? { kind: 'passport', passport } : null, active, (m) => {
     if (m.action === 'refresh') return setRound((n) => n + 1);
+    if (m.action === 'fill-docs') return passport?.fill ? onFill?.() : undefined;
     const cell = cellOf(m, passport);
     if (cell && tool) {
       setPicked(cell);
@@ -1238,11 +1315,64 @@ const PlanRow = ({ state, text }: { state: 'done' | 'will' | 'stop'; text: strin
 
 const quoted = (names: string[]) => names.map((n) => `“${n}”`).join(' or ');
 
+/**
+ * What one click built, line by line from the server's reply, then the false-Yes suite run at once on this site's
+ * engine (D61): the administrator sees what is now here and that it cannot give a false Yes, without a second step.
+ */
+const BuiltPanel = ({ lines, safety }: { lines: string[]; safety: SafetyReply | 'running' | null }) => {
+  // The lines come in one after another; every one is already true when it shows.
+  const [shown, setShown] = useState(0);
+  const total = lines.length;
+  const text = lines.join('|');
+  useEffect(() => {
+    setShown(0);
+    const timer = setInterval(() => setShown((n) => (n >= total ? n : n + 1)), 220);
+    return () => clearInterval(timer);
+  }, [text, total]);
+  const done = shown >= lines.length;
+  return (
+    <Box xcss={xcss({ padding: 'space.200', borderRadius: 'radius.large', backgroundColor: 'color.background.success' })}>
+      <Stack space="space.100">
+        <Inline space="space.100" alignBlock="center">
+          <Icon glyph="magic-wand" color="color.icon.success" label="" />
+          <Heading as="h3" size="small">
+            Built for you on this site
+          </Heading>
+        </Inline>
+        {lines.slice(0, shown).map((l) => (
+          <PlanRow key={l} state="done" text={l} />
+        ))}
+        {done ? (
+          safety === 'running' || safety === null ? (
+            <Inline space="space.100" alignBlock="center">
+              <Spinner size="small" />
+              <Text>Running the false-Yes safety tests on this site…</Text>
+            </Inline>
+          ) : safety.ok ? (
+            <Inline space="space.100" alignBlock="start">
+              <Icon glyph={safety.passed === safety.total ? 'status-success' : 'status-error'} color={safety.passed === safety.total ? 'color.icon.success' : 'color.icon.danger'} label="" size="small" />
+              <Text weight="bold">
+                {safety.passed === safety.total
+                  ? `${safety.passed} of ${safety.total} safety tests passed: none could get a Yes it should not have.`
+                  : `${safety.total - safety.passed} of ${safety.total} safety tests failed. Don't rely on its answers until this is fixed.`}
+              </Text>
+            </Inline>
+          ) : (
+            <Text>{`The safety tests couldn't run just now (${safety.reason}). Run them under 6. Tests.`}</Text>
+          )
+        ) : null}
+      </Stack>
+    </Box>
+  );
+};
+
 /** Steps 1 to 4 in one click: the server proposes exactly what it would set, and sets it only on the click. */
 const QuickSetup = ({ refreshKey, onDone }: { refreshKey: number; onDone: () => void }) => {
   const [plan, setPlan] = useState<PlanReply | null>(null);
   const [busy, setBusy] = useState(false);
   const [reply, setReply] = useState<QuickSetupReply | null>(null);
+  const [built, setBuilt] = useState<string[] | null>(null);
+  const [safety, setSafety] = useState<SafetyReply | 'running' | null>(null);
 
   useEffect(() => {
     void call<PlanReply>('quickSetupPlan')
@@ -1253,10 +1383,20 @@ const QuickSetup = ({ refreshKey, onDone }: { refreshKey: number; onDone: () => 
   const apply = async (mode: 'assets' | 'registry') => {
     setBusy(true);
     setReply(null);
+    setBuilt(null);
+    setSafety(null);
     try {
       const r = await call<QuickSetupReply>('quickSetup', { mode });
       setReply(r);
       onDone();
+      if (r.ok) {
+        // What the click wrote, then the suite on the engine it wrote it for (no model call, nothing on the site touched).
+        setBuilt(builtLines(r, plan?.ok ? plan : null));
+        setSafety('running');
+        void call<SafetyReply>('runSafety')
+          .then(setSafety)
+          .catch((e: unknown) => setSafety({ ok: false, reason: String(e) }));
+      }
     } catch (e) {
       setReply({ ok: false, reason: String(e) });
     } finally {
@@ -1284,16 +1424,13 @@ const QuickSetup = ({ refreshKey, onDone }: { refreshKey: number; onDone: () => 
           {canAsk ? 'Ready to ask' : 'Set up in one click'}
         </Heading>
         {allSet ? (
-          <Text>Steps 1 to 4 are done. Open Tool Passport from the sidebar (Apps → Tool Passport), pick KS-DEV and ask the first suggested question.</Text>
+          <Text>All set. Open Apps → Tool Passport: your passport for Kestrel Studio is the first thing you see.</Text>
         ) : canAsk && requests.state !== 'done' ? (
-          <Text>
-            Kestrel Studio is loaded, so you can ask now: Apps → Tool Passport, KS-DEV, the first suggested question. To raise requests from its answers, do what is marked
-            below, then click Set it all up again.
-          </Text>
+          <Text>Kestrel Studio is loaded: open Apps → Tool Passport. To raise requests from its answers, do what is marked below, then click Set it all up again.</Text>
         ) : canAsk ? (
-          <Text>Kestrel Studio is loaded, so you can ask now: Apps → Tool Passport, KS-DEV, the first suggested question. One click does what is marked below.</Text>
+          <Text>Kestrel Studio is loaded: open Apps → Tool Passport. One click does what is marked below.</Text>
         ) : (
-          <Text>One click does steps 1 to 4 below for you. Here is exactly what it will set; change any of it later in its own step.</Text>
+          <Text>One click sets up everything below. You can change any of it later.</Text>
         )}
         <Stack space="space.075">
           <PlanRow
@@ -1341,6 +1478,7 @@ const QuickSetup = ({ refreshKey, onDone }: { refreshKey: number; onDone: () => 
             ) : null}
           </Inline>
         ) : null}
+        {built?.length ? <BuiltPanel lines={built} safety={safety} /> : null}
         {reply?.ok && reply.later ? (
           <SectionMessage appearance="information" title="You can ask now">
             <Text>{reply.later}</Text>
@@ -1458,12 +1596,9 @@ const SetupPage = () => {
         {busy ? <Spinner /> : null}
         {result?.ok ? (
           <SectionMessage appearance="success" title="Demo data loaded">
-            <Text>
-              {Object.entries(result.counts)
-                .map(([k, v]) => `${k}: ${v}`)
-                .join(' · ')}
-            </Text>
-            <Text>{result.environments.map((e) => `${e.name} → ${e.providerRef}`).join(' · ')}</Text>
+            {builtLines({ ok: true, did: ['demo'], seed: result }, null).map((l) => (
+              <Text key={l}>{l}</Text>
+            ))}
           </SectionMessage>
         ) : null}
         {result?.ok && result.warnings?.length ? (
@@ -1628,27 +1763,127 @@ const QuestionsForTool = ({ toolId, refreshKey }: { toolId: number; refreshKey: 
   );
 };
 
-const MyToolsPage = ({ tools, refreshKey }: { tools: Option[]; refreshKey: number }) => {
+// My tools' sections, in tab order.
+const MY_TOOLS_QUESTIONS = 0;
+const MY_TOOLS_CHANGES = 1;
+const MY_TOOLS_DOCS = 2;
+
+const needTile = xcss({
+  padding: 'space.200',
+  borderRadius: 'radius.large',
+  borderWidth: 'border.width',
+  borderStyle: 'solid',
+  borderColor: 'color.border',
+  backgroundColor: 'elevation.surface.raised',
+  width: '230px',
+  minHeight: '150px',
+});
+
+/** One thing the owner may need to do: how many, in a few words, and the button that goes there. */
+const NeedTile = ({ n, one, many, clear, sub, action, onGo }: { n: number | null; one: string; many: string; clear: string; sub: string | null; action: string; onGo: () => void }) => (
+  <Box xcss={needTile}>
+    <Stack space="space.075">
+      <Inline space="space.100" alignBlock="center">
+        {n === 0 ? <Icon glyph="status-success" color="color.icon.success" label="" /> : null}
+        <Heading as="h3" size={n === 0 ? 'small' : 'large'}>
+          {n === null ? '–' : n === 0 ? clear : String(n)}
+        </Heading>
+      </Inline>
+      {n !== 0 ? <Text weight="medium">{n === 1 ? one : many}</Text> : null}
+      {sub && n !== 0 ? (
+        <Text size="small" color="color.text.subtle">
+          {sub}
+        </Text>
+      ) : null}
+      {n ? (
+        <Button appearance="primary" spacing="compact" onClick={onGo}>
+          {action}
+        </Button>
+      ) : null}
+    </Stack>
+  </Box>
+);
+
+/**
+ * What the owner has to do for this tool, counted from the same replies the sections below show (D62): open
+ * questions, facts to re-check after an upgrade, and capabilities nobody has verified. Each goes to its section.
+ */
+const NeedsYou = ({ toolId, refreshKey, onGo }: { toolId: number; refreshKey: number; onGo: (section: number) => void }) => {
+  const [needs, setNeeds] = useState<Needs | null>(null);
+  useEffect(() => {
+    let live = true;
+    const quiet = <T,>(p: Promise<T>) => p.catch(() => null);
+    void Promise.all([
+      quiet(call<QuestionsReply>('openQuestions', { toolId })),
+      quiet(call<Parameters<typeof needsOf>[0]['changes']>('changes', { toolId })),
+      quiet(call<PassportReply>('passport', { toolId })),
+    ]).then(([questions, changes, passport]) => {
+      if (live) setNeeds(needsOf({ questions, changes, passport }));
+    });
+    return () => {
+      live = false;
+    };
+  }, [toolId, refreshKey]);
+  if (!needs) return <Spinner size="small" />;
+  return (
+    <Inline space="space.200" shouldWrap>
+      <NeedTile
+        n={needs.questions}
+        one="question waiting for you"
+        many="questions waiting for you"
+        clear="No open questions"
+        sub="Answer once: everyone who asked gets it."
+        action="Answer"
+        onGo={() => onGo(MY_TOOLS_QUESTIONS)}
+      />
+      <NeedTile n={needs.recheck} one="fact to re-check" many="facts to re-check" clear="Nothing to re-check" sub={needs.moved} action="Re-check" onGo={() => onGo(MY_TOOLS_CHANGES)} />
+      <NeedTile
+        n={needs.unverified}
+        one="capability not verified yet"
+        many="capabilities not verified yet"
+        clear="Everything verified"
+        sub="The AI drafts them from your docs; you accept."
+        action="Fill in from your docs"
+        onGo={() => onGo(MY_TOOLS_DOCS)}
+      />
+    </Inline>
+  );
+};
+
+const MyToolsPage = ({ tools, refreshKey, openAt }: { tools: Option[]; refreshKey: number; openAt?: { section: number; n: number } }) => {
   const [tool, setTool] = useState<Option>(tools[0]!);
   // One Refresh for the whole tab: it used to reload the open questions only, so a version change found by the
   // sweep showed only after switching tabs (found live). Both counters only grow, so their sum changes with either.
   const [refreshed, setRefreshed] = useState(0);
   const key = refreshKey + refreshed;
+  const [section, setSection] = useState(openAt?.section ?? 0);
+  // Another tab sent the owner to a section (the Passport's Fill them in from your docs).
+  useEffect(() => {
+    if (openAt?.n) setSection(openAt.section);
+  }, [openAt?.n, openAt?.section]);
   return (
     <Stack space="space.200">
-      <Inline space="space.150" alignBlock="center">
-        {tools.length > 1 ? (
-          <Box xcss={xcss({ width: '240px' })}>
-            <Select options={tools} value={tool} onChange={(o: Option) => setTool(o)} />
-          </Box>
-        ) : null}
+      <Inline space="space.150" alignBlock="center" spread="space-between">
+        <Inline space="space.150" alignBlock="center">
+          {tools.length > 1 ? (
+            <Box xcss={xcss({ width: '240px' })}>
+              <Select options={tools} value={tool} onChange={(o: Option) => setTool(o)} />
+            </Box>
+          ) : (
+            <Heading as="h2" size="small">
+              {tool.label}
+            </Heading>
+          )}
+          <Lozenge appearance="new">You own it</Lozenge>
+        </Inline>
         <Button appearance="subtle" onClick={() => setRefreshed((n) => n + 1)}>
           Refresh
         </Button>
       </Inline>
+      <NeedsYou key={tool.value} toolId={Number(tool.value)} refreshKey={key} onGo={setSection} />
       {/* One section at a time (D60): the owner's work used to be one long page. The tab names are the ones the
           judge guide uses. */}
-      <Tabs id="my-tools-tabs">
+      <Tabs id="my-tools-tabs" selected={section} onChange={setSection}>
         <TabList>
           <Tab>Open questions</Tab>
           <Tab>Changes</Tab>
@@ -1657,10 +1892,7 @@ const MyToolsPage = ({ tools, refreshKey }: { tools: Option[]; refreshKey: numbe
         </TabList>
         <TabPanel>
           <Box xcss={tabBody}>
-            <Stack space="space.150">
-              <Text color="color.text.subtle">Answer once: everyone who asked gets it on their own request.</Text>
-              <QuestionsForTool key={tool.value} toolId={Number(tool.value)} refreshKey={key} />
-            </Stack>
+            <QuestionsForTool key={tool.value} toolId={Number(tool.value)} refreshKey={key} />
           </Box>
         </TabPanel>
         <TabPanel>
@@ -1899,62 +2131,72 @@ const HelpCenterAsk = () => {
 // Passport frame stayed narrow on a tab with nothing wide in it).
 const tabBody = xcss({ paddingTop: 'space.200', width: '100%' });
 
-/** The global page: Ask and Passport for everyone, My tools for tool owners and Jira administrators. */
+/**
+ * The global page: Passport and Ask for everyone, My tools for tool owners and Jira administrators. Passport opens
+ * first: the whole picture, kept true as the tools change, before anyone types a question (D61).
+ */
 const HomePage = () => {
   const [mine, setMine] = useState<Option[]>([]);
-  // Opening a tab reads it again: Passport is tab 1, My tools tab 2.
+  // Opening a tab reads it again: Passport is tab 0 (read on first open anyway), My tools tab 2.
   const [opened, setOpened] = useState({ passport: 0, mine: 0 });
   // The open tab: only it may draw its frame (one Frame per module, D60).
   const [tab, setTab] = useState(0);
+  // Which part of My tools to open, when another tab sends the owner there (n changes on every send).
+  const [mineAt, setMineAt] = useState({ section: 0, n: 0 });
   useEffect(() => {
     void call<{ tools: Array<{ id: number; name: string }> }>('myTools').then((r) => setMine(r.tools.map((t) => ({ label: t.name, value: String(t.id) }))));
   }, []);
   const onChange = (index: number) => {
+    setOpened((o) => (index === 0 && tab !== 0 ? { ...o, passport: o.passport + 1 } : index === 2 ? { ...o, mine: o.mine + 1 } : o));
     setTab(index);
-    setOpened((o) => (index === 1 ? { ...o, passport: o.passport + 1 } : index === 2 ? { ...o, mine: o.mine + 1 } : o));
   };
-  const ask = (
+  // From the Passport's unverified rows straight to Fill in from your docs (D62).
+  const fillFromDocs = () => {
+    setMineAt((s) => ({ section: MY_TOOLS_DOCS, n: s.n + 1 }));
+    onChange(2);
+  };
+  const passport = (
     <TabPanel>
       <Box xcss={tabBody}>
         <FrameSlot.Provider value={tab === 0}>
-          <AskPage />
+          <PassportPage refreshKey={opened.passport} owns={(id) => mine.some((t) => t.value === id)} onFill={mine.length ? fillFromDocs : undefined} />
         </FrameSlot.Provider>
       </Box>
     </TabPanel>
   );
-  const passport = (
+  const ask = (
     <TabPanel>
       <Box xcss={tabBody}>
         <FrameSlot.Provider value={tab === 1}>
-          <PassportPage refreshKey={opened.passport} />
+          <AskPage />
         </FrameSlot.Provider>
       </Box>
     </TabPanel>
   );
   if (mine.length === 0) {
     return (
-      <Tabs id="passport-tabs" onChange={onChange}>
+      <Tabs id="passport-tabs" selected={tab} onChange={onChange}>
         <TabList>
-          <Tab>Ask</Tab>
           <Tab>Passport</Tab>
+          <Tab>Ask</Tab>
         </TabList>
-        {ask}
         {passport}
+        {ask}
       </Tabs>
     );
   }
   return (
-    <Tabs id="passport-tabs" onChange={onChange}>
+    <Tabs id="passport-tabs" selected={tab} onChange={onChange}>
       <TabList>
-        <Tab>Ask</Tab>
         <Tab>Passport</Tab>
+        <Tab>Ask</Tab>
         <Tab>My tools</Tab>
       </TabList>
-      {ask}
       {passport}
+      {ask}
       <TabPanel>
         <Box xcss={tabBody}>
-          <MyToolsPage tools={mine} refreshKey={opened.mine} />
+          <MyToolsPage tools={mine} refreshKey={opened.mine} openAt={mineAt} />
         </Box>
       </TabPanel>
     </Tabs>

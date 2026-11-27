@@ -21,8 +21,11 @@ export const EVENT = {
   hello: 'tool-passport:card-hello',
 } as const;
 
-/** primary and recheck: the card's buttons. open-cell: a Passport cell was clicked. refresh: Check again. */
-export type FrameAction = 'primary' | 'recheck' | 'open-cell' | 'refresh';
+/**
+ * primary and recheck: the card's buttons. open-cell: a Passport cell was clicked. refresh: Check again.
+ * fill-docs: the owner's way from the unverified rows to Fill in from your docs.
+ */
+export type FrameAction = 'primary' | 'recheck' | 'open-cell' | 'refresh' | 'fill-docs';
 
 export interface CardFrameView {
   card: Card;
@@ -35,11 +38,27 @@ export interface CardFrameView {
   busy: boolean;
 }
 
+/** A cell whose answer changed between two reads of the grid while the tab was open (D61). */
+export interface CellChange {
+  /** The answer before. */
+  from: string;
+  at: string;
+  /** True when the tab's own re-check found it; false after a click on Check again. */
+  byItself: boolean;
+}
+
 /** One cell of the Passport grid, as the server worked it out for the person looking. */
 export interface PassportFrameCell {
   environmentId: number;
   verdict: Verdict | null;
   title: string;
+  change: CellChange | null;
+}
+
+/** An environment whose recorded version changed between two reads. */
+export interface VersionChange {
+  from: string | null;
+  at: string;
 }
 
 /**
@@ -49,7 +68,7 @@ export interface PassportFrameCell {
 export interface PassportFrameView {
   tool: string;
   checkedAt: string;
-  environments: Array<{ id: number; name: string; version: string | null }>;
+  environments: Array<{ id: number; name: string; version: string | null; change: VersionChange | null }>;
   rows: Array<{ key: string; label: string; cells: PassportFrameCell[] }>;
   picked: { key: string; environmentId: number } | null;
   /** The opened cell's card, once it has come back. */
@@ -58,6 +77,56 @@ export interface PassportFrameView {
   status: string | null;
   /** True while the grid itself is being checked again. */
   refreshing: boolean;
+  /** While the tab is open the page reads the grid again by itself, this often (D61); null once it has stopped. */
+  watch: { seconds: number } | null;
+  /** The person owns this tool: the unverified rows offer Fill in from your docs (D62). The server checks again. */
+  fill: boolean;
+}
+
+/** What changed on the Passport tab since it opened: cells by `cellId`, versions by environment id. */
+export interface PassportMarks {
+  cells: Record<string, CellChange>;
+  versions: Record<number, VersionChange>;
+}
+
+export const NO_MARKS: PassportMarks = { cells: {}, versions: {} };
+
+export const cellId = (key: string, environmentId: number) => `${key}|${environmentId}`;
+
+/** The parts of a grid read that changes are found in. */
+export interface GridRead {
+  environments: Array<{ id: number; version: string | null }>;
+  rows: Array<{ key: string; cells: Array<{ environmentId: number; title: string }> }>;
+}
+
+/**
+ * Adds what changed from one read of the grid to the next (D61). A cell is marked when its answer differs from the
+ * read before; it keeps the latest change. A cell or environment only in one read is not a change. Nothing before
+ * (a first read, a new tool) marks nothing.
+ */
+export function markChanges(before: GridRead | null, after: GridRead, marks: PassportMarks, x: { at: string; byItself: boolean }): PassportMarks {
+  if (!before) return marks;
+  const was = new Map<string, string>();
+  for (const r of before.rows) for (const c of r.cells) was.set(cellId(r.key, c.environmentId), c.title);
+  const cells = { ...marks.cells };
+  for (const r of after.rows) {
+    for (const c of r.cells) {
+      const id = cellId(r.key, c.environmentId);
+      const from = was.get(id);
+      if (from !== undefined && from !== c.title) cells[id] = { from, at: x.at, byItself: x.byItself };
+    }
+  }
+  const versions = { ...marks.versions };
+  for (const e of after.environments) {
+    const b = before.environments.find((y) => y.id === e.id);
+    if (b && b.version !== e.version) versions[e.id] = { from: b.version, at: x.at };
+  }
+  return { cells, versions };
+}
+
+/** "KS-DEV and KS-PROD", "A, B and C". */
+export function namesText(names: string[]): string {
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
 export type FrameView = { kind: 'card'; card: CardFrameView } | { kind: 'passport'; passport: PassportFrameView };

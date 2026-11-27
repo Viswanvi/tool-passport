@@ -1,5 +1,5 @@
 import type { Card, PathStep, Stamp } from '../../../src/engine/card';
-import type { CardFrameView, FrameAction, PassportFrameView } from '../../../src/frontend/card-frame';
+import { cellId, namesText, type CardFrameView, type FrameAction, type PassportFrameView } from '../../../src/frontend/card-frame';
 import { checkLine, chipText, stampLines, time } from '../../../src/frontend/card-text';
 import { ICONS, type IconName } from './icons';
 
@@ -153,6 +153,8 @@ type Cell = { key: string; environmentId: number };
 export interface PassportOptions {
   /** The grid rises in once, when the tab first shows. */
   animateGrid: boolean;
+  /** Cells (by cellId) whose change is new in this view: they flip once. */
+  flips: ReadonlySet<string>;
   /** The opened card's stamps land when its answer first shows or changes. */
   animateCard: boolean;
   detailsOpen: boolean;
@@ -174,7 +176,15 @@ function grid(p: PassportFrameView, rows: PassportFrameView['rows'], o: Passport
   for (const e of p.environments) {
     const th = el('th');
     const yes = rows.filter((r) => r.cells.some((c) => c.environmentId === e.id && c.verdict === 'yes')).length;
-    th.append(el('span', 'tp-env-name', e.name), el('span', 'tp-env-meta', `${e.version ? `${e.version} · ` : ''}${yes} of ${rows.length} Yes`));
+    th.append(el('span', 'tp-env-name', e.name));
+    if (e.change) {
+      // The version moved while the tab was open: old one struck through, new one marked.
+      const v = el('span', 'tp-env-meta tp-env-moved');
+      if (e.change.from) v.append(el('s', 'tp-ver-was', e.change.from), document.createTextNode(' → '));
+      v.append(el('strong', undefined, e.version ?? 'no version'));
+      v.title = `${e.name}'s recorded version changed at ${time(e.change.at)}.`;
+      th.append(v, el('span', 'tp-env-meta', `${yes} of ${rows.length} Yes`));
+    } else th.append(el('span', 'tp-env-meta', `${e.version ? `${e.version} · ` : ''}${yes} of ${rows.length} Yes`));
     head.append(th);
   }
   const thead = el('thead');
@@ -189,13 +199,21 @@ function grid(p: PassportFrameView, rows: PassportFrameView['rows'], o: Passport
       if (c) {
         const state = stateOf(c.verdict);
         const picked = p.picked?.key === r.key && p.picked.environmentId === e.id;
-        const b = el('button', `tp-cell tp-v-${state}${picked ? ' tp-cell-picked' : ''}`);
+        const id = cellId(r.key, e.id);
+        const cls = ['tp-cell', `tp-v-${state}`];
+        if (picked) cls.push('tp-cell-picked');
+        if (c.change) cls.push('tp-cell-changed');
+        if (o.flips.has(id)) cls.push('tp-cell-flip');
+        const b = el('button', cls.join(' '));
         b.type = 'button';
         b.setAttribute('aria-pressed', String(picked));
-        b.title = `${r.label} in ${e.name}: ${c.title}. Click to see why.`;
+        b.title = c.change
+          ? `${r.label} in ${e.name}: ${c.title}. It was ${c.change.from} until ${time(c.change.at)}. Click to see why.`
+          : `${r.label} in ${e.name}: ${c.title}. Click to see why.`;
         b.append(icon(STATE_ICON[state]), document.createTextNode(c.title));
         b.addEventListener('click', () => o.onAction('open-cell', { key: r.key, environmentId: e.id }));
         td.append(b);
+        if (c.change) td.append(el('span', 'tp-was', `was ${c.change.from}`));
       }
       tr.append(td);
     }
@@ -206,6 +224,36 @@ function grid(p: PassportFrameView, rows: PassportFrameView['rows'], o: Passport
   return wrap;
 }
 
+/** "Watching KS-DEV and KS-PROD · checks again every 30 seconds", or that the watch has stopped. */
+function watchLine(p: PassportFrameView): HTMLElement {
+  if (!p.watch) return el('div', 'tp-watch tp-watch-off', 'Stopped checking by itself after 30 minutes. Check again to start.');
+  const w = el('div', 'tp-watch');
+  w.title = 'While this tab is open it checks every cell again by itself, so an answer that stops being true changes here without anyone asking.';
+  w.append(el('span', 'tp-pulse'), el('span', undefined, `Watching ${namesText(p.environments.map((e) => e.name))} · checks again every ${p.watch.seconds} seconds`));
+  return w;
+}
+
+/** What changed since the tab opened: how many answers, when, and any version that moved. */
+function changesBanner(p: PassportFrameView, fresh: boolean): HTMLElement | null {
+  const changed = p.rows.flatMap((r) => r.cells.filter((c) => c.change).map((c) => c.change!));
+  const moved = p.environments.filter((e) => e.change);
+  if (!changed.length && !moved.length) return null;
+  const latest = [...changed.map((c) => c.at), ...moved.map((e) => e.change!.at)].sort().pop()!;
+  const b = el('div', `tp-changes${fresh ? ' tp-animate' : ''}`);
+  b.setAttribute('role', 'status');
+  const words = el('div', 'tp-changes-words');
+  const n = changed.length;
+  words.append(el('div', 'tp-changes-title', n ? `${n} answer${n === 1 ? '' : 's'} changed at ${time(latest)}` : `A version changed at ${time(latest)}`));
+  const lines: string[] = moved.map((e) => (e.change!.from ? `${e.name} moved from ${e.change!.from} to ${e.version ?? 'no version'}.` : `${e.name} now reads ${e.version ?? 'no version'}.`));
+  if (n && changed.every((c) => c.byItself)) lines.push('Nobody asked: the passport checked again by itself.');
+  // The rule behind a cell that turned Don't know yet when its version moved (spec: facts are per tool version).
+  const unknownNow = p.rows.some((r) => r.cells.some((c) => c.change && c.verdict === 'dont_know'));
+  if (moved.length && unknownNow) lines.push('Facts recorded for the old version are not vouched for on the new one until the owner checks them again.');
+  if (lines.length) words.append(el('div', 'tp-changes-sub', lines.join(' ')));
+  b.append(icon('alert', 'tp-icon tp-changes-icon'), words);
+  return b;
+}
+
 export function renderPassport(p: PassportFrameView, o: PassportOptions): HTMLElement {
   const root = el('section', `tp-passport${o.animateGrid ? ' tp-animate-grid' : ''}`);
 
@@ -213,21 +261,30 @@ export function renderPassport(p: PassportFrameView, o: PassportOptions): HTMLEl
   const titles = el('div');
   const title = el('div', 'tp-pp-title');
   title.append(icon('passport', 'tp-icon tp-pp-icon'), document.createTextNode(`Your passport for ${p.tool}`));
-  titles.append(title, el('div', 'tp-pp-sub', `What you can do, everywhere, checked as you at ${time(p.checkedAt)}. Click a cell to see why.`));
+  titles.append(title, el('div', 'tp-pp-sub', `Checked as you at ${time(p.checkedAt)}. Click any answer to see why.`), watchLine(p));
   head.append(titles, button(p.refreshing ? 'Checking…' : 'Check again', 'tp-btn', p.refreshing, () => o.onAction('refresh')));
   root.append(head);
+  const banner = changesBanner(p, o.flips.size > 0);
+  if (banner) root.append(banner);
 
-  // Rows nobody has verified anywhere are folded away, so the grid leads with what is known.
-  const unknown = p.rows.filter((r) => r.cells.length > 0 && r.cells.every((c) => c.verdict === 'dont_know'));
+  // Rows nobody has verified anywhere are folded away, so the grid leads with what is known. A row with a change
+  // stays in view: the change is the news.
+  const unknown = p.rows.filter((r) => r.cells.length > 0 && r.cells.every((c) => c.verdict === 'dont_know' && !c.change));
   const known = p.rows.filter((r) => !unknown.includes(r));
   root.append(grid(p, known, o, `What you can do with ${p.tool}, by environment`));
   if (unknown.length) {
     const fold = el('div', 'tp-fold');
     fold.append(
       el('span', 'tp-fold-badge', `Not verified yet · ${unknown.length}`),
-      el('span', 'tp-small', "Nobody has verified these, so they are Don't know yet everywhere."),
+      el('span', 'tp-small', p.fill ? 'Nobody has verified these yet.' : "Nobody has verified these, so they are Don't know yet everywhere."),
       button(o.showUnknown ? 'Hide them' : 'Show them', 'tp-btn tp-btn-link', false, o.onToggleUnknown),
     );
+    // The owner goes straight from the gap to filling it: the AI drafts each fact from their docs, they accept.
+    if (p.fill) {
+      const b = button('Fill them in from your docs', 'tp-btn tp-btn-primary tp-btn-small', false, () => o.onAction('fill-docs'));
+      b.prepend(icon('sparkles', 'tp-icon tp-icon-ai'));
+      fold.append(b);
+    }
     root.append(fold);
     if (o.showUnknown) root.append(grid(p, unknown, o, `Capabilities of ${p.tool} nobody has verified yet`));
   }

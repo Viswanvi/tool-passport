@@ -104,12 +104,18 @@ describe('Load demo data', () => {
     expect(r).toMatchObject({
       ok: true,
       environments: [{ name: 'KS-DEV', providerRef: 'TPENV-4679' }, { name: 'KS-PROD', providerRef: 'TPENV-4680' }],
-      counts: { tools: 1, environments: 2, catalogKeys: 25, links: 7, facts: 6, rules: 8, readinessKeys: 2, accessMappings: 4 },
+      counts: { tools: 1, environments: 2, catalogKeys: 25, links: 18, facts: 15, rules: 14, readinessKeys: 4, accessMappings: 10 },
     });
     expect(m.db.revisions).toBe(1);
     expect(m.db.audits).toHaveLength(1);
     expect(m.db.tools[0]).toMatchObject({ name: 'Kestrel Studio', ownerAccountId: 'acct-admin', defaultPolicy: 'none', versionGranularity: 'minor' });
-    expect(m.db.facts.find((f) => f.factKey === 'websockets')).toBeUndefined();
+    // Linked but unverified: the judge guide's sample docs page fills these in (D62).
+    for (const key of ['websockets', 'export_csv', 'email_notifications']) expect(m.db.facts.find((f) => f.factKey === key), key).toBeUndefined();
+    // Every policy rule's action has an access mapping in both environments, so no demo cell is unknown for want of one.
+    for (const rule of m.db.rules.values()) {
+      if (['external_api_calls', 'external_sharing'].includes(rule.actionKey)) continue;
+      expect(m.db.access.has(`${rule.environmentId}|${rule.actionKey}`), `${rule.actionKey} access`).toBe(true);
+    }
     // Approvals under the demo's approval rules count for 30 days (D52); other rules have no limit.
     for (const rule of m.db.rules.values()) expect(rule.approvalDays, `${rule.actionKey} ${rule.effect}`).toBe(rule.effect === 'approval' ? 30 : null);
   });
@@ -155,6 +161,45 @@ describe('Load demo data', () => {
     expect(await verdict('KS-DEV', picks({ key: 'max_upload_gb', value: 1 }))).toBe('yes');
     expect(await verdict('KS-DEV', picks({ key: 'websockets' }))).toBe('dont_know');
     expect(await verdict('KS-PROD', picks({ key: 'community_app_framework' }))).toBe('no');
+  });
+
+  it('the demo Passport shows every kind of answer, each for a real reason (D62)', async () => {
+    const m = memoryRegistry();
+    await seedDemo({ writer: m.writer, findObjectKey: async (n) => OBJECTS[n] ?? null, actor: 'acct-admin' });
+    const tool = m.db.tools[0]!;
+    const catalog = { revision: 1, keys: m.db.keys, links: m.db.links, examples: DEMO_EXAMPLES };
+    const env = (name: string) => m.db.environments.find((e) => e.name === name)!;
+    const cell = async (key: string, name: string) => {
+      const a = await answerQuestion(
+        { question: 'q', tool, environment: env(name), asker: 'acct-priya', groups: { ok: true, names: ['kestrel-dev-builders'] }, catalog },
+        {
+          chat: modelReplying(picks({ key })),
+          repo: m.repo,
+          environments: { read: async (e) => ({ ok: true, source: 'assets', values: RECORDS[e.providerRef!]!, version: '13.2', readAt: 'now', recordUpdatedAt: null }) },
+        },
+      );
+      return a.state === 'checked' ? a.verdict : a.state;
+    };
+    // [KS-DEV, KS-PROD] for a builder (kestrel-dev-builders), on a fresh demo.
+    const expected: Record<string, [string, string]> = {
+      web_frontend: ['not_ready', 'no'],
+      database_connections: ['yes', 'yes_with_approval'],
+      api_endpoints: ['yes', 'not_ready'],
+      community_app_framework: ['no', 'no'],
+      single_sign_on: ['not_ready', 'yes'],
+      scheduled_jobs: ['yes', 'yes'],
+      secrets_storage: ['yes', 'yes'],
+      audit_logging: ['yes', 'yes'],
+      gpu_compute: ['no', 'no'],
+      custom_domains: ['no', 'no'],
+      // Linked, not verified yet: the sample docs page fills these in.
+      export_csv: ['dont_know', 'dont_know'],
+      email_notifications: ['dont_know', 'dont_know'],
+      websockets: ['dont_know', 'dont_know'],
+    };
+    const got: Record<string, [string, string]> = {};
+    for (const key of Object.keys(expected)) got[key] = [await cell(key, 'KS-DEV'), await cell(key, 'KS-PROD')];
+    expect(got).toEqual(expected);
   });
 });
 
