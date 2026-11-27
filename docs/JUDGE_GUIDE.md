@@ -167,7 +167,9 @@ for the fictional Kestrel Studio) and click **Draft facts with AI**. One model c
 *Keep two-way connections open (websockets) · Yes*, each with the exact line it came from and a tag: **New**, **Same
 as recorded** or **Recorded: …**. A draft whose quote isn't really in the text is dropped. Click **Accept** on the
 websockets draft: it is saved as an owner-verified fact on 13.2, and the open question's request is answered and
-closed, as in step 3. Nothing is saved until you accept.
+closed, as in step 3. Nothing is saved until you accept. Drafts tagged **Checks not linked** are for capabilities
+whose policy and setup checks the owner hasn't linked yet: they can be saved, but answers stay Not verified until
+the links exist, so nothing turns Yes on a fact alone.
 
 ```text
 Kestrel Studio 13.2 feature overview

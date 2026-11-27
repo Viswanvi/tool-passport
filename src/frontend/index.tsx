@@ -120,7 +120,9 @@ type Look = { glyph: 'status-success' | 'clock' | 'status-warning' | 'question-c
 type IconColor = 'color.icon.success' | 'color.icon.information' | 'color.icon.warning' | 'color.icon.discovery' | 'color.icon.danger' | 'color.icon.subtle';
 type TextColor = 'color.text.success' | 'color.text.information' | 'color.text.warning' | 'color.text.discovery' | 'color.text.danger' | 'color.text.subtle';
 
-const TILE = { borderWidth: 'border.width', borderStyle: 'solid', borderRadius: 'radius.medium', padding: 'space.150', flexGrow: 1, flexBasis: '0', minWidth: '150px' } as const;
+// A fixed width: Inline wraps each child in its own box, so percentages and flexGrow don't reach the row (seen live).
+// Four fit in one row on the Ask page; narrow places (the story panel) show them two by two.
+const TILE = { borderWidth: 'border.width', borderStyle: 'solid', borderRadius: 'radius.medium', padding: 'space.100', width: '150px' } as const;
 
 const NEUTRAL: Look = { glyph: 'minus', icon: 'color.icon.subtle', text: 'color.text.subtle', box: xcss({ ...TILE, backgroundColor: 'color.background.neutral', borderColor: 'color.border' }) };
 const LOOK: Record<Stamp['state'], Look> = {
@@ -164,26 +166,29 @@ const StampTile = ({ stamp }: { stamp: Stamp }) => {
   const tip = [stamp.detail, stamp.chip ? `Evidence: ${chipText(stamp.chip)}` : null, more].filter(Boolean).join(' · ');
   const tile = (
     <Box xcss={look.box}>
-      <Inline space="space.100" alignBlock="center">
-        <Icon glyph={look.glyph} color={look.icon} label={stamp.statusText} size="medium" />
-        <Stack space="space.025">
-          <Text size="small" color="color.text.subtle">
-            {stamp.title}
-          </Text>
-          <Text weight="bold" color={look.text}>
+      <Stack space="space.050">
+        <Text size="small" color="color.text.subtle" maxLines={1}>
+          {stamp.title}
+        </Text>
+        <Inline space="space.075" alignBlock="center">
+          <Icon glyph={look.glyph} color={look.icon} label={stamp.statusText} size="small" />
+          <Text weight="bold" color={look.text} maxLines={1}>
             {stamp.statusText}
           </Text>
-          {third ? (
-            <Text size="small" color="color.text.subtlest" maxLines={1}>
-              {third}
-            </Text>
-          ) : null}
-        </Stack>
-      </Inline>
+        </Inline>
+        {third ? (
+          <Text size="small" color="color.text.subtlest" maxLines={1}>
+            {third}
+          </Text>
+        ) : null}
+      </Stack>
     </Box>
   );
   return tip ? <Tooltip content={tip}>{tile}</Tooltip> : tile;
 };
+
+// A pill that shows the whole label (a Tag cuts long capability names short, seen live).
+const readPill = xcss({ backgroundColor: 'color.background.discovery', borderRadius: 'radius.small', paddingInline: 'space.075', paddingBlock: 'space.025' });
 
 /** The reading step: what the question was read as and, for a typed question, that the AI read it but rules decided. */
 const ReadStrip = ({ card }: { card: Card }) => {
@@ -196,7 +201,11 @@ const ReadStrip = ({ card }: { card: Card }) => {
         {ai ? 'AI read your question as' : 'Checked'}
       </Text>
       {card.read.map((r) => (
-        <Tag key={r} text={r} color="purpleLight" />
+        <Box key={r} xcss={readPill}>
+          <Text size="small" color="color.text.discovery">
+            {r}
+          </Text>
+        </Box>
       ))}
       {ai ? (
         <Tooltip content="The AI only matches your words to this tool's list. Fixed rules check the evidence and give the answer, so the AI can never say Yes on its own.">

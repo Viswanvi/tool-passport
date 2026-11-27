@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Button, Checkbox, Heading, Icon, Inline, Lozenge, SectionMessage, Spinner, Stack, Text, TextArea, Textfield, xcss } from '@forge/react';
+import { Box, Button, Checkbox, Heading, Icon, Inline, Lozenge, SectionMessage, Spinner, Stack, Text, TextArea, Textfield, Tooltip, xcss } from '@forge/react';
 import type { DocDraft, DocReply } from '../resolvers/doc-handlers';
 import { call, cardStyle } from './common';
 
@@ -119,6 +119,11 @@ export const DocAssistant = ({ toolId, toolName, onSaved }: { toolId: number; to
                     <Inline space="space.100" alignBlock="center" spread="space-between" shouldWrap>
                       <Inline space="space.100" alignBlock="center" shouldWrap>
                         <Lozenge appearance={c.appearance}>{c.text}</Lozenge>
+                        {d.linked ? null : (
+                          <Tooltip content="Saved as a fact, but answers use it only once you link the checks this capability needs (Records → Show records → Capability links). Until then it stays Not verified.">
+                            <Lozenge appearance="default">Checks not linked</Lozenge>
+                          </Tooltip>
+                        )}
                         <Text weight="semibold">{d.label}</Text>
                         <Text weight="bold" color={d.value === true ? 'color.text.success' : d.value === false ? 'color.text.danger' : 'color.text'}>
                           {shown(d.value, d.unit)}

@@ -24,6 +24,11 @@ export interface DocDeps {
 export type DocDraft = DocSuggestion & {
   /** What is already recorded for every environment, so the page can say New, Same or Different; null if nothing. */
   recorded: unknown;
+  /**
+   * Whether the owner has linked the capability's checks. An unlinked capability stays Not verified with a fact
+   * (expand's `unlinked` check), so the page says so rather than let the owner expect a changed answer (seen live).
+   */
+  linked: boolean;
 };
 
 export type DocReply = { ok: true; drafts: DocDraft[]; dropped: number; version: string | null } | { ok: false; reason: string };
@@ -55,9 +60,15 @@ export async function handleDocFacts(payload: unknown, ctx: ResolverContext, dep
     if (r.status === 'failed') return { ok: false, reason: 'The documentation could not be read this time. Try again.' };
     // The version the drafts are verified on by default: the one the environments run now, if they agree.
     const seen = [...new Set(environments.map((e) => e.lastSeenVersion).filter((v): v is string => Boolean(v)))];
+    const isLinked = (key: string) => {
+      const l = catalog.links.get(key);
+      return Boolean(l && l.actions != null && l.readinessKeys != null);
+    };
+    // Drafts that change answers once accepted come first.
+    const drafts = r.suggestions.map((s) => ({ ...s, recorded: recordedValue(registry.facts, s.key), linked: isLinked(s.key) }));
     return {
       ok: true,
-      drafts: r.suggestions.map((s) => ({ ...s, recorded: recordedValue(registry.facts, s.key) })),
+      drafts: [...drafts.filter((d) => d.linked), ...drafts.filter((d) => !d.linked)],
       dropped: r.dropped,
       version: seen.length === 1 ? seen[0]! : null,
     };

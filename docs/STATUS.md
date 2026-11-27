@@ -1548,5 +1548,29 @@ one-line texts across the screens.
   (`purpleLight`), `Lozenge` `discovery`, `Icon` glyphs `magic-wand` and `search`, `Heading` sizes.
 - `npx vitest run`: `Tests 538 passed (538)`; `npx tsc --noEmit -p .` and `npx eslint src test` exit 0; `forge lint`:
   `No issues found.` Dev 5.24.0 deployed ("eligible for the Runs on Atlassian program").
-- Live check: not done yet. The browser pane's Atlassian session had expired (it showed id.atlassian.com), and
-  signing in is the human's step.
+- Live on the demo site (dev 5.24.0 to 5.32.0), after the human signed in again:
+  - Ask, KS-DEV dashboard question: *AI read your question as* **Build a custom web front end or dashboard** ·
+    *Rules decide*, a green **Yes** banner "Everything this needs is in place in KS-DEV." with *KS-DEV · 13.2*, and the
+    four stamps (Owner-verified · 13.2, Approved · TPD-12, Assets record, Mapped access). KS-PROD: a red **No** banner,
+    "Policy for KS-PROD: Not allowed in production.", the policy stamp red. Both `cached=true` (no model call).
+  - Fixed from what the screen showed: the reading tag cut long names short (now a pill that shows the whole label,
+    5.25.0); the stamps sized to their text and wrapped unevenly (UI Kit's `Inline` wraps each child, so `flexGrow`
+    and percentage widths don't reach the row: a `width: '23.5%'` try made thin strips; `Grid` isn't exported by
+    `@forge/react` 12.5 although it has types). Now each stamp is 150px with its icon beside the answer, four to a
+    row on a normal page and three plus one in the narrow browser pane (5.29.0; 130px cut the evidence short).
+    *Your recent questions* now lists the newest answer per question and environment, at most four, each with its
+    verdict as a coloured tag.
+  - **Fill in from your docs** with the judge guide's sample page: `[docfacts] tool=1 drafts=7 dropped=0` (websockets
+    and scheduled jobs *Same as recorded*; CSV export, email, memory 8 GB, GPU No, own web address No *New*), each
+    with its exact line. **Accept** on CSV export: "Export data to a spreadsheet file (CSV): saved.", `[publish]
+    export_csv settled=0 open=0`. The Passport tab still listed it under *Not verified yet*: CSV export has no
+    capability links in the demo, so its answer stays Not verified by design (expand's `unlinked` check). The screen
+    now says so: such drafts carry **Checks not linked** with a tooltip, and linked ones come first (5.30.0).
+  - A second run with four lines gave 3 drafts: the model skipped websockets (`dropped=0`). The capability list now
+    carries the catalog's other words for each capability (as the question reader's does), and the rules say to match
+    by meaning (5.31.0): websockets came back, but a fifth draft mapped the WebSockets line to *Build a custom web front
+    end or dashboard* because it mentions dashboards. Rule 4 now says the quote must state the capability itself, not
+    just a related word (5.32.0): the next run gave exactly the four drafts, one per line, with the two unlinked ones
+    tagged.
+- LLM calls: 4 (the four draft runs); every Ask answer came from the cache. The demo site now also has CSV export
+  verified on 13.2 (Reset demo clears it).

@@ -286,6 +286,19 @@ const VERDICT: Record<string, string> = {
   unsupported: "Don't know yet",
 };
 
+// The same colours as the answer card's verdicts.
+const VERDICT_LOOK: Record<string, 'success' | 'inprogress' | 'moved' | 'removed' | 'new' | 'default'> = {
+  yes: 'success',
+  yes_with_approval: 'inprogress',
+  not_ready: 'moved',
+  no: 'removed',
+  dont_know: 'new',
+  unsupported: 'new',
+};
+
+/** How many recent questions the Ask page lists: enough to pick one up again, short enough to read. */
+const RECENT_SHOWN = 4;
+
 /** The asker's own recent questions; "May have changed: ask again" where a version change touched the evidence. */
 export const RecentQuestions = ({ refreshKey, onAskAgain }: { refreshKey: number; onAskAgain: (askId: number) => void }) => {
   const [asks, setAsks] = useState<RecentAsk[] | null>(null);
@@ -293,14 +306,19 @@ export const RecentQuestions = ({ refreshKey, onAskAgain }: { refreshKey: number
     void call<{ asks: RecentAsk[] }>('recentAsks').then((r) => setAsks(r.asks));
   }, [refreshKey]);
   if (!asks || asks.length === 0) return null;
+  // The newest answer for each question and environment (the list comes newest first), at most RECENT_SHOWN.
+  const latest = asks.filter((a, i) => asks.findIndex((b) => b.question === a.question && b.environment === a.environment) === i).slice(0, RECENT_SHOWN);
   return (
-    <Stack space="space.100">
-      <Heading as="h3">Your recent questions</Heading>
-      {asks.map((a) => (
+    <Stack space="space.075">
+      <Heading as="h3" size="small">
+        Your recent questions
+      </Heading>
+      {latest.map((a) => (
         <Inline key={a.askId} space="space.100" alignBlock="center" shouldWrap>
-          <Text>{`${a.question ?? 'An earlier question'} · ${a.environment} · ${VERDICT[a.verdict ?? ''] ?? '—'}`}</Text>
+          <Lozenge appearance={VERDICT_LOOK[a.verdict ?? ''] ?? 'default'}>{VERDICT[a.verdict ?? ''] ?? '—'}</Lozenge>
+          <Text size="small">{`${a.question ?? 'An earlier question'} · ${a.environment}`}</Text>
           {a.mayHaveChanged ? <Lozenge appearance="moved">May have changed</Lozenge> : null}
-          <Button appearance={a.mayHaveChanged ? 'primary' : 'subtle'} onClick={() => onAskAgain(a.askId)}>
+          <Button appearance={a.mayHaveChanged ? 'primary' : 'subtle'} spacing="compact" onClick={() => onAskAgain(a.askId)}>
             Ask again
           </Button>
         </Inline>
