@@ -1126,15 +1126,22 @@ const QuickSetup = ({ refreshKey, onDone }: { refreshKey: number; onDone: () => 
   }
   const { requests, approvals, demo } = plan;
   const allSet = requests.state === 'done' && approvals.state === 'done' && demo.state === 'done';
+  // The demo is in: asking works now, even before a service desk exists (D56).
+  const canAsk = demo.state === 'done';
   const warnings = reply?.ok ? (reply.seed?.ok ? (reply.seed.warnings ?? []) : []) : [];
   return (
     <Box xcss={cardStyle}>
       <Stack space="space.150">
         <Heading as="h2" size="medium">
-          {allSet ? 'Ready to ask' : 'Set up in one click'}
+          {canAsk ? 'Ready to ask' : 'Set up in one click'}
         </Heading>
         {allSet ? (
           <Text>Steps 1 to 3 are done. Open Tool Passport from the sidebar (Apps → Tool Passport), pick KS-DEV and ask the first suggested question.</Text>
+        ) : canAsk ? (
+          <Text>
+            Kestrel Studio is loaded, so you can ask now: Apps → Tool Passport, KS-DEV, the first suggested question. To raise requests from its answers, do what is marked
+            below, then click Set it all up again.
+          </Text>
         ) : (
           <Text>One click does steps 1 to 3 below for you. Here is exactly what it will set; change any of it later in its own step.</Text>
         )}
@@ -1164,17 +1171,22 @@ const QuickSetup = ({ refreshKey, onDone }: { refreshKey: number; onDone: () => 
             }
           />
         </Stack>
-        {!allSet ? (
+        {!allSet && plan.ready ? (
           <Inline space="space.100" alignBlock="center" shouldWrap>
-            <Button appearance="primary" onClick={() => void apply('assets')} isDisabled={busy || !plan.ready}>
+            <Button appearance="primary" onClick={() => void apply('assets')} isDisabled={busy}>
               Set it all up
             </Button>
             {demo.state === 'will_load' ? (
-              <Button appearance="subtle" onClick={() => void apply('registry')} isDisabled={busy || !plan.ready}>
+              <Button appearance="subtle" onClick={() => void apply('registry')} isDisabled={busy}>
                 No Assets? Set up in registry mode
               </Button>
             ) : null}
           </Inline>
+        ) : null}
+        {reply?.ok && reply.later ? (
+          <SectionMessage appearance="information" title="You can ask now">
+            <Text>{reply.later}</Text>
+          </SectionMessage>
         ) : null}
         {busy ? (
           <Inline space="space.100" alignBlock="center">

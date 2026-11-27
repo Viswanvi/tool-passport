@@ -11,7 +11,8 @@ import type { Option } from './request-handlers';
  * (the service desk and request type, which resolutions decide an approval, the demo data) and sets it only
  * when a Jira administrator clicks. On the click the plan is worked out again here; the page sends only the
  * demo mode. It keeps whatever is already set, never chooses between two desks, and only a resolution named
- * Done can approve (D49): anything else is left to the administrator in step 2, so approvals stay off.
+ * Done can approve (D49): anything else is left to the administrator in step 2, so approvals stay off. With no
+ * single desk yet it still loads the demo, so asking works at once, and says how to finish requests (D56).
  * No Forge imports.
  */
 
@@ -41,7 +42,15 @@ export interface QuickPlan {
 
 type Refusal = { ok: false; reason: string };
 
-export type QuickSetupReply = { ok: true; did: Array<'requests' | 'approvals' | 'demo'>; seed?: SeedResult } | { ok: false; reason: string; did?: Array<'requests' | 'approvals' | 'demo'> };
+export type QuickSetupReply =
+  | {
+      ok: true;
+      did: Array<'requests' | 'approvals' | 'demo'>;
+      seed?: SeedResult;
+      /** Requests could not be set yet (no single desk): what to do, then click again. The demo loaded anyway. */
+      later?: string;
+    }
+  | { ok: false; reason: string; did?: Array<'requests' | 'approvals' | 'demo'> };
 
 /** The plan, plus what the click would write. */
 interface Worked {
@@ -70,7 +79,9 @@ async function workOut(deps: QuickSetupDeps): Promise<Worked> {
     requests = { state: 'done', desk: savedDesk.name, requestType: savedType.name };
     deskId = savedDesk.id;
   } else if (desks.length === 0) {
-    requests = blocked('Create a service desk first: Spaces → + → Service management → Basic IT service management.');
+    requests = blocked(
+      'No service desk yet. You can load the demo and ask now; to raise requests, create one (Spaces → + → Service management → Basic IT service management) and click Set it all up again.',
+    );
   } else if (desks.length > 1) {
     requests = blocked('This site has more than one service desk: choose yours under 1. Requests.');
   } else {
@@ -117,7 +128,8 @@ async function workOut(deps: QuickSetupDeps): Promise<Worked> {
 
   const plan: QuickPlan = {
     ok: true,
-    ready: requests.state !== 'blocked' && (requests.state === 'will_set' || approvals.state === 'will_set' || demo === null),
+    // Requests that can't be set yet don't hold the demo back: a judge can ask before making a service desk (D56).
+    ready: requests.state === 'will_set' || approvals.state === 'will_set' || demo === null,
     requests,
     approvals,
     demo: { state: demo ? 'done' : 'will_load' },
@@ -146,7 +158,9 @@ export async function handleQuickSetup(payload: unknown, ctx: ResolverContext, d
   const did: Array<'requests' | 'approvals' | 'demo'> = [];
   try {
     const { plan, setup, map } = await workOut(deps);
-    if (plan.requests.state === 'blocked') return { ok: false, reason: plan.requests.reason ?? 'Set up requests under 1. Requests.' };
+    const later = plan.requests.state === 'blocked' ? (plan.requests.reason ?? 'Set up requests under 1. Requests.') : undefined;
+    // Nothing this click could set: say what is missing rather than "done".
+    if (later && plan.demo.state === 'done') return { ok: false, reason: later };
     if (setup) {
       await deps.saveSetup(setup);
       did.push('requests');
@@ -159,7 +173,7 @@ export async function handleQuickSetup(payload: unknown, ctx: ResolverContext, d
     const seed = await deps.seed(ctx.accountId, p.data.mode);
     if (!seed.ok) return { ok: false, reason: seed.reason, did };
     did.push('demo');
-    return { ok: true, did, seed };
+    return { ok: true, did, seed, ...(later ? { later } : {}) };
   } catch (e) {
     // Every write here is safe to repeat, and a second click skips what is already set.
     console.error(`[quickSetup] failed after ${did.join(',') || 'nothing'}: ${String(e).slice(0, 300)}`);

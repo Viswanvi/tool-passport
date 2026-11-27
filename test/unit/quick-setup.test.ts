@@ -78,16 +78,27 @@ describe('the plan', () => {
     });
   });
 
-  it('never picks between two desks, and needs a desk to exist', async () => {
+  it('never picks between two desks; with no single desk, requests wait but the demo can still load (D56)', async () => {
     const two = fakes({ desks: [{ id: '1', name: 'A' }, { id: '2', name: 'B' }] });
-    expect(await handleQuickSetupPlan({ accountId: ADMIN }, two.deps)).toMatchObject({ ready: false, requests: { state: 'blocked', reason: expect.stringContaining('more than one') }, approvals: { state: 'manual' } });
+    expect(await handleQuickSetupPlan({ accountId: ADMIN }, two.deps)).toMatchObject({
+      ready: true,
+      requests: { state: 'blocked', reason: expect.stringContaining('more than one') },
+      approvals: { state: 'manual' },
+      demo: { state: 'will_load' },
+    });
     const none = fakes({ desks: [] });
-    expect(await handleQuickSetupPlan({ accountId: ADMIN }, none.deps)).toMatchObject({ ready: false, requests: { state: 'blocked', reason: expect.stringContaining('Create a service desk') } });
+    expect(await handleQuickSetupPlan({ accountId: ADMIN }, none.deps)).toMatchObject({
+      ready: true,
+      requests: { state: 'blocked', reason: expect.stringContaining('No service desk yet. You can load the demo and ask now') },
+    });
+    // Demo already in and still no desk: nothing for one click to do.
+    const loaded = fakes({ desks: [], demo: true });
+    expect(await handleQuickSetupPlan({ accountId: ADMIN }, loaded.deps)).toMatchObject({ ready: false, demo: { state: 'done' } });
   });
 
-  it('with no request type that needs only a summary and a description, it is blocked', async () => {
+  it('with no request type that needs only a summary and a description, requests wait', async () => {
     const { deps } = fakes({ types: [] });
-    expect(await handleQuickSetupPlan({ accountId: ADMIN }, deps)).toMatchObject({ ready: false, requests: { state: 'blocked' } });
+    expect(await handleQuickSetupPlan({ accountId: ADMIN }, deps)).toMatchObject({ ready: true, requests: { state: 'blocked' } });
   });
 
   it('falls back to the first usable request type when there is no Get IT help', async () => {
@@ -139,10 +150,26 @@ describe('the click', () => {
     expect(saved.seeded).toHaveLength(1);
   });
 
-  it('refuses when requests are blocked and writes nothing', async () => {
+  it('with no service desk yet, loads the demo only and says how to finish requests (D56)', async () => {
     const { deps, saved } = fakes({ desks: [] });
-    expect(await handleQuickSetup({ mode: 'assets' }, { accountId: ADMIN }, deps)).toMatchObject({ ok: false });
+    expect(await handleQuickSetup({ mode: 'assets' }, { accountId: ADMIN }, deps)).toMatchObject({
+      ok: true,
+      did: ['demo'],
+      later: expect.stringContaining('create one'),
+    });
+    expect(saved).toEqual({ setup: [], map: [], seeded: [[ADMIN, 'assets']] });
+  });
+
+  it('with the demo in and still no desk, says what is missing and writes nothing', async () => {
+    const { deps, saved } = fakes({ desks: [], demo: true });
+    expect(await handleQuickSetup({ mode: 'assets' }, { accountId: ADMIN }, deps)).toMatchObject({ ok: false, reason: expect.stringContaining('No service desk yet') });
     expect(saved).toEqual({ setup: [], map: [], seeded: [] });
+  });
+
+  it('after a desk is made, a second click sets requests and approvals and keeps the demo', async () => {
+    const { deps, saved } = fakes({ demo: true });
+    expect(await handleQuickSetup({ mode: 'assets' }, { accountId: ADMIN }, deps)).toMatchObject({ ok: true, did: ['requests', 'approvals'] });
+    expect(saved.seeded).toEqual([]);
   });
 
   it('a demo load that stops part way says so, keeping what was set', async () => {
