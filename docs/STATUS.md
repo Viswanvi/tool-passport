@@ -1758,3 +1758,19 @@ the Runs on Atlassian program".
   - Seen only as the end state in screenshots, not in motion: the stamp landing, the count from 12 to 8, the squares
     turning over, the rows glowing. Not seen: the dark theme.
   - LLM calls: 0.
+- The human's screenshot of 5.47.0 at full width: the stamps looked blurry and fake, the rosette sat behind Check
+  again, the cards had a wide empty gap, and KS-DEV showed a faded 14.0 stamp under 13.2 after the version went back.
+  Replaced the next day (D66).
+
+### Back to a clean look; marks clear when things go back, 2026-11-28 (human: "Yes, rebuild clean")
+
+Built (D66). `npx vitest run`: `Tests 559 passed (559)`; `npx tsc --noEmit -p .` and `npm run lint` exit 0; `npm run
+build:card`. Dev 5.48.0, "eligible for the Runs on Atlassian program".
+
+- Live on the demo site (800px wide): the plain blue header (*YOUR PASSPORT · Kestrel Studio*, checked at 12:05 AM,
+  *Watching KS-DEV and KS-PROD*, **Check again**); KS-DEV *v13.2*, **12** *of 19 you can do now*, one bar (green,
+  yellow, red, purple), *12 Yes · 1 Not ready · 3 No · 3 Don't know yet*; KS-PROD *v13.2*, **9** *of 19*, the bar with
+  blue for approvals; the key; the grid from *WHERE KS-DEV AND KS-PROD DIFFER*. No stamps, pattern or rosette.
+- Not seen live: the change moment in this look (the card lighting up, the bar growing in, the count) and a version
+  moved and moved back (covered by the `markChanges` tests, not watched); full width (the human's screen); dark theme.
+- LLM calls: 0.

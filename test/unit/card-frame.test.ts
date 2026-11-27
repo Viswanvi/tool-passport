@@ -189,17 +189,27 @@ describe('the Passport keeps itself true (D61)', () => {
 
   it('marks nothing on a first read, or when nothing changed', () => {
     expect(markChanges(null, read('14.0', "Don't know yet"), NO_MARKS, { at, byItself: true })).toBe(NO_MARKS);
-    expect(markChanges(read('13.2', 'Yes'), read('13.2', 'Yes'), NO_MARKS, { at, byItself: true })).toEqual(NO_MARKS);
+    const same = markChanges(read('13.2', 'Yes'), read('13.2', 'Yes'), NO_MARKS, { at, byItself: true });
+    expect([same.cells, same.versions]).toEqual([{}, {}]);
   });
 
-  it('keeps earlier marks and the latest change of each cell; a cell new in this read is not a change', () => {
-    const first = markChanges(read('13.2', 'Yes'), read('14.0', "Don't know yet"), NO_MARKS, { at, byItself: true });
+  it('says what a cell was when the tab opened, and clears the mark when it goes back to it (D66)', () => {
     const later = '2026-11-27T12:05:00.000Z';
-    const back = markChanges(read('14.0', "Don't know yet"), read('13.2', 'Yes', 'Yes'), first, { at: later, byItself: false });
-    expect(back.cells).toEqual({ 'web_frontend|1': { from: "Don't know yet", at: later, byItself: false }, 'web_frontend|2': { from: 'No', at: later, byItself: false } });
-    expect(back.versions).toEqual({ 1: { from: '14.0', at: later } });
+    const last = '2026-11-27T12:10:00.000Z';
+    const up = markChanges(read('13.2', 'Yes'), read('14.0', "Don't know yet"), NO_MARKS, { at, byItself: true });
+    // A second, different change still says what it was at the start.
+    const again = markChanges(read('14.0', "Don't know yet"), read('14.1', 'No'), up, { at: later, byItself: true });
+    expect(again.cells).toEqual({ 'web_frontend|1': { from: 'Yes', at: later, byItself: true } });
+    expect(again.versions).toEqual({ 1: { from: '13.2', at: later } });
+    // Back where it started: KS-DEV 13.2, Yes. Nothing is marked, so nothing is drawn as changed.
+    const back = markChanges(read('14.1', 'No'), read('13.2', 'Yes'), again, { at: last, byItself: true });
+    expect([back.cells, back.versions]).toEqual([{}, {}]);
+  });
+
+  it('a cell new in this read is not a change', () => {
     const added: GridRead = { ...read('13.2', 'Yes'), rows: [...read('13.2', 'Yes').rows, { key: 'gpu_compute', cells: [{ environmentId: 1, title: 'No' }] }] };
-    expect(markChanges(read('13.2', 'Yes'), added, NO_MARKS, { at, byItself: true })).toEqual(NO_MARKS);
+    const m = markChanges(read('13.2', 'Yes'), added, NO_MARKS, { at, byItself: true });
+    expect([m.cells, m.versions]).toEqual([{}, {}]);
   });
 
   it('names the environments it watches in plain words', () => {

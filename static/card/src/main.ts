@@ -21,7 +21,7 @@ let answered = false;
 let showSame = false;
 // Changes already flipped (cell and time), so a cell flips once per change and not on every redraw.
 const flipped = new Set<string>();
-// Version changes whose new stamp has already landed (environment and time).
+// Version changes already shown moving (environment and time), so a card lights up once per change.
 const stamped = new Set<string>();
 // Each environment's Yes count as last shown, so a changed count counts to the new one.
 const lastYes = new Map<number, number>();
@@ -51,7 +51,7 @@ function takeMoves(v: FrameView | null) {
 
 const calm = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
-/** Counts each changed number from the old value to the new one, after the new stamp has landed. */
+/** Counts each changed number from the old value to the new one, as its bar grows in again. */
 function runCounters() {
   for (const n of Array.from(root.querySelectorAll<HTMLElement>('.tp-visa-n[data-from]'))) {
     const from = Number(n.dataset.from);

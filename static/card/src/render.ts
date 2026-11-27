@@ -426,98 +426,16 @@ export function renderAsk(v: AskFrameView, o: AskOptions): HTMLElement {
   return root;
 }
 
-const SVG = 'http://www.w3.org/2000/svg';
-
-/** The fine wavy lines printed on a passport page: drawn once per redraw, behind the cover's words. */
-function guilloche(): SVGSVGElement {
-  const svg = document.createElementNS(SVG, 'svg');
-  svg.setAttribute('class', 'tp-guilloche');
-  svg.setAttribute('viewBox', '0 0 600 140');
-  svg.setAttribute('preserveAspectRatio', 'none');
-  svg.setAttribute('aria-hidden', 'true');
-  for (let k = 0; k < 11; k++) {
-    let d = '';
-    for (let x = 0; x <= 600; x += 5) {
-      const t = x / 600;
-      const y = 70 + Math.sin(t * Math.PI * 3 + k * 0.55) * (16 + k * 4) + Math.sin(t * Math.PI * 13 + k * 1.3) * 5;
-      d += `${x === 0 ? 'M' : 'L'}${x} ${y.toFixed(1)} `;
-    }
-    const path = document.createElementNS(SVG, 'path');
-    path.setAttribute('d', d);
-    svg.append(path);
-  }
-  return svg;
-}
-
-/** An SVG element with its attributes (presentation attributes, not inline styles: the content policy allows them). */
-function svgEl(tag: string, attrs: Record<string, string> = {}, text?: string): SVGElement {
-  const e = document.createElementNS(SVG, tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-
-/** The rosette in a passport's corner: ellipses turned around one centre. */
-function rosette(): SVGSVGElement {
-  const svg = svgEl('svg', { class: 'tp-rosette', viewBox: '0 0 200 200', 'aria-hidden': 'true' }) as SVGSVGElement;
-  for (let k = 0; k < 24; k++) svg.append(svgEl('ellipse', { cx: '100', cy: '100', rx: '92', ry: '30', transform: `rotate(${k * 7.5} 100 100)` }));
-  svg.append(svgEl('circle', { cx: '100', cy: '100', r: '34' }), svgEl('circle', { cx: '100', cy: '100', r: '96' }));
-  return svg;
-}
-
-let stampSeq = 0;
-const stampDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
-
-/**
- * An environment's stamp, as on a passport's visa page: ink that is a little rough and patchy (an SVG filter),
- * slightly turned, with the environment, its version and when it was checked. `ink` picks the colour per
- * environment. The words are the page's data; nothing on it is decoration that claims more.
- */
-function stamp(x: { name: string; version: string | null; bottom: string; ink: number; cls: string }): SVGSVGElement {
-  const uid = `tps${++stampSeq}`;
-  const svg = svgEl('svg', { class: `tp-stampmark tp-ink-${x.ink % 4} ${x.cls}`, viewBox: '0 0 140 140', role: 'img', 'aria-label': `${x.name} stamp: version ${x.version ?? 'unknown'}, ${x.bottom.toLowerCase()}` }) as SVGSVGElement;
-  const filter = svgEl('filter', { id: `${uid}-ink`, x: '-10%', y: '-10%', width: '120%', height: '120%' });
-  filter.append(
-    svgEl('feTurbulence', { type: 'fractalNoise', baseFrequency: '0.9', numOctaves: '2', seed: String(x.ink + 3), result: 'n' }),
-    svgEl('feDisplacementMap', { in: 'SourceGraphic', in2: 'n', scale: '2.4', result: 'rough' }),
-    svgEl('feTurbulence', { type: 'fractalNoise', baseFrequency: '1.3', numOctaves: '1', seed: String(x.ink + 11), result: 's' }),
-    svgEl('feColorMatrix', { in: 's', type: 'matrix', values: '0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -2.6 2.25', result: 'm' }),
-    svgEl('feComposite', { in: 'rough', in2: 'm', operator: 'in' }),
-  );
-  const defs = svgEl('defs');
-  defs.append(filter, svgEl('path', { id: `${uid}-top`, d: 'M 26 70 A 44 44 0 0 1 114 70' }), svgEl('path', { id: `${uid}-bot`, d: 'M 20 70 A 50 50 0 0 0 120 70' }));
-  const g = svgEl('g', { filter: `url(#${uid}-ink)`, transform: `rotate(${x.ink % 2 === 0 ? -9 : 7} 70 70)` });
-  const arc = (id: string, words: string) => {
-    const t = svgEl('text', { class: 'tp-stamp-arc' });
-    t.append(svgEl('textPath', { href: `#${id}`, startOffset: '50%', 'text-anchor': 'middle' }, words));
-    return t;
-  };
-  g.append(
-    svgEl('circle', { cx: '70', cy: '70', r: '64', class: 'tp-stamp-ring' }),
-    svgEl('circle', { cx: '70', cy: '70', r: '57', class: 'tp-stamp-ring tp-stamp-thin' }),
-    arc(`${uid}-top`, 'TOOL PASSPORT'),
-    arc(`${uid}-bot`, x.bottom),
-    svgEl('text', { x: '70', y: '74', 'text-anchor': 'middle', class: x.name.length > 8 ? 'tp-stamp-name tp-stamp-name-sm' : 'tp-stamp-name' }, x.name),
-    svgEl('line', { x1: '38', y1: '82', x2: '102', y2: '82', class: 'tp-stamp-ring tp-stamp-thin' }),
-    svgEl('text', { x: '70', y: '97', 'text-anchor': 'middle', class: 'tp-stamp-ver' }, x.version ? `v${x.version}` : 'NO VERSION'),
-    svgEl('circle', { cx: '25', cy: '70', r: '2.5', class: 'tp-stamp-dot' }),
-    svgEl('circle', { cx: '115', cy: '70', r: '2.5', class: 'tp-stamp-dot' }),
-  );
-  svg.append(defs, g);
-  return svg;
-}
-
-/** Each environment's Yes count and total, as the cards show them: the page's own cells. */
+/** Each environment's Yes count, as the cards show them: the page's own cells. */
 export function yesCounts(p: PassportFrameView): Map<number, number> {
   const m = new Map<number, number>();
   for (const e of p.environments) m.set(e.id, p.rows.filter((r) => r.cells.some((c) => c.environmentId === e.id && c.verdict === 'yes')).length);
   return m;
 }
 
-/** The passport's cover: whose, for which tool, when it was checked, and that it keeps checking. */
+/** The passport's header: for which tool, when it was checked as you, and that it keeps checking. */
 function cover(p: PassportFrameView, o: PassportOptions): HTMLElement {
   const band = el('div', 'tp-cover');
-  band.append(guilloche(), rosette());
   const seal = el('div', 'tp-seal');
   seal.append(icon('passport'));
   const words = el('div', 'tp-cover-words');
@@ -541,52 +459,58 @@ const KEY: Array<{ verdict: string; title: string; short: string; means: string 
   { verdict: 'dont_know', title: "Don't know yet", short: 'not verified', means: 'Nobody has verified it yet. Never a guess.' },
 ];
 
+// Bar segments grow by class (the content policy blocks inline styles): tp-g-1 … tp-g-40.
+const MAX_GROW = 40;
+
 /**
- * One card per environment, like a visa page: its stamp (with the version and when it was checked), how many things
- * you can do there now, and every answer as one square. When the version moved while the tab was open, the old
- * stamp stays faded underneath and the new one lands on top; when the count moved, the number counts to it.
+ * One card per environment: its name and version, how many things you can do there now, and one bar split by
+ * answer, with the count of each. When the count changed while the tab was open, the number counts to the new one
+ * (main.ts) and the bar grows in again; a version that moved shows old → new.
  */
 function visas(p: PassportFrameView, o: PassportOptions): HTMLElement {
   const wrap = el('div', 'tp-visas');
-  p.environments.forEach((e, ink) => {
+  for (const e of p.environments) {
     const cells = p.rows.map((r) => r.cells.find((c) => c.environmentId === e.id)).filter((c): c is NonNullable<typeof c> => Boolean(c));
     const count = (v: string) => cells.filter((c) => (c.verdict ?? 'dont_know') === v).length;
-    const fresh = o.freshEnvs.has(e.id);
     const from = o.countFrom.get(e.id);
-    const card = el('div', `tp-visa${fresh ? ' tp-visa-fresh' : ''}`);
+    const moved = from !== undefined || o.freshEnvs.has(e.id);
+    const card = el('div', `tp-visa${moved ? ' tp-visa-moved' : ''}`);
 
-    const words = el('div', 'tp-visa-words');
-    words.append(el('div', 'tp-visa-name', e.name));
+    const top = el('div', 'tp-visa-top');
+    top.append(el('span', 'tp-visa-name', e.name));
+    const ver = el('span', `tp-visa-ver${e.change ? ' tp-visa-ver-moved' : ''}`);
+    if (e.change) {
+      ver.title = `${e.name}'s recorded version changed at ${time(e.change.at)}.`;
+      ver.append(document.createTextNode(`${e.change.from ?? 'no version'} → `), el('strong', undefined, e.version ?? 'no version'));
+    } else ver.textContent = e.version ? `v${e.version}` : 'no version';
+    top.append(ver);
+
     const big = el('div', 'tp-visa-big');
     const n = el('span', 'tp-visa-n', String(from ?? count('yes')));
-    // The frame counts from the old number to the new one (main.ts); without motion it shows the new one at once.
+    // main.ts counts from the old number to the new one; without motion it shows the new one at once.
     if (from !== undefined) {
       n.dataset.from = String(from);
       n.dataset.to = String(count('yes'));
     }
-    big.append(n, el('span', 'tp-visa-of', ` of ${cells.length}`));
-    words.append(big, el('div', 'tp-visa-label', 'you can do now'));
+    big.append(n, el('span', 'tp-visa-of', `of ${cells.length}`), el('span', 'tp-visa-label', 'you can do now'));
 
-    const slot = el('div', 'tp-stamp-slot');
-    if (e.change?.from) slot.append(stamp({ name: e.name, version: e.change.from, bottom: `REPLACED ${time(e.change.at)}`, ink, cls: `tp-stamp-old${fresh ? ' tp-stamp-fade' : ''}` }));
-    slot.append(stamp({ name: e.name, version: e.version, bottom: `CHECKED ${stampDate(p.checkedAt)}`, ink, cls: fresh ? 'tp-stamp-slam' : '' }));
-
-    // Each capability is one square, grouped by answer, so the mix shows at a glance; they turn over when it changes.
-    const strip = el('div', `tp-strip${fresh || from !== undefined ? ' tp-strip-wave' : ''}`);
-    strip.setAttribute('aria-hidden', 'true');
+    const bar = el('div', `tp-bar${moved ? ' tp-bar-grow' : ''}`);
+    bar.setAttribute('role', 'img');
     const counts = el('div', 'tp-visa-counts');
+    const said: string[] = [];
     for (const k of KEY) {
       const c = count(k.verdict);
-      for (let i = 0; i < c; i++) strip.append(el('span', `tp-sq tp-v-${stateOf(k.verdict)}`));
-      if (c) {
-        const chip = el('span', `tp-count tp-v-${stateOf(k.verdict)}`);
-        chip.append(el('span', 'tp-dot'), document.createTextNode(`${c} ${k.title}`));
-        counts.append(chip);
-      }
+      if (!c) continue;
+      bar.append(el('span', `tp-seg tp-v-${stateOf(k.verdict)} tp-g-${Math.min(c, MAX_GROW)}`));
+      const chip = el('span', `tp-count tp-v-${stateOf(k.verdict)}`);
+      chip.append(el('span', 'tp-dot'), document.createTextNode(`${c} ${k.title}`));
+      counts.append(chip);
+      said.push(`${c} ${k.title}`);
     }
-    card.append(words, slot, strip, counts);
+    bar.setAttribute('aria-label', `${e.name}: ${said.join(', ')}`);
+    card.append(top, big, bar, counts);
     wrap.append(card);
-  });
+  }
   return wrap;
 }
 

@@ -39,9 +39,9 @@ export interface CardFrameView {
   busy: boolean;
 }
 
-/** A cell whose answer changed between two reads of the grid while the tab was open (D61). */
+/** A cell whose answer is not what it was when the tab first read it (D61, D66). */
 export interface CellChange {
-  /** The answer before. */
+  /** The answer when the tab first read it. */
   from: string;
   at: string;
   /** True when the tab's own re-check found it; false after a click on Check again. */
@@ -88,9 +88,11 @@ export interface PassportFrameView {
 export interface PassportMarks {
   cells: Record<string, CellChange>;
   versions: Record<number, VersionChange>;
+  /** Each cell's answer and each environment's version when the tab first read them. */
+  base: { cells: Record<string, string>; versions: Record<number, string | null> };
 }
 
-export const NO_MARKS: PassportMarks = { cells: {}, versions: {} };
+export const NO_MARKS: PassportMarks = { cells: {}, versions: {}, base: { cells: {}, versions: {} } };
 
 export const cellId = (key: string, environmentId: number) => `${key}|${environmentId}`;
 
@@ -101,28 +103,39 @@ export interface GridRead {
 }
 
 /**
- * Adds what changed from one read of the grid to the next (D61). A cell is marked when its answer differs from the
- * read before; it keeps the latest change. A cell or environment only in one read is not a change. Nothing before
- * (a first read, a new tool) marks nothing.
+ * Adds what changed from one read of the grid to the next (D61). A cell is marked when its answer is no longer what
+ * it was when the tab first read it, and the mark says what that was; a cell that goes back to it is no longer
+ * marked (D66: KS-DEV moved to 14.0 and back to 13.2 shows as it started). The same for an environment's version.
+ * A cell or environment only in one read is not a change. Nothing before (a first read, a new tool) marks nothing.
  */
 export function markChanges(before: GridRead | null, after: GridRead, marks: PassportMarks, x: { at: string; byItself: boolean }): PassportMarks {
   if (!before) return marks;
   const was = new Map<string, string>();
   for (const r of before.rows) for (const c of r.cells) was.set(cellId(r.key, c.environmentId), c.title);
   const cells = { ...marks.cells };
+  const baseCells = { ...marks.base.cells };
   for (const r of after.rows) {
     for (const c of r.cells) {
       const id = cellId(r.key, c.environmentId);
-      const from = was.get(id);
-      if (from !== undefined && from !== c.title) cells[id] = { from, at: x.at, byItself: x.byItself };
+      const prev = was.get(id);
+      if (prev === undefined) continue;
+      if (!Object.hasOwn(baseCells, id)) baseCells[id] = prev;
+      if (prev === c.title) continue;
+      if (c.title === baseCells[id]) delete cells[id];
+      else cells[id] = { from: baseCells[id]!, at: x.at, byItself: x.byItself };
     }
   }
   const versions = { ...marks.versions };
+  const baseVersions = { ...marks.base.versions };
   for (const e of after.environments) {
     const b = before.environments.find((y) => y.id === e.id);
-    if (b && b.version !== e.version) versions[e.id] = { from: b.version, at: x.at };
+    if (!b) continue;
+    if (!Object.hasOwn(baseVersions, e.id)) baseVersions[e.id] = b.version;
+    if (b.version === e.version) continue;
+    if (e.version === baseVersions[e.id]) delete versions[e.id];
+    else versions[e.id] = { from: baseVersions[e.id] ?? null, at: x.at };
   }
-  return { cells, versions };
+  return { cells, versions, base: { cells: baseCells, versions: baseVersions } };
 }
 
 /** "KS-DEV and KS-PROD", "A, B and C". */
