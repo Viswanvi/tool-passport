@@ -1592,7 +1592,11 @@ Built (D59): the card on Ask, the story panel and the help center is drawn in a 
     evidence, then **Details**. KS-PROD: a red **No** banner, the policy ring red with a "no" badge and access a dashed
     yellow ring with a warning badge. The stamps land with their animation when an answer first shows.
   - MSD-19's story panel: **Check this story** gave the same card in the frame, four stamps in one row.
-  - Not verified live: clicks inside the frame. The browser pane's clicks reach the Jira page but not the frame (a
-    separate Atlassian-hosted frame); **Details** didn't open from the pane. Needs a click by the human. The button
-    choice behind each click is unit-tested, and the page's actions are the ones already verified.
+  - Clicks inside the frame: the browser pane's clicks reach the Jira page but not the frame (a separate
+    Atlassian-hosted frame), so **Details** didn't open from the pane. The human clicked it on the Ask page: it opened
+    the four check lines (Owner-verified · 13.2; Approved · TPD-12 · until Dec 26; Mapped access ·
+    kestrel-dev-builders; Assets record · Build environments, changed Nov 27) and turned into **Hide details**.
+    Not yet clicked live: the main button (Request the fix and the rest), which goes from the frame back to the page
+    as an event; its choice is unit-tested and the page's actions behind it are the ones already verified.
+    The check lines name the policy action by its key (*custom ui policy*), since that action has no catalog label.
 - LLM calls: 2 (the first Ask and the story check weren't cached after the catalog changed). Production still 2.5.0.
