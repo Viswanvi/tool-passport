@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import type { Card, CardAction, Stamp } from '../../src/engine/card';
-import { cellOf, frameView, markChanges, namesText, NO_MARKS, primaryOf, type GridRead, type PassportFrameView } from '../../src/frontend/card-frame';
+import {
+  askOf,
+  cellOf,
+  frameView,
+  markChanges,
+  MAX_QUESTION,
+  namesText,
+  NO_MARKS,
+  primaryOf,
+  recentOf,
+  recentRows,
+  type AskFrameView,
+  type GridRead,
+  type PassportFrameView,
+} from '../../src/frontend/card-frame';
 import { stampLines } from '../../src/frontend/card-text';
 
 /**
@@ -88,6 +102,64 @@ describe('a Passport cell clicked in the frame (D60)', () => {
     expect(cellOf({ frameId: 'f', action: 'open-cell', cell: { key: 'web_frontend', environmentId: 2 } }, passport)).toBeNull();
     expect(cellOf({ frameId: 'f', action: 'primary', cell: { key: 'web_frontend', environmentId: 1 } }, passport)).toBeNull();
     expect(cellOf({ frameId: 'f', action: 'open-cell', cell: { key: 'web_frontend', environmentId: 1 } }, null)).toBeNull();
+  });
+});
+
+describe('the Ask tab in the frame (D63)', () => {
+  const view: AskFrameView = {
+    tool: 'Kestrel Studio',
+    environments: [
+      { value: '1', name: 'KS-DEV' },
+      { value: 'any', name: 'Any environment' },
+    ],
+    suggestions: [],
+    asked: null,
+    working: null,
+    answer: null,
+    changed: null,
+    status: null,
+    recent: [{ askId: 7, question: 'Can I use GPUs?', environment: 'KS-DEV', title: 'No', verdict: 'no', mayHaveChanged: false }],
+  };
+  const m = (over: Partial<Parameters<typeof askOf>[0]>) => ({ frameId: 'f', action: 'ask' as const, ...over });
+
+  it('asks only in an environment the page sent, with words within the limit', () => {
+    expect(askOf(m({ question: '  Can I use GPUs? ', environment: '1' }), view)).toEqual({ question: 'Can I use GPUs?', environment: '1' });
+    expect(askOf(m({ question: 'Can I use GPUs?', environment: 'any' }), view)).toEqual({ question: 'Can I use GPUs?', environment: 'any' });
+    // An environment the page never showed, nothing to ask, too long, or no view: nothing is asked.
+    expect(askOf(m({ question: 'Can I use GPUs?', environment: '2' }), view)).toBeNull();
+    expect(askOf(m({ question: '   ', environment: '1' }), view)).toBeNull();
+    expect(askOf(m({ question: 'x'.repeat(MAX_QUESTION + 1), environment: '1' }), view)).toBeNull();
+    expect(askOf(m({ question: 'Can I use GPUs?', environment: '1' }), null)).toBeNull();
+    expect(askOf(m({ action: 'primary', question: 'Can I use GPUs?', environment: '1' }), view)).toBeNull();
+  });
+
+  it('opens only a recent question it listed', () => {
+    expect(recentOf({ frameId: 'f', action: 'open-recent', askId: 7 }, view)).toBe(7);
+    expect(recentOf({ frameId: 'f', action: 'open-recent', askId: 8 }, view)).toBeNull();
+    expect(recentOf({ frameId: 'f', action: 'ask', askId: 7 }, view)).toBeNull();
+  });
+
+  it("lists this tool's newest answer for each question and environment, at most four, in the card's words", () => {
+    const ask = (askId: number, question: string | null, environment = 'KS-DEV', verdict: string | null = 'yes', tool = 'Kestrel Studio') => ({ askId, question, tool, environment, verdict, mayHaveChanged: askId === 9 });
+    const rows = recentRows(
+      [
+        ask(9, 'Can I use GPUs?', 'KS-DEV', 'no'),
+        ask(8, 'Can I use GPUs?', 'KS-DEV', 'dont_know'),
+        ask(7, 'Can I use GPUs?', 'KS-PROD', 'unsupported'),
+        ask(6, null),
+        ask(5, 'Can I export a CSV?', 'KS-PROD', 'yes_with_approval', 'Another tool'),
+        ask(4, 'Can I keep secrets?'),
+        ask(3, 'Can I add roles?'),
+        ask(2, 'Can I use git?'),
+      ],
+      'Kestrel Studio',
+    );
+    expect(rows.map((r) => [r.askId, r.title, r.mayHaveChanged])).toEqual([
+      [9, 'No', true],
+      [7, "Don't know yet", false],
+      [4, 'Yes', false],
+      [3, 'Yes', false],
+    ]);
   });
 });
 

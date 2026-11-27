@@ -1,5 +1,14 @@
 import type { Card, PathStep, Stamp } from '../../../src/engine/card';
-import { cellId, namesText, type CardFrameView, type FrameAction, type PassportFrameView } from '../../../src/frontend/card-frame';
+import {
+  cellId,
+  MAX_QUESTION,
+  namesText,
+  type AskFrameView,
+  type CardFrameView,
+  type ChangedNote,
+  type FrameAction,
+  type PassportFrameView,
+} from '../../../src/frontend/card-frame';
 import { checkLine, chipText, stampLines, time } from '../../../src/frontend/card-text';
 import { ICONS, type IconName } from './icons';
 
@@ -164,7 +173,16 @@ export interface PassportOptions {
   onToggleUnknown(): void;
 }
 
-const stateOf = (verdict: string | null): State => (verdict ? (VERDICT_STATE[verdict] ?? 'none') : 'none');
+// "unsupported" is stored for questions outside the catalog; the card calls it Don't know yet.
+const stateOf = (verdict: string | null): State => (verdict ? (VERDICT_STATE[verdict === 'unsupported' ? 'dont_know' : verdict] ?? 'none') : 'none');
+
+/** A verdict as a coloured chip that isn't a button: in notes and lists. */
+function verdictChip(verdict: string | null, title: string): HTMLElement {
+  const s = stateOf(verdict);
+  const c = el('span', `tp-cell tp-cell-static tp-v-${s}`);
+  c.append(icon(STATE_ICON[s]), document.createTextNode(title));
+  return c;
+}
 
 /** Capabilities down the side, environments across the top; each cell is a coloured verdict that opens its card. */
 function grid(p: PassportFrameView, rows: PassportFrameView['rows'], o: PassportOptions, label: string): HTMLElement {
@@ -252,6 +270,123 @@ function changesBanner(p: PassportFrameView, fresh: boolean): HTMLElement | null
   if (lines.length) words.append(el('div', 'tp-changes-sub', lines.join(' ')));
   b.append(icon('alert', 'tp-icon tp-changes-icon'), words);
   return b;
+}
+
+// ---- The Ask tab (D63): the question box, environments, suggestions, the card and recent questions ----
+
+export interface AskOptions {
+  animateCard: boolean;
+  detailsOpen: boolean;
+  /** The words in the box and the environment picked: the frame's own, so a redraw never loses them. */
+  draft: string;
+  environment: string;
+  onDraft(text: string): void;
+  onEnvironment(value: string): void;
+  onAsk(question: string): void;
+  onRecent(askId: number): void;
+  onAction(a: FrameAction): void;
+  onToggleDetails(): void;
+}
+
+/** "Changed by itself at 10:44: Not ready → Yes, with approval". */
+function changedNote(c: ChangedNote, fresh: boolean): HTMLElement {
+  const n = el('div', `tp-changed-note${fresh ? ' tp-animate' : ''}`);
+  n.setAttribute('role', 'status');
+  n.append(
+    el('span', 'tp-changed-when', c.byItself ? `Changed by itself at ${time(c.at)}` : `Checked again at ${time(c.at)}`),
+    verdictChip(c.from.verdict, c.from.title),
+    el('span', 'tp-arrow', '→'),
+    verdictChip(c.to.verdict, c.to.title),
+  );
+  return n;
+}
+
+export function renderAsk(v: AskFrameView, o: AskOptions): HTMLElement {
+  const root = el('section', 'tp-ask');
+  const busy = v.working !== null;
+
+  const hero = el('div', 'tp-ask-hero');
+  const title = el('div', 'tp-ask-title');
+  title.append(icon('passport', 'tp-icon tp-pp-icon'), document.createTextNode(`Can I … with ${v.tool}?`));
+  hero.append(title);
+
+  const form = el('form', 'tp-ask-box');
+  const input = el('input', 'tp-ask-input');
+  input.type = 'text';
+  input.maxLength = MAX_QUESTION;
+  input.placeholder = 'Can I build a dashboard for the sales team?';
+  input.value = o.draft;
+  input.setAttribute('aria-label', `Your question about ${v.tool}`);
+  input.addEventListener('input', () => o.onDraft(input.value));
+  const go = button(busy ? 'Checking…' : 'Ask', 'tp-btn tp-btn-primary tp-ask-go', busy, () => undefined);
+  go.type = 'submit';
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!busy && input.value.trim()) o.onAsk(input.value);
+  });
+  form.append(icon('search', 'tp-icon tp-ask-search'), input, go);
+  hero.append(form);
+
+  const envs = el('div', 'tp-ask-row');
+  envs.setAttribute('role', 'radiogroup');
+  envs.setAttribute('aria-label', 'Environment');
+  envs.append(el('span', 'tp-ask-label', 'In'));
+  for (const e of v.environments) {
+    const on = e.value === o.environment;
+    const b = button(e.name, `tp-env-pill${on ? ' tp-env-on' : ''}`, false, () => o.onEnvironment(e.value));
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(on));
+    envs.append(b);
+  }
+  hero.append(envs);
+
+  if (v.suggestions.length) {
+    const tries = el('div', 'tp-ask-row');
+    tries.append(el('span', 'tp-ask-label', 'Try'));
+    for (const s of v.suggestions) {
+      tries.append(
+        button(s, 'tp-suggest', busy, () => {
+          o.onDraft(s);
+          o.onAsk(s);
+        }),
+      );
+    }
+    hero.append(tries);
+  }
+  const note = el('div', 'tp-ask-note');
+  note.append(icon('sparkles', 'tp-icon tp-icon-ai'), document.createTextNode('The AI only reads your question. Fixed rules check the evidence and decide.'));
+  hero.append(note);
+  root.append(hero);
+
+  if (v.working) {
+    const w = el('div', 'tp-working');
+    w.setAttribute('role', 'status');
+    w.append(el('span', 'tp-spinner'), el('span', undefined, v.working));
+    root.append(w);
+  }
+  if (v.changed && v.answer) root.append(changedNote(v.changed, o.animateCard));
+  if (v.status) root.append(el('div', 'tp-status', v.status));
+  if (v.answer) root.append(renderCard(v.answer, { animate: o.animateCard, detailsOpen: o.detailsOpen, onAction: o.onAction, onToggleDetails: o.onToggleDetails }));
+
+  if (v.recent.length) {
+    const list = el('div', 'tp-recent');
+    list.append(el('div', 'tp-recent-title', 'Your recent questions'));
+    for (const r of v.recent) {
+      const row = el('button', 'tp-recent-row');
+      row.type = 'button';
+      row.disabled = busy;
+      row.title = r.mayHaveChanged ? 'A version change touched the evidence: ask again for the answer today.' : 'Open this answer again, checked today.';
+      const words = el('span', 'tp-recent-words');
+      words.append(el('span', 'tp-recent-q', r.question), el('span', 'tp-recent-env', r.environment));
+      row.append(verdictChip(r.verdict, r.title), words);
+      if (r.mayHaveChanged) row.append(el('span', 'tp-recent-moved', 'May have changed'));
+      row.append(el('span', 'tp-recent-go', 'Ask again'));
+      row.addEventListener('click', () => o.onRecent(r.askId));
+      list.append(row);
+    }
+    root.append(list);
+  }
+  return root;
 }
 
 export function renderPassport(p: PassportFrameView, o: PassportOptions): HTMLElement {

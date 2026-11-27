@@ -1,6 +1,6 @@
 import { events, view } from '@forge/bridge';
 import { cellId, EVENT, type ActionMessage, type FrameAction, type FrameView, type ReadyMessage, type ViewMessage } from '../../../src/frontend/card-frame';
-import { renderCard, renderPassport } from './render';
+import { renderAsk, renderCard, renderPassport } from './render';
 import './card.css';
 
 /**
@@ -37,8 +37,13 @@ function newFlips(v: FrameView | null): Set<string> {
   return fresh;
 }
 
-function send(action: FrameAction, cell?: ActionMessage['cell']) {
-  const m: ActionMessage = cell ? { frameId, action, cell } : { frameId, action };
+// The Ask tab's box and environment are the frame's own: a view arriving while someone types must not undo it.
+let askDraft = '';
+let askEnv: string | null = null;
+let askedShown: string | null = null;
+
+function send(action: FrameAction, extra: Omit<ActionMessage, 'frameId' | 'action'> = {}) {
+  const m: ActionMessage = { frameId, action, ...extra };
   void events.emit(EVENT.action, m);
 }
 
@@ -46,8 +51,36 @@ function send(action: FrameAction, cell?: ActionMessage['cell']) {
 function answerKey(v: FrameView | null): string | null {
   if (!v) return null;
   if (v.kind === 'card') return v.card.card.title;
+  if (v.kind === 'ask') return v.ask.answer ? `${v.ask.asked?.question}|${v.ask.asked?.environment}|${v.ask.answer.card.title}` : null;
   const p = v.passport;
   return p.answer ? `${p.picked?.key}|${p.picked?.environmentId}|${p.answer.card.title}` : null;
+}
+
+/** The page says which question is on screen (asked, or a recent one opened again): the box shows it. */
+function takeAsked(v: FrameView | null) {
+  if (v?.kind !== 'ask') return;
+  const a = v.ask;
+  const key = a.asked ? `${a.asked.question}|${a.asked.environment}` : null;
+  if (key !== askedShown && a.asked) {
+    askDraft = a.asked.question;
+    if (a.environments.some((e) => e.value === a.asked!.environment)) askEnv = a.asked.environment;
+  }
+  askedShown = key;
+  if (!a.environments.some((e) => e.value === askEnv)) askEnv = a.environments[0]?.value ?? null;
+}
+
+/** Redraws keep the question box focused, with the caret where it was. */
+function keepFocus(redraw: () => void) {
+  const before = document.activeElement;
+  const typing = before instanceof HTMLInputElement && before.classList.contains('tp-ask-input');
+  const caret = typing ? [before.selectionStart, before.selectionEnd] : null;
+  redraw();
+  if (!typing) return;
+  const input = root.querySelector<HTMLInputElement>('.tp-ask-input');
+  if (!input) return;
+  input.focus();
+  const [start, end] = caret ?? [null, null];
+  if (typeof start === 'number' && typeof end === 'number') input.setSelectionRange(start, end);
 }
 
 function draw(animateCard: boolean, flips: ReadonlySet<string> = new Set()) {
@@ -63,6 +96,33 @@ function draw(animateCard: boolean, flips: ReadonlySet<string> = new Set()) {
     root.replaceChildren(renderCard(current.card, { animate: animateCard, detailsOpen, onAction: (a) => send(a), onToggleDetails }));
     return;
   }
+  if (current.kind === 'ask') {
+    const ask = current.ask;
+    keepFocus(() =>
+      root.replaceChildren(
+        renderAsk(ask, {
+          animateCard,
+          detailsOpen,
+          draft: askDraft,
+          environment: askEnv ?? '',
+          onDraft: (text) => {
+            askDraft = text;
+          },
+          onEnvironment: (value) => {
+            askEnv = value;
+            draw(false);
+          },
+          onAsk: (question) => {
+            if (askEnv !== null) send('ask', { question, environment: askEnv });
+          },
+          onRecent: (askId) => send('open-recent', { askId }),
+          onAction: (a) => send(a),
+          onToggleDetails,
+        }),
+      ),
+    );
+    return;
+  }
   const animateGrid = !gridShown;
   gridShown = true;
   root.replaceChildren(
@@ -72,7 +132,7 @@ function draw(animateCard: boolean, flips: ReadonlySet<string> = new Set()) {
       animateCard,
       detailsOpen,
       showUnknown,
-      onAction: send,
+      onAction: (a, cell) => send(a, cell ? { cell } : {}),
       onToggleDetails,
       onToggleUnknown: () => {
         showUnknown = !showUnknown;
@@ -93,6 +153,7 @@ async function start() {
     if (key !== shownAnswer) detailsOpen = false;
     current = m.view;
     shownAnswer = key;
+    takeAsked(m.view);
     draw(animate, newFlips(m.view));
   });
   // The page may start listening after this frame starts, so say ready until it answers (about 15 seconds at most),

@@ -30,6 +30,7 @@ import ForgeReconciler, {
 import type { Card, CardRequest, PathStep, Stamp } from '../engine/card';
 import { events } from '@forge/bridge';
 import {
+  askOf,
   cellId,
   cellOf,
   EVENT,
@@ -38,8 +39,12 @@ import {
   markChanges,
   NO_MARKS,
   primaryOf,
+  recentOf,
+  recentRows,
   WAITING_KINDS,
   type ActionMessage,
+  type AskFrameView,
+  type ChangedNote,
   type FrameView,
   type PassportFrameView,
   type PassportMarks,
@@ -51,7 +56,8 @@ import { builtLines } from './setup-text';
 import { needsOf, type Needs } from './needs';
 import type { Verdict } from '../engine/model';
 import { call, cardStyle, type Option } from './common';
-import { ChangesSection, RecentQuestions } from './changes';
+import { ChangesSection } from './changes';
+import type { RecentAsk } from '../resolvers/change-handlers';
 import { DocAssistant } from './doc-assistant';
 import { AddToolSection, ToolRecords } from './records';
 import { EVAL_QUESTIONS } from '../eval/questions';
@@ -592,75 +598,93 @@ function useTools() {
   return { tools, tool, setTool };
 }
 
+/**
+ * The Ask tab, drawn in the frame (D63): a question box, the environments as pills, suggestions, the answer card
+ * and the person's recent questions, in the same look as the Passport. This page keeps every call (`ask`,
+ * `recentAsks`, `recheck` and the card's buttons) and sends the frame the view; it asks only in an environment it
+ * sent and opens only a recent question it listed. The question is checked again on the server like any typed one.
+ */
 const AskPage = () => {
   const { tools, tool, setTool } = useTools();
   const [envs, setEnvs] = useState<Option[]>([]);
-  const [env, setEnv] = useState<Option | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [question, setQuestion] = useState('');
+  const [asked, setAsked] = useState<{ question: string; environment: string } | null>(null);
   const [asksMade, setAsksMade] = useState(0);
+  const [recent, setRecent] = useState<RecentAsk[]>([]);
   const a = useAnswer(() => setAsksMade((n) => n + 1));
+  const active = useContext(FrameSlot);
 
   useEffect(() => {
     if (!tool) return;
-    setEnv(null);
+    setEnvs([]);
+    setAsked(null);
     a.clear();
     void call<{ environments: Array<{ id: number; name: string }>; suggestions: string[] }>('environments', { toolId: Number(tool.value) }).then((r) => {
-      const list = [...r.environments.map((e) => ({ label: e.name, value: String(e.id) })), { label: 'Any environment', value: ANY }];
-      setEnvs(list);
-      setEnv(list[0] ?? null);
+      setEnvs([...r.environments.map((e) => ({ label: e.name, value: String(e.id) })), { label: 'Any environment', value: ANY }]);
       setSuggestions(r.suggestions);
     });
     // a.clear only resets the answer on screen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool]);
 
-  const ask = (q: string) => {
-    if (!tool || !env || !q.trim()) return;
-    const payload = { toolId: Number(tool.value), environmentId: env.value === ANY ? null : Number(env.value), question: q };
+  // Read again after every answer: the newest is listed first.
+  useEffect(() => {
+    void call<{ asks: RecentAsk[] }>('recentAsks')
+      .then((r) => setRecent(r.asks))
+      .catch(() => undefined);
+  }, [asksMade]);
+
+  const ask = (question: string, environment: string) => {
+    if (!tool) return;
+    setAsked({ question, environment });
+    const payload = { toolId: Number(tool.value), environmentId: environment === ANY ? null : Number(environment), question };
     void a.show('AI is reading your question, then the rules check it…', () => call<AskReply>('ask', payload));
   };
+
+  const rows = tool ? recentRows(recent, tool.label) : [];
+  const changed: ChangedNote | null = a.changed
+    ? { from: { title: a.changed.from.title, verdict: a.changed.from.verdict }, to: { title: a.changed.to.title, verdict: a.changed.to.verdict }, at: a.changed.at, byItself: a.changed.byItself }
+    : null;
+  const failed = a.failed && !a.card ? (a.failed === 'not_found' ? 'That tool or environment no longer exists.' : 'Something went wrong. Try again.') : null;
+  const view: AskFrameView | null =
+    tool && envs.length
+      ? {
+          tool: tool.label,
+          environments: envs.map((e) => ({ value: e.value, name: e.label })),
+          suggestions,
+          asked,
+          working: a.busy ? a.working : null,
+          answer: a.card ? frameView(a.card, { busy: a.busy, canRecheck: a.askId !== null }) : null,
+          changed,
+          status: a.notice ?? failed,
+          recent: rows,
+        }
+      : null;
+
+  useFrameLink(view ? { kind: 'ask', ask: view } : null, active, (m) => {
+    const q = askOf(m, view);
+    if (q) return ask(q.question, q.environment);
+    const id = recentOf(m, view);
+    if (id !== null) {
+      const row = rows.find((r) => r.askId === id)!;
+      setAsked({ question: row.question, environment: envs.find((e) => e.label === row.environment)?.value ?? ANY });
+      return void a.open(id);
+    }
+    return a.card ? cardButton(m, a.card, { onRecheck: () => void a.recheck(), onRequest: (kind) => void a.request(kind) }) : undefined;
+  });
 
   if (tools === null) return <Spinner />;
   if (tools.length === 0) return <NoTools />;
 
   return (
     <Stack space="space.200">
-      <Inline space="space.200" shouldWrap>
+      {tools.length > 1 ? (
         <Box xcss={xcss({ width: '240px' })}>
           <Select options={tools} value={tool} onChange={(o: Option) => setTool(o)} placeholder="Tool" />
         </Box>
-        <Box xcss={xcss({ width: '240px' })}>
-          <Select options={envs} value={env} onChange={(o: Option) => setEnv(o)} placeholder="Environment" />
-        </Box>
-      </Inline>
-      <Inline space="space.100" alignBlock="center">
-        <Box xcss={xcss({ width: '480px' })}>
-          <Textfield placeholder="Can I … ?" value={question} maxLength={500} onChange={(e) => setQuestion(String(e.target.value ?? ''))} />
-        </Box>
-        <Button appearance="primary" onClick={() => ask(question)} isDisabled={a.busy || !question.trim() || !env}>
-          Ask
-        </Button>
-      </Inline>
-      {suggestions.length ? (
-        <Inline space="space.100" shouldWrap>
-          {suggestions.map((s) => (
-            <Button
-              key={s}
-              appearance="subtle"
-              onClick={() => {
-                setQuestion(s);
-                ask(s);
-              }}
-              isDisabled={a.busy || !env}
-            >
-              {s}
-            </Button>
-          ))}
-        </Inline>
       ) : null}
-      <AnswerView a={a} framed />
-      <RecentQuestions refreshKey={asksMade} onAskAgain={(id) => void a.open(id)} />
+      {!view ? <Spinner /> : active ? <Frame resource={FRAME_RESOURCE} /> : null}
+      {a.card ? <CardRequests card={a.card} /> : null}
     </Stack>
   );
 };

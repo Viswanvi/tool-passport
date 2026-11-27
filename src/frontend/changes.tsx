@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Button, Heading, Icon, Inline, Lozenge, SectionMessage, Select, Spinner, Stack, Text, TextArea, Textfield, xcss } from '@forge/react';
+import { Box, Button, Icon, Inline, Lozenge, SectionMessage, Select, Spinner, Stack, Text, TextArea, Textfield, xcss } from '@forge/react';
 import type { LabelKind } from '../change/release-notes';
-import type { ChangeView, RecentAsk, UpgradePreview } from '../resolvers/change-handlers';
+import type { ChangeView, UpgradePreview } from '../resolvers/change-handlers';
 import { call, cardStyle, type Option } from './common';
 
 /**
  * Version changes (spec F6, section 15): the owner's Changes list, with "Still true" in one click and "Changed"
- * opening the fact form; and the asker's recent questions with "May have changed: ask again".
+ * opening the fact form. The asker's recent questions, with "May have changed", are on the Ask tab (D63).
  */
 
 type EnvView = { id: number; name: string; version: string | null };
@@ -269,56 +269,6 @@ export const ChangesSection = ({ toolId, refreshKey }: { toolId: number; refresh
             </Text>
           </Stack>
         </Box>
-      ))}
-    </Stack>
-  );
-};
-
-const VERDICT: Record<string, string> = {
-  yes: 'Yes',
-  yes_with_approval: 'Yes, with approval',
-  not_ready: 'Not ready',
-  no: 'No',
-  dont_know: "Don't know yet",
-  unsupported: "Don't know yet",
-};
-
-// The same colours as the answer card's verdicts.
-const VERDICT_LOOK: Record<string, 'success' | 'inprogress' | 'moved' | 'removed' | 'new' | 'default'> = {
-  yes: 'success',
-  yes_with_approval: 'inprogress',
-  not_ready: 'moved',
-  no: 'removed',
-  dont_know: 'new',
-  unsupported: 'new',
-};
-
-/** How many recent questions the Ask page lists: enough to pick one up again, short enough to read. */
-const RECENT_SHOWN = 4;
-
-/** The asker's own recent questions; "May have changed: ask again" where a version change touched the evidence. */
-export const RecentQuestions = ({ refreshKey, onAskAgain }: { refreshKey: number; onAskAgain: (askId: number) => void }) => {
-  const [asks, setAsks] = useState<RecentAsk[] | null>(null);
-  useEffect(() => {
-    void call<{ asks: RecentAsk[] }>('recentAsks').then((r) => setAsks(r.asks));
-  }, [refreshKey]);
-  if (!asks || asks.length === 0) return null;
-  // The newest answer for each question and environment (the list comes newest first), at most RECENT_SHOWN.
-  const latest = asks.filter((a, i) => asks.findIndex((b) => b.question === a.question && b.environment === a.environment) === i).slice(0, RECENT_SHOWN);
-  return (
-    <Stack space="space.075">
-      <Heading as="h3" size="small">
-        Your recent questions
-      </Heading>
-      {latest.map((a) => (
-        <Inline key={a.askId} space="space.100" alignBlock="center" shouldWrap>
-          <Lozenge appearance={VERDICT_LOOK[a.verdict ?? ''] ?? 'default'}>{VERDICT[a.verdict ?? ''] ?? '—'}</Lozenge>
-          <Text size="small">{`${a.question ?? 'An earlier question'} · ${a.environment}`}</Text>
-          {a.mayHaveChanged ? <Lozenge appearance="moved">May have changed</Lozenge> : null}
-          <Button appearance={a.mayHaveChanged ? 'primary' : 'subtle'} spacing="compact" onClick={() => onAskAgain(a.askId)}>
-            Ask again
-          </Button>
-        </Inline>
       ))}
     </Stack>
   );

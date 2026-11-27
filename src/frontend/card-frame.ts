@@ -23,9 +23,10 @@ export const EVENT = {
 
 /**
  * primary and recheck: the card's buttons. open-cell: a Passport cell was clicked. refresh: Check again.
- * fill-docs: the owner's way from the unverified rows to Fill in from your docs.
+ * fill-docs: the owner's way from the unverified rows to Fill in from your docs. ask: a question typed or picked on
+ * the Ask tab. open-recent: one of the person's recent questions, opened again.
  */
-export type FrameAction = 'primary' | 'recheck' | 'open-cell' | 'refresh' | 'fill-docs';
+export type FrameAction = 'primary' | 'recheck' | 'open-cell' | 'refresh' | 'fill-docs' | 'ask' | 'open-recent';
 
 export interface CardFrameView {
   card: Card;
@@ -129,7 +130,52 @@ export function namesText(names: string[]): string {
   return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
-export type FrameView = { kind: 'card'; card: CardFrameView } | { kind: 'passport'; passport: PassportFrameView };
+/** An answer that changed under the open card ("Not ready → Yes, with approval"). */
+export interface ChangedNote {
+  from: { title: string; verdict: Verdict | null };
+  to: { title: string; verdict: Verdict | null };
+  at: string;
+  byItself: boolean;
+}
+
+/** One of the person's recent questions, as the Ask tab lists it. */
+export interface RecentRow {
+  askId: number;
+  question: string;
+  environment: string;
+  /** The verdict in the card's words ("Yes, with approval"), or a dash. */
+  title: string;
+  verdict: string | null;
+  mayHaveChanged: boolean;
+}
+
+/**
+ * The Ask tab in the frame (D63): the question box, the environments to ask about, suggestions, the answer card and
+ * the person's recent questions. The page keeps every call; the frame sends what was typed or picked, and the page
+ * acts only on an environment or a recent question it sent (`askOf`, `recentOf`).
+ */
+export interface AskFrameView {
+  tool: string;
+  /** `value` is what the page asks with: an environment id, or ANY_ENVIRONMENT. */
+  environments: Array<{ value: string; name: string }>;
+  suggestions: string[];
+  /** The question on screen, so the box shows it after an answer or a recent question opened again. */
+  asked: { question: string; environment: string } | null;
+  /** What the page is waiting for, in plain words, while it waits. */
+  working: string | null;
+  answer: CardFrameView | null;
+  changed: ChangedNote | null;
+  /** A problem in words. */
+  status: string | null;
+  recent: RecentRow[];
+}
+
+export type FrameView = { kind: 'card'; card: CardFrameView } | { kind: 'passport'; passport: PassportFrameView } | { kind: 'ask'; ask: AskFrameView };
+
+/** The page's value for "Any environment". */
+export const ANY_ENVIRONMENT = 'any';
+/** The ask resolver's own limit. */
+export const MAX_QUESTION = 500;
 
 export interface ReadyMessage {
   frameId: string;
@@ -145,6 +191,51 @@ export interface ActionMessage {
   action: FrameAction;
   /** open-cell only. */
   cell?: { key: string; environmentId: number };
+  /** ask only: the words typed or picked, and the environment's `value`. */
+  question?: string;
+  environment?: string;
+  /** open-recent only. */
+  askId?: number;
+}
+
+/** A question from the Ask tab as the page will ask it: words within the limit, in an environment the page sent. */
+export function askOf(m: ActionMessage, view: AskFrameView | null): { question: string; environment: string } | null {
+  if (m.action !== 'ask' || !view || typeof m.question !== 'string' || typeof m.environment !== 'string') return null;
+  const question = m.question.trim();
+  if (!question || question.length > MAX_QUESTION) return null;
+  return view.environments.some((e) => e.value === m.environment) ? { question, environment: m.environment } : null;
+}
+
+/** A recent question to open again: only one the page listed. */
+export function recentOf(m: ActionMessage, view: AskFrameView | null): number | null {
+  if (m.action !== 'open-recent' || !view || typeof m.askId !== 'number') return null;
+  return view.recent.some((r) => r.askId === m.askId) ? m.askId : null;
+}
+
+/** Verdicts in the card's words, for lists that hold only the stored verdict. */
+export const VERDICT_WORDS: Record<string, string> = {
+  yes: 'Yes',
+  yes_with_approval: 'Yes, with approval',
+  not_ready: 'Not ready',
+  no: 'No',
+  dont_know: "Don't know yet",
+  unsupported: "Don't know yet",
+};
+
+/**
+ * The recent questions the Ask tab lists: this tool's, the newest answer for each question and environment (the
+ * server lists newest first), at most `limit`. A question whose text was deleted after 30 days is left out.
+ */
+export function recentRows(
+  asks: Array<{ askId: number; question: string | null; tool: string; environment: string; verdict: string | null; mayHaveChanged: boolean }>,
+  tool: string,
+  limit = 4,
+): RecentRow[] {
+  const mine = asks.filter((a): a is typeof a & { question: string } => a.tool === tool && typeof a.question === 'string' && a.question.length > 0);
+  return mine
+    .filter((a, i) => mine.findIndex((b) => b.question === a.question && b.environment === a.environment) === i)
+    .slice(0, limit)
+    .map((a) => ({ askId: a.askId, question: a.question, environment: a.environment, title: VERDICT_WORDS[a.verdict ?? ''] ?? '—', verdict: a.verdict, mayHaveChanged: a.mayHaveChanged }));
 }
 
 /** A clicked cell as the page will act on it: only cells it sent may be opened (the frame decides nothing). */

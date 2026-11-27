@@ -95,9 +95,9 @@ site has two service desks or no resolution named Done), do that one step below;
 
 ## 3. Moment 1: the answer depends on the environment
 
-Open the app: sidebar → **Apps** → **Tool Passport**. It opens on the **Passport** tab (below). Open the **Ask** tab,
-pick **Kestrel Studio** and **KS-DEV**, then click the suggested question **Can I build a custom web front end or
-dashboard?** (or type it and click **Ask**).
+Open the app: sidebar → **Apps** → **Tool Passport**. It opens on the **Passport** tab (below). Open the **Ask** tab:
+a *Can I … with Kestrel Studio?* box, the environments as buttons (**KS-DEV** is picked) and a few suggestions. Click
+the suggestion **Can I build a custom web front end or dashboard?** (or type it and press Enter).
 
 - Expected: at the top, *AI read your question as* **Build a custom web front end or dashboard**, next to **Rules
   decide**: the model only matched your words to the tool's list. Then the answer in a yellow banner: **Not ready**,
@@ -105,7 +105,7 @@ dashboard?** (or type it and click **Ask**).
   (hover a stamp for the full line): **Tool can do it · Yes** (*Owner-verified · 13.2*), **Policy allows it · Needs
   approval**, **Set up here · Missing** (Frontend build) and **You have access · Yes** (*Mapped access*). Below them,
   the **path to Yes**: Asked → Set up frontend build → Get approval → Yes. **Details** lists every check in words.
-- Switch the environment to **KS-PROD** and ask again: **No**. The policy stamp is red: not allowed in production
+- Click **KS-PROD** and ask again: **No**. The policy stamp is red: not allowed in production
   (*Policy rule*), even though KS-PROD has the frontend build.
 - Pick **Any environment** and ask again: only the tool stamp is checked; the other three say **Not checked**.
 

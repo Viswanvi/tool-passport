@@ -1704,3 +1704,23 @@ data, *Needs you* on My tools, *Fill them in from your docs* from the Passport (
   brings it. Not done there (tp-judge-2 needs the human's sign-in).
 - Not checked live on production; the same code is live on the demo site's development install (5.43.0, checked
   above). LLM calls: 0.
+
+### The Ask tab in the new look, 2026-11-27 (human: "Ask tab new look")
+
+Built (D63): the Ask tab drawn by the card frame, with a large question box, environment pills, suggestion chips,
+the changed note, the card and recent questions as rows.
+
+- `npx vitest run`: `Tests 558 passed (558)`; `npx tsc --noEmit -p .` and `npm run lint` exit 0; `npm run
+  build:card`; `forge lint`: `No issues found.` Dev 5.44.0, "eligible for the Runs on Atlassian program".
+- Live on the demo site (development):
+  - The Ask tab: *Can I … with Kestrel Studio?*, the box, **KS-DEV** picked among KS-DEV, KS-PROD and Any
+    environment, three suggestions as chips, the AI line, and *Your recent questions* as four rows with verdict chips
+    (one *May have changed*).
+  - Clicked **KS-PROD**, typed *Can my app read the customer database?*, pressed Enter: the spinner line, then *AI
+    read your question as* **Connect an app to a company database** · *Rules decide*, **Yes, with approval**
+    ("Allowed in KS-PROD with approval: Customer data needs a privacy review."), four stamps, *Path to Yes*, **Request
+    approval**. The question went to the top of the recent rows. 1 LLM call.
+  - Clicked the recent row *Can I use the community app framework?* (KS-DEV): the box showed that question with
+    **KS-DEV** picked, and the card **No** ("Policy for KS-DEV: Pending security review."). No LLM call.
+  - Not tried live: a view arriving while typing (the focus and caret are kept by code, not seen); the changed note
+    in the frame (it shows after a re-check changes an open answer).
